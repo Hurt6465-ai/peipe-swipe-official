@@ -11,7 +11,7 @@ const EXTRA_FIELDS = [
   'gender', 'language_flag', 'language_fluent', 'language_learning',
   'peipe_partner_display_name', 'peipe_partner_photo', 'peipe_partner_photos', 'peipe_partner_tags',
   'peipe_partner_height', 'peipe_partner_weight', 'peipe_partner_education', 'peipe_partner_occupation',
-  'peipe_partner_relationship', 'peipe_partner_interests', 'relationship_status',
+  'peipe_partner_relationship', 'relationship_status',
 ];
 
 const COUNTRY_TO_FLAG = {
@@ -209,14 +209,12 @@ function normaliseProfile(raw) {
     education: cleanText(raw.peipe_partner_education || '', 40),
     occupation: cleanText(raw.peipe_partner_occupation || '', 60),
     relationship: cleanText(raw.peipe_partner_relationship || raw.relationship_status || '', 40),
-    interestsText: cleanText(raw.peipe_partner_interests || '', 120),
   };
 }
 
 function getMissing(profile) {
   const missing = [];
   if (!profile.displayName) missing.push('displayName');
-  if (!profile.photos.length) missing.push('photos');
   if (!profile.language_flag) missing.push('language_flag');
   if (!profile.language_fluent || !profile.language_fluent.length) missing.push('language_fluent');
   if (!profile.language_learning || !profile.language_learning.length) missing.push('language_learning');
@@ -253,7 +251,6 @@ function decorateUser(baseUser, extra) {
     education: profile.education || baseUser.education || '',
     occupation: profile.occupation || baseUser.occupation || '',
     relationship: profile.relationship || baseUser.relationship || baseUser.relationshipStatus || '',
-    interestsText: profile.interestsText || baseUser.interestsText || '',
   });
 }
 
@@ -319,7 +316,6 @@ async function saveMe(uid, body) {
     peipe_partner_weight: cleanNumber(body.weightKg || body.weight || current.peipe_partner_weight, 20, 300),
     peipe_partner_education: cleanText(body.education || current.peipe_partner_education || '', 40),
     peipe_partner_occupation: cleanText(body.occupation || body.job || current.peipe_partner_occupation || '', 60),
-    peipe_partner_interests: cleanText(body.interestsText || body.interests || current.peipe_partner_interests || '', 120),
   };
 
   await user.setUserFields(uid, fields);
