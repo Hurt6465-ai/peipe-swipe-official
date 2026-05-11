@@ -28,7 +28,7 @@
   "required": "请先补全必填资料",
   "noBio": "这个人还没有写简介。",
   "noPhoto": "未上传语伴照片",
-  "greet": "打招呼",
+  "greet": "👋 Hi",
   "greeted": "已打招呼",
   "greeting": "发送中...",
   "greetOk": "已打招呼",
@@ -81,5 +81,8 @@
   "tagBeginner": "初级",
   "tagIntermediate": "中级",
   "tagAdvanced": "高级",
-  "tagNativeHelper": "母语帮助"
+  "tagNativeHelper": "母语帮助",
+  "privateGender": "保密",
+  "selectPlaceholder": "请选择",
+  "missingPrefix": "请先补全："
 }
