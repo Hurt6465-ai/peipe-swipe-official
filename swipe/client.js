@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v8
+/* Peipe Partners Swipe v10
    - full-screen mobile page
    - vertical swipe partners, horizontal swipe photos
    - profile setup with frosted glass sheet
@@ -8,7 +8,9 @@
 (function () {
   'use strict';
 
-  if (window.__peipePartnersSwipeV8) return;
+  if (window.__peipePartnersSwipeV10) return;
+  window.__peipePartnersSwipeV10 = true;
+  window.__peipePartnersSwipeV9 = true;
   window.__peipePartnersSwipeV8 = true;
   window.__peipePartnersSwipeV7 = true;
   window.__peipePartnersSwipeV6 = true;
@@ -24,11 +26,23 @@
   var CONFIG = Object.assign({
     pageSize: 18,
     maxPhotos: 5,
-    maxUploadBytes: 5 * 1024 * 1024,
-    imageMaxSide: 1600,
-    imageQualityStart: 0.82,
-    imageQualityMin: 0.48,
     uploadCid: 6,
+    imageConfig: {
+      maxSide: 1440,
+      maxSizeMB: 0.25,
+      quality: 0.60,
+      minCompressBytes: 120 * 1024,
+      useWebp: true,
+      qualities: [0.60, 0.52, 0.45, 0.38, 0.32]
+    },
+    avatarImageConfig: {
+      maxSide: 720,
+      maxSizeMB: 0.10,
+      quality: 0.58,
+      minCompressBytes: 80 * 1024,
+      useWebp: true,
+      qualities: [0.58, 0.50, 0.42, 0.34, 0.28]
+    },
     preloadAhead: 2,
     swiperCss: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.css',
     swiperJs: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.js',
@@ -47,6 +61,8 @@
     photos: '语伴照片',
     uploadPhotos: '上传手机图片',
     uploading: '上传中...',
+    compressing: '压缩中...',
+    uploadAvatar: '上传头像',
     imageTooLarge: '图片压缩后仍超过 5MB，请换一张图片',
     imageOnly: '请选择图片',
     maxPhotos: '',
@@ -62,9 +78,11 @@
     education: '学历',
     occupation: '职业',
     relationship: '感情状况',
+    location: '定位 / 城市',
     heightPlaceholder: '170',
     weightPlaceholder: '60',
     occupationPlaceholder: '请选择职业',
+    locationPlaceholder: '例如：曼谷 / 仰光 / 广州',
     optional: '选填',
     tags: '标签',
     chooseTags: '选择标签',
@@ -435,16 +453,18 @@
 
   function renderProfileDetails(user) {
     var chips = [];
-    if (user.heightCm) chips.push(user.heightCm + 'cm');
-    if (user.weightKg) chips.push(user.weightKg + 'kg');
+    var loc = norm(user.locationText || user.location || user.city || '');
+    if (loc) chips.push('<span class=\"pps-location-icon\">📍</span>' + escapeHtml(loc));
+    if (user.heightCm) chips.push(escapeHtml(user.heightCm + 'cm'));
+    if (user.weightKg) chips.push(escapeHtml(user.weightKg + 'kg'));
     var edu = optionLabel(OPTIONS.educations, user.education);
-    if (edu && edu !== '保密') chips.push(edu);
+    if (edu && edu !== '保密') chips.push(escapeHtml(edu));
     var job = optionLabel(OPTIONS.occupations || [], user.occupation) || user.occupation;
-    if (job && job !== TEXT.selectPlaceholder) chips.push(job);
+    if (job && job !== TEXT.selectPlaceholder) chips.push(escapeHtml(job));
     var rel = optionLabel(OPTIONS.relationships, user.relationship || user.relationshipStatus);
-    if (rel && rel !== '保密') chips.push(rel);
+    if (rel && rel !== '保密') chips.push(escapeHtml(rel));
     if (!chips.length) return '';
-    return '<div class="pps-detail-row">' + chips.slice(0, 4).map(function (txt) { return '<span class="pps-detail-chip">' + escapeHtml(txt) + '</span>'; }).join('') + '</div>';
+    return '<div class="pps-detail-row">' + chips.slice(0, 4).map(function (txt) { return '<span class="pps-detail-chip">' + txt + '</span>'; }).join('') + '</div>';
   }
 
   function tagLabel(key) {
@@ -941,13 +961,16 @@
         '<div class="pps-profile-scroll">' +
           '<div class="pps-profile-head"><div><div class="pps-profile-title">' + escapeHtml(title) + '</div><div class="pps-profile-subtitle">' + escapeHtml(TEXT.profileSubtitle) + '</div></div></div>' +
           '<div class="pps-form-grid">' +
-            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.displayName) + '</label><div class="pps-display-row">' + (avatar ? '<img class="pps-form-avatar" src="' + escapeHtml(avatar) + '" alt="avatar">' : '<div class="pps-form-avatar"></div>') + '<input name="displayName" maxlength="40" value="' + escapeHtml(profile.displayName || profile.username || me.username || '') + '"></div></div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.displayName) + '</label><div class="pps-display-row"><button type="button" class="pps-avatar-upload" aria-label="' + escapeHtml(TEXT.uploadAvatar) + '">' + (avatar ? '<img class="pps-form-avatar pps-form-avatar-img" data-avatar="' + escapeHtml(avatar) + '" src="' + escapeHtml(avatar) + '" alt="avatar">' : '<span class="pps-form-avatar pps-form-avatar-img" data-avatar=""></span>') + '<span class="pps-avatar-plus">+</span></button><input class="pps-avatar-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" hidden><input name="displayName" maxlength="40" value="' + escapeHtml(profile.displayName || profile.username || me.username || '') + '"></div></div>' +
             '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.photos) + '</div><div class="pps-photos-row">' + renderPhotoTiles(profile.photos) + '</div><input class="pps-photo-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" multiple hidden><button type="button" class="pps-upload-btn">' + escapeHtml(TEXT.uploadPhotos) + '</button></div>' +
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.bio) + '</label><textarea name="bio" maxlength="180" placeholder="' + escapeHtml(TEXT.bioPlaceholder) + '">' + escapeHtml(profile.bio || '') + '</textarea></div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.location) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><input name="locationText" maxlength="40" placeholder="' + escapeHtml(TEXT.locationPlaceholder) + '" value="' + escapeHtml(profile.locationText || profile.location || '') + '"></div>' +
             '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.country) + '</label>' + buildChoicePicker('language_flag', OPTIONS.countries, profile.language_flag, 'country', false, 1, TEXT.country) + '</div>' +
             '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.gender) + '</label>' + buildChoicePicker('gender', OPTIONS.genders, profile.gender, 'text', false, 1, TEXT.gender) + '</div>' +
-            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.nativeLanguage) + '</label>' + buildChoicePicker('language_fluent', OPTIONS.languages, profile.language_fluent, 'language', true, 5, TEXT.nativeLanguage) + '</div>' +
-            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.learningLanguage) + '</label>' + buildChoicePicker('language_learning', OPTIONS.languages, profile.language_learning, 'language', true, 5, TEXT.learningLanguage) + '</div>' +
+            '<div class="pps-lang-picker-row pps-span-2">' +
+              '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.nativeLanguage) + '</label>' + buildChoicePicker('language_fluent', OPTIONS.languages, profile.language_fluent, 'language', true, 5, TEXT.nativeLanguage) + '</div>' +
+              '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.learningLanguage) + '</label>' + buildChoicePicker('language_learning', OPTIONS.languages, profile.language_learning, 'language', true, 5, TEXT.learningLanguage) + '</div>' +
+            '</div>' +
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.birthday) + '</label><input type="date" name="birthday" value="' + escapeHtml(profile.birthday || '') + '"></div>' +
             '<div class="pps-field"><label>' + escapeHtml(TEXT.height) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><div class="pps-unit-input"><input inputmode="decimal" name="heightCm" maxlength="5" placeholder="' + escapeHtml(TEXT.heightPlaceholder) + '" value="' + escapeHtml(profile.heightCm || '') + '"><span>cm</span></div></div>' +
             '<div class="pps-field"><label>' + escapeHtml(TEXT.weight) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><div class="pps-unit-input"><input inputmode="decimal" name="weightKg" maxlength="5" placeholder="' + escapeHtml(TEXT.weightPlaceholder) + '" value="' + escapeHtml(profile.weightKg || '') + '"><span>kg</span></div></div>' +
@@ -979,10 +1002,24 @@
     if (box) box.innerHTML = renderPhotoTiles(photos);
   }
 
+  function getProfileAvatarFromSheet() {
+    var avatar = $('.pps-form-avatar-img', state.root);
+    if (!avatar) return '';
+    return avatar.getAttribute('data-avatar') || avatar.getAttribute('src') || '';
+  }
+
+  function updateProfileAvatar(url) {
+    var avatar = $('.pps-avatar-upload', state.root);
+    if (!avatar || !url) return;
+    avatar.innerHTML = '<img class="pps-form-avatar pps-form-avatar-img" data-avatar="' + escapeHtml(url) + '" src="' + escapeHtml(url) + '" alt="avatar"><span class="pps-avatar-plus">+</span>';
+  }
+
   function collectProfileData() {
     var sheet = $('.pps-profile-sheet', state.root);
     return {
       displayName: norm($('[name="displayName"]', sheet).value),
+      avatar: getProfileAvatarFromSheet(),
+      locationText: norm($('[name="locationText"]', sheet).value),
       photos: getProfilePhotosFromSheet(),
       bio: norm($('[name="bio"]', sheet).value),
       language_flag: getChoiceValue('language_flag'),
@@ -1100,9 +1137,33 @@
         var c = document.createElement('canvas');
         c.width = 1;
         c.height = 1;
+        if (!c.toBlob) return resolve(false);
         c.toBlob(function (b) { resolve(!!b && b.type === type); }, type, 0.8);
       } catch (e) { resolve(false); }
     });
+  }
+
+  function imageConfig(opts) {
+    var base = Object.assign({}, CONFIG.imageConfig || {});
+    return Object.assign({
+      maxSide: 1440,
+      maxSizeMB: 0.12,
+      quality: 0.60,
+      minCompressBytes: 120 * 1024,
+      useWebp: true,
+      qualities: [0.60, 0.52, 0.45, 0.38, 0.32, 0.26, 0.20]
+    }, base, opts || {});
+  }
+
+  function imageTargetBytes(cfg) {
+    return Math.max(30 * 1024, Math.round(Number(cfg.maxSizeMB || 0.12) * 1024 * 1024));
+  }
+
+  function extForMime(type) {
+    type = String(type || '').toLowerCase();
+    if (type === 'image/webp') return '.webp';
+    if (type === 'image/png') return '.png';
+    return '.jpg';
   }
 
   function loadImageFromFile(file) {
@@ -1155,52 +1216,97 @@
     });
   }
 
-  function compressImageFile(file) {
-    if (!file) return Promise.reject(new Error(TEXT.imageOnly));
+  function makeCompressedFile(original, blob, type) {
+    if (!blob || !blob.size) return original;
+    var base = String(original && original.name || ('photo-' + Date.now())).replace(/\.[^.]+$/, '');
+    try { return new File([blob], base + extForMime(type), { type: type, lastModified: Date.now() }); }
+    catch (e) { blob.name = base + extForMime(type); return blob; }
+  }
 
-    // Do not block normal phone photos. If it is already <= 5MB, upload the original file directly.
-    // This avoids Android/WeChat/Chrome decode quirks that caused "读取失败" before upload.
-    if (file.size && file.size <= CONFIG.maxUploadBytes) return Promise.resolve(file);
+  function compressWithLibrary(file, cfg, targetType) {
+    if (typeof window.imageCompression !== 'function') return Promise.resolve(null);
+    return window.imageCompression(file, {
+      maxSizeMB: Number(cfg.maxSizeMB || 0.12),
+      maxWidthOrHeight: Number(cfg.maxSide || 1440),
+      useWebWorker: true,
+      fileType: targetType,
+      initialQuality: Number(cfg.quality || 0.60),
+      alwaysKeepResolution: false,
+      preserveExif: false
+    }).then(function (blob) {
+      if (!blob || !blob.size) return null;
+      return blob;
+    }).catch(function (err) {
+      console.warn('[peipe-swipe] imageCompression library failed, fallback to canvas', err);
+      return null;
+    });
+  }
 
-    // HEIC/HEIF/GIF are often not decodable by canvas. Try original upload first if possible.
-    if (/gif|svg|heic|heif/i.test(file.type || '') || /^(heic|heif|gif)$/i.test(fileExt(file))) {
-      return Promise.resolve(file);
-    }
-
+  function compressWithCanvas(file, cfg, targetType) {
     return loadImageFromFile(file).then(function (img) {
-      var maxSide = CONFIG.imageMaxSide;
       var w = img.width || 1;
       var h = img.height || 1;
+      var maxSide = Number(cfg.maxSide || 1440);
       var scale = Math.min(1, maxSide / Math.max(w, h));
       var canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(w * scale));
       canvas.height = Math.max(1, Math.round(h * scale));
       var ctx = canvas.getContext('2d');
-      if (!ctx || !canvas.toBlob) return file;
-      img.draw(ctx, canvas.width, canvas.height);
+      if (!ctx || !canvas.toBlob) return null;
+      ctx.drawImage && img.draw(ctx, canvas.width, canvas.height);
       img.close && img.close();
 
-      return canCanvasEncode('image/webp').then(function (webp) {
-        var type = webp ? 'image/webp' : 'image/jpeg';
-        var quality = CONFIG.imageQualityStart;
-        function step() {
-          return canvasToBlob(canvas, type, quality).then(function (blob) {
-            if (!blob) return file;
-            if (blob.size <= CONFIG.maxUploadBytes || quality <= CONFIG.imageQualityMin) return blob;
-            quality = Math.max(CONFIG.imageQualityMin, quality - 0.10);
-            return step();
+      var targetBytes = imageTargetBytes(cfg);
+      var qualities = Array.isArray(cfg.qualities) && cfg.qualities.length ? cfg.qualities : [cfg.quality || 0.60, 0.52, 0.45, 0.38];
+      var best = null;
+      var chain = Promise.resolve();
+      qualities.forEach(function (q) {
+        chain = chain.then(function () {
+          if (best && best.size <= targetBytes) return best;
+          return canvasToBlob(canvas, targetType, Number(q)).then(function (blob) {
+            if (blob && blob.size) best = blob;
+            return best;
           });
-        }
-        return step().then(function (blob) {
-          if (!blob || blob.size > CONFIG.maxUploadBytes) return file;
-          var ext = type === 'image/webp' ? '.webp' : '.jpg';
-          var base = String(file.name || ('photo-' + Date.now())).replace(/\.[^.]+$/, '');
-          return new File([blob], base + ext, { type: type, lastModified: Date.now() });
         });
       });
-    }).catch(function () {
-      // Never fail before upload only because browser cannot decode the local image.
-      // Upload original and let NodeBB return the real server error if it cannot accept it.
+      return chain.then(function () { return best; });
+    }).catch(function (err) {
+      console.warn('[peipe-swipe] canvas compression failed', err);
+      return null;
+    });
+  }
+
+  function compressImageFile(file, opts) {
+    opts = opts || {};
+    if (!file) return Promise.reject(new Error(TEXT.imageOnly));
+
+    var cfg = imageConfig(opts);
+    var ext = fileExt(file);
+    var type = mimeFromFile(file);
+    var size = Number(file.size || 0);
+
+    if (!isImageFile(file)) return Promise.resolve(file);
+    if (/gif|svg/i.test(type) || /^(gif|svg)$/i.test(ext)) return Promise.resolve(file);
+    if (size > 0 && size < Number(cfg.minCompressBytes || 0)) return Promise.resolve(file);
+    if (/heic|heif/i.test(type) || /^(heic|heif)$/i.test(ext)) return Promise.resolve(file);
+
+    return canCanvasEncode('image/webp').then(function (webp) {
+      var targetType = cfg.useWebp && webp ? 'image/webp' : 'image/jpeg';
+      var targetBytes = imageTargetBytes(cfg);
+      return compressWithLibrary(file, cfg, targetType).then(function (libBlob) {
+        if (libBlob && libBlob.size <= Math.max(targetBytes * 1.25, targetBytes + 35 * 1024)) return libBlob;
+        return compressWithCanvas(file, cfg, targetType).then(function (canvasBlob) {
+          if (!canvasBlob) return libBlob || null;
+          if (!libBlob) return canvasBlob;
+          return canvasBlob.size < libBlob.size ? canvasBlob : libBlob;
+        });
+      }).then(function (blob) {
+        if (!blob || !blob.size) return file;
+        if (size && blob.size >= size * 0.98) return file;
+        return makeCompressedFile(file, blob, targetType);
+      });
+    }).catch(function (err) {
+      console.warn('[peipe-swipe] image compression skipped', err);
       return file;
     });
   }
@@ -1262,7 +1368,7 @@
 
     state.uploadBusy = true;
     var btn = $('.pps-upload-btn', state.root);
-    if (btn) { btn.disabled = true; btn.textContent = TEXT.uploading; }
+    if (btn) { btn.disabled = true; btn.textContent = TEXT.compressing; }
 
     var chain = Promise.resolve();
     var uploaded = [];
@@ -1270,7 +1376,10 @@
       chain = chain.then(function () {
         // Upload original File directly. Compression can be reintroduced later only as a
         // non-blocking optimization, never as a prerequisite for upload.
-        return uploadToNodeBB(file).then(function (url) {
+        return compressImageFile(file).then(function (nextFile) {
+          if (nextFile !== file && btn) btn.textContent = TEXT.uploading;
+          return uploadToNodeBB(nextFile);
+        }).then(function (url) {
           uploaded.push(url);
           updateProfilePhotoTiles(current.concat(uploaded).slice(0, CONFIG.maxPhotos));
         });
@@ -1283,6 +1392,28 @@
     }).finally(function () {
       state.uploadBusy = false;
       if (btn) { btn.disabled = false; btn.textContent = TEXT.uploadPhotos; }
+    });
+  }
+
+  function handleAvatarFile(file) {
+    if (!file || file.size === 0) return toast(TEXT.imageOnly);
+    if (state.uploadBusy) return toast(TEXT.uploading);
+    state.uploadBusy = true;
+    var btn = $('.pps-avatar-upload', state.root);
+    if (btn) btn.classList.add('is-uploading');
+    toast(TEXT.compressing);
+    compressImageFile(file, CONFIG.avatarImageConfig || {}).then(function (nextFile) {
+      toast(TEXT.uploading);
+      return uploadToNodeBB(nextFile);
+    }).then(function (url) {
+      updateProfileAvatar(url);
+      toast(TEXT.saveOk);
+    }).catch(function (err) {
+      console.warn('[peipe-swipe] avatar upload failed', err);
+      toast((err && err.message) || TEXT.imageOnly);
+    }).finally(function () {
+      state.uploadBusy = false;
+      if (btn) btn.classList.remove('is-uploading');
     });
   }
 
@@ -1453,6 +1584,12 @@
         updateChoiceCount();
         return;
       }
+      if (e.target.closest('.pps-avatar-upload')) {
+        e.preventDefault();
+        var avatarInput = $('.pps-avatar-input', state.root);
+        if (avatarInput) avatarInput.click();
+        return;
+      }
       if (e.target.closest('.pps-upload-btn')) {
         e.preventDefault();
         var input = $('.pps-photo-input', state.root);
@@ -1500,6 +1637,12 @@
     }, true);
 
     state.root.addEventListener('change', function (e) {
+      if (e.target && e.target.classList.contains('pps-avatar-input')) {
+        var avatarFiles = Array.prototype.slice.call(e.target.files || []);
+        e.target.value = '';
+        handleAvatarFile(avatarFiles[0]);
+        return;
+      }
       if (e.target && e.target.classList.contains('pps-photo-input')) {
         var files = Array.prototype.slice.call(e.target.files || []);
         e.target.value = '';
