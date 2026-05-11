@@ -16,6 +16,16 @@ const COUNTRY_TO_FLAG = {
   CN: 'cn', MM: 'mm', VN: 'vn', VI: 'vn', TH: 'th', US: 'us', GB: 'gb', UK: 'gb', JP: 'jp', JA: 'jp', KR: 'kr', KO: 'kr', EN: 'gb',
 };
 
+const LANG_TO_CODE = {
+  cn: 'CN', zh: 'CN', 'zh-cn': 'CN', chinese: 'CN', '中文': 'CN', '汉语': 'CN', '普通话': 'CN',
+  en: 'EN', us: 'EN', uk: 'EN', gb: 'EN', english: 'EN', '英语': 'EN',
+  mm: 'MM', my: 'MM', burmese: 'MM', myanmar: 'MM', '缅甸语': 'MM', '缅甸': 'MM',
+  vi: 'VI', vn: 'VI', vietnamese: 'VI', vietnam: 'VI', '越南语': 'VI', '越南': 'VI',
+  th: 'TH', thai: 'TH', thailand: 'TH', '泰语': 'TH', '泰国': 'TH',
+  jp: 'JP', ja: 'JP', japanese: 'JP', japan: 'JP', '日语': 'JP', '日本语': 'JP', '日本': 'JP',
+  kr: 'KR', ko: 'KR', korean: 'KR', korea: 'KR', '韩语': 'KR', '韩国语': 'KR', '韩国': 'KR'
+};
+
 function cleanText(value, maxLength = 120) {
   return String(value || '')
     .replace(/[\u0000-\u001f\u007f]/g, '')
@@ -43,6 +53,25 @@ function parseJsonArray(value) {
   } catch (err) {
     return text.split(/[\n,，|]+/g);
   }
+}
+
+function cleanLangValue(value) {
+  const arr = parseJsonArray(value).map(item => cleanText(item, 40)).filter(Boolean);
+  const raw = cleanText(arr[0] || value, 40);
+  if (!raw) return '';
+  const key = raw.toLowerCase();
+  return LANG_TO_CODE[key] || LANG_TO_CODE[raw] || raw.toUpperCase();
+}
+
+function cleanGender(value) {
+  const raw = cleanText(value, 40);
+  const key = raw.toLowerCase();
+  if (!raw) return '';
+  if (key === 'm' || key === 'male' || raw === '男') return 'male';
+  if (key === 'f' || key === 'female' || raw === '女') return 'female';
+  if (key === 'private' || raw === '保密' || raw === '秘密') return 'private';
+  if (key === 'other' || raw === '其他') return 'other';
+  return raw;
 }
 
 function cleanDate(value) {
@@ -117,27 +146,26 @@ function normaliseProfile(raw) {
     photos,
     tags,
     bio: cleanText(raw.aboutme || raw.bio || raw.signature || '', 180),
-    gender: cleanText(raw.gender, 40),
+    gender: cleanGender(raw.gender),
     age,
     birthday,
     language_flag: cleanText(raw.language_flag, 40),
     countryCode,
     flagEmoji: flagEmoji(countryCode),
-    language_fluent: cleanText(raw.language_fluent, 40),
-    language_learning: cleanText(raw.language_learning, 40),
+    language_fluent: cleanLangValue(raw.language_fluent),
+    language_learning: cleanLangValue(raw.language_learning),
   };
 }
 
 function getMissing(profile) {
   const missing = [];
   if (!profile.displayName) missing.push('displayName');
-  if (!profile.photos.length) missing.push('picture');
+  if (!profile.photos.length) missing.push('photos');
   if (!profile.language_flag) missing.push('language_flag');
   if (!profile.language_fluent) missing.push('language_fluent');
   if (!profile.language_learning) missing.push('language_learning');
   if (!profile.gender) missing.push('gender');
   if (!profile.birthday) missing.push('birthday');
-  if (!profile.tags.length) missing.push('tags');
   return missing;
 }
 
@@ -212,9 +240,9 @@ async function saveMe(uid, body) {
     aboutme: bio,
     bio,
     language_flag: cleanText(body.language_flag || body.country || current.language_flag, 40),
-    language_fluent: cleanText(body.language_fluent || body.nativeLanguage || current.language_fluent, 40),
-    language_learning: cleanText(body.language_learning || body.learningLanguage || current.language_learning, 40),
-    gender: cleanText(body.gender || current.gender, 40),
+    language_fluent: cleanLangValue(body.language_fluent || body.nativeLanguage || current.language_fluent),
+    language_learning: cleanLangValue(body.language_learning || body.learningLanguage || current.language_learning),
+    gender: cleanGender(body.gender || current.gender),
     birthday,
     birthdate: birthday,
     peipe_partner_birthday: birthday,
