@@ -10,6 +10,8 @@ const EXTRA_FIELDS = [
   'age', 'birthday', 'birthdate', 'peipe_partner_birthday',
   'gender', 'language_flag', 'language_fluent', 'language_learning',
   'peipe_partner_display_name', 'peipe_partner_photo', 'peipe_partner_photos', 'peipe_partner_tags',
+  'peipe_partner_height', 'peipe_partner_weight', 'peipe_partner_education', 'peipe_partner_occupation',
+  'peipe_partner_relationship', 'peipe_partner_interests', 'relationship_status',
 ];
 
 const COUNTRY_TO_FLAG = {
@@ -72,6 +74,39 @@ function cleanGender(value) {
   if (key === 'private' || raw === '保密' || raw === '秘密') return 'private';
   if (key === 'other' || raw === '其他') return 'other';
   return raw;
+}
+
+
+function cleanNumber(value, min, max) {
+  const num = Number(String(value == null ? '' : value).replace(/[^0-9.]/g, '')) || 0;
+  if (!Number.isFinite(num) || num < min || num > max) return 0;
+  return Math.round(num * 10) / 10;
+}
+
+function jsonArrayString(value) {
+  const code = cleanLangValue(value);
+  return code ? JSON.stringify([code]) : JSON.stringify([]);
+}
+
+function isJsonArrayText(value) {
+  if (Array.isArray(value)) return true;
+  const text = String(value == null ? '' : value).trim();
+  if (!text) return true;
+  try {
+    return Array.isArray(JSON.parse(text));
+  } catch (err) {
+    return false;
+  }
+}
+
+async function repairJsonLanguageFields(uid, raw) {
+  if (!uid || !raw) return raw;
+  const patch = {};
+  if (!isJsonArrayText(raw.language_fluent)) patch.language_fluent = jsonArrayString(raw.language_fluent);
+  if (!isJsonArrayText(raw.language_learning)) patch.language_learning = jsonArrayString(raw.language_learning);
+  if (!Object.keys(patch).length) return raw;
+  await user.setUserFields(uid, patch).catch(() => {});
+  return Object.assign({}, raw, patch);
 }
 
 function cleanDate(value) {
@@ -154,6 +189,12 @@ function normaliseProfile(raw) {
     flagEmoji: flagEmoji(countryCode),
     language_fluent: cleanLangValue(raw.language_fluent),
     language_learning: cleanLangValue(raw.language_learning),
+    heightCm: cleanNumber(raw.peipe_partner_height, 60, 260),
+    weightKg: cleanNumber(raw.peipe_partner_weight, 20, 300),
+    education: cleanText(raw.peipe_partner_education || '', 40),
+    occupation: cleanText(raw.peipe_partner_occupation || '', 60),
+    relationship: cleanText(raw.peipe_partner_relationship || raw.relationship_status || 'private', 40),
+    interestsText: cleanText(raw.peipe_partner_interests || '', 120),
   };
 }
 
@@ -190,6 +231,12 @@ function decorateUser(baseUser, extra) {
     learnCode: profile.language_learning || baseUser.learnCode || '',
     countryCode: profile.countryCode || baseUser.countryCode || '',
     flagEmoji: profile.flagEmoji || baseUser.flagEmoji || '',
+    heightCm: profile.heightCm || baseUser.heightCm || 0,
+    weightKg: profile.weightKg || baseUser.weightKg || 0,
+    education: profile.education || baseUser.education || '',
+    occupation: profile.occupation || baseUser.occupation || '',
+    relationship: profile.relationship || baseUser.relationship || baseUser.relationshipStatus || '',
+    interestsText: profile.interestsText || baseUser.interestsText || '',
   });
 }
 
@@ -215,14 +262,16 @@ async function feed(req) {
 }
 
 async function getMe(uid) {
-  const raw = await user.getUserFields(uid, EXTRA_FIELDS);
+  let raw = await user.getUserFields(uid, EXTRA_FIELDS);
+  raw = await repairJsonLanguageFields(uid, raw || {});
   const profile = normaliseProfile(Object.assign({}, raw, { uid }));
   const missing = getMissing(profile);
   return { ok: true, complete: missing.length === 0, missing, profile, tagCategories: tagData.categories };
 }
 
 async function saveMe(uid, body) {
-  const current = await user.getUserFields(uid, EXTRA_FIELDS);
+  let current = await user.getUserFields(uid, EXTRA_FIELDS);
+  current = await repairJsonLanguageFields(uid, current || {});
   const displayName = cleanText(body.displayName || body.username || current.peipe_partner_display_name || current.username, 40);
   const submittedPhotos = normalisePhotos(body.photos || body.peipe_partner_photos, body.picture || body.photo || body.peipe_partner_photo);
   const photos = submittedPhotos.slice(0, 5);
@@ -240,13 +289,20 @@ async function saveMe(uid, body) {
     aboutme: bio,
     bio,
     language_flag: cleanText(body.language_flag || body.country || current.language_flag, 40),
-    language_fluent: cleanLangValue(body.language_fluent || body.nativeLanguage || current.language_fluent),
-    language_learning: cleanLangValue(body.language_learning || body.learningLanguage || current.language_learning),
+    language_fluent: jsonArrayString(body.language_fluent || body.nativeLanguage || current.language_fluent),
+    language_learning: jsonArrayString(body.language_learning || body.learningLanguage || current.language_learning),
     gender: cleanGender(body.gender || current.gender),
     birthday,
     birthdate: birthday,
     peipe_partner_birthday: birthday,
     age,
+    relationship_status: cleanText(body.relationship || body.relationship_status || current.relationship_status || 'private', 40),
+    peipe_partner_relationship: cleanText(body.relationship || body.relationship_status || current.peipe_partner_relationship || current.relationship_status || 'private', 40),
+    peipe_partner_height: cleanNumber(body.heightCm || body.height || current.peipe_partner_height, 60, 260),
+    peipe_partner_weight: cleanNumber(body.weightKg || body.weight || current.peipe_partner_weight, 20, 300),
+    peipe_partner_education: cleanText(body.education || current.peipe_partner_education || '', 40),
+    peipe_partner_occupation: cleanText(body.occupation || body.job || current.peipe_partner_occupation || '', 60),
+    peipe_partner_interests: cleanText(body.interestsText || body.interests || current.peipe_partner_interests || '', 120),
   };
 
   await user.setUserFields(uid, fields);
@@ -260,3 +316,4 @@ function tags() {
 }
 
 module.exports = { feed, getMe, saveMe, tags };
+
