@@ -65,6 +65,22 @@ function cleanLangValue(value) {
   return LANG_TO_CODE[key] || LANG_TO_CODE[raw] || raw.toUpperCase();
 }
 
+function cleanLangValues(value, max = 5) {
+  const result = [];
+  const seen = new Set();
+  parseJsonArray(value).forEach((item) => {
+    const code = cleanLangValue(item);
+    if (!code || seen.has(code)) return;
+    seen.add(code);
+    result.push(code);
+  });
+  if (!result.length) {
+    const code = cleanLangValue(value);
+    if (code) result.push(code);
+  }
+  return result.slice(0, max);
+}
+
 function cleanGender(value) {
   const raw = cleanText(value, 40);
   const key = raw.toLowerCase();
@@ -84,8 +100,7 @@ function cleanNumber(value, min, max) {
 }
 
 function jsonArrayString(value) {
-  const code = cleanLangValue(value);
-  return code ? JSON.stringify([code]) : JSON.stringify([]);
+  return JSON.stringify(cleanLangValues(value, 5));
 }
 
 function isJsonArrayText(value) {
@@ -187,13 +202,13 @@ function normaliseProfile(raw) {
     language_flag: cleanText(raw.language_flag, 40),
     countryCode,
     flagEmoji: flagEmoji(countryCode),
-    language_fluent: cleanLangValue(raw.language_fluent),
-    language_learning: cleanLangValue(raw.language_learning),
+    language_fluent: cleanLangValues(raw.language_fluent, 5),
+    language_learning: cleanLangValues(raw.language_learning, 5),
     heightCm: cleanNumber(raw.peipe_partner_height, 60, 260),
     weightKg: cleanNumber(raw.peipe_partner_weight, 20, 300),
     education: cleanText(raw.peipe_partner_education || '', 40),
     occupation: cleanText(raw.peipe_partner_occupation || '', 60),
-    relationship: cleanText(raw.peipe_partner_relationship || raw.relationship_status || 'private', 40),
+    relationship: cleanText(raw.peipe_partner_relationship || raw.relationship_status || '', 40),
     interestsText: cleanText(raw.peipe_partner_interests || '', 120),
   };
 }
@@ -203,8 +218,8 @@ function getMissing(profile) {
   if (!profile.displayName) missing.push('displayName');
   if (!profile.photos.length) missing.push('photos');
   if (!profile.language_flag) missing.push('language_flag');
-  if (!profile.language_fluent) missing.push('language_fluent');
-  if (!profile.language_learning) missing.push('language_learning');
+  if (!profile.language_fluent || !profile.language_fluent.length) missing.push('language_fluent');
+  if (!profile.language_learning || !profile.language_learning.length) missing.push('language_learning');
   if (!profile.gender) missing.push('gender');
   if (!profile.birthday) missing.push('birthday');
   return missing;
@@ -227,8 +242,10 @@ function decorateUser(baseUser, extra) {
     birthday: profile.birthday || baseUser.birthday || '',
     gender: profile.gender || baseUser.gender || '',
     genderCode: profile.gender || baseUser.genderCode || baseUser.gender || '',
-    nativeCode: profile.language_fluent || baseUser.nativeCode || '',
-    learnCode: profile.language_learning || baseUser.learnCode || '',
+    nativeCode: (profile.language_fluent && profile.language_fluent[0]) || baseUser.nativeCode || '',
+    nativeCodes: profile.language_fluent || baseUser.nativeCodes || [],
+    learnCode: (profile.language_learning && profile.language_learning[0]) || baseUser.learnCode || '',
+    learnCodes: profile.language_learning || baseUser.learnCodes || [],
     countryCode: profile.countryCode || baseUser.countryCode || '',
     flagEmoji: profile.flagEmoji || baseUser.flagEmoji || '',
     heightCm: profile.heightCm || baseUser.heightCm || 0,
@@ -296,8 +313,8 @@ async function saveMe(uid, body) {
     birthdate: birthday,
     peipe_partner_birthday: birthday,
     age,
-    relationship_status: cleanText(body.relationship || body.relationship_status || current.relationship_status || 'private', 40),
-    peipe_partner_relationship: cleanText(body.relationship || body.relationship_status || current.peipe_partner_relationship || current.relationship_status || 'private', 40),
+    relationship_status: cleanText(body.relationship || body.relationship_status || current.relationship_status || '', 40),
+    peipe_partner_relationship: cleanText(body.relationship || body.relationship_status || current.peipe_partner_relationship || current.relationship_status || '', 40),
     peipe_partner_height: cleanNumber(body.heightCm || body.height || current.peipe_partner_height, 60, 260),
     peipe_partner_weight: cleanNumber(body.weightKg || body.weight || current.peipe_partner_weight, 20, 300),
     peipe_partner_education: cleanText(body.education || current.peipe_partner_education || '', 40),
@@ -316,4 +333,3 @@ function tags() {
 }
 
 module.exports = { feed, getMe, saveMe, tags };
-
