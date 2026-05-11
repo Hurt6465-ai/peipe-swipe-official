@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v10
+/* Peipe Partners Swipe v12
    - full-screen mobile page
    - vertical swipe partners, horizontal swipe photos
    - profile setup with frosted glass sheet
@@ -8,7 +8,9 @@
 (function () {
   'use strict';
 
-  if (window.__peipePartnersSwipeV10) return;
+  if (window.__peipePartnersSwipeV12) return;
+  window.__peipePartnersSwipeV12 = true;
+  window.__peipePartnersSwipeV11 = true;
   window.__peipePartnersSwipeV10 = true;
   window.__peipePartnersSwipeV9 = true;
   window.__peipePartnersSwipeV8 = true;
@@ -21,6 +23,7 @@
   if (typeof define === 'function' && define.amd && !window.__peipePartnersSwipeForumModule) {
     window.__peipePartnersSwipeForumModule = true;
     define('forum/peipe-partners-swipe', [], function () { return { init: function () {} }; });
+    try { define('forum/peipe-nearby-swipe', [], function () { return { init: function () {} }; }); } catch (err) {}
   }
 
   var CONFIG = Object.assign({
@@ -29,11 +32,11 @@
     uploadCid: 6,
     imageConfig: {
       maxSide: 1440,
-      maxSizeMB: 0.25,
+      maxSizeMB: 0.12,
       quality: 0.60,
       minCompressBytes: 120 * 1024,
       useWebp: true,
-      qualities: [0.60, 0.52, 0.45, 0.38, 0.32]
+      qualities: [0.60, 0.52, 0.45, 0.38, 0.32, 0.26, 0.20]
     },
     avatarImageConfig: {
       maxSide: 720,
@@ -41,7 +44,7 @@
       quality: 0.58,
       minCompressBytes: 80 * 1024,
       useWebp: true,
-      qualities: [0.58, 0.50, 0.42, 0.34, 0.28]
+      qualities: [0.58, 0.50, 0.42, 0.34, 0.28, 0.22]
     },
     preloadAhead: 2,
     swiperCss: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.css',
@@ -78,11 +81,15 @@
     education: '学历',
     occupation: '职业',
     relationship: '感情状况',
-    location: '定位 / 城市',
+    location: '距离',
     heightPlaceholder: '170',
     weightPlaceholder: '60',
     occupationPlaceholder: '请选择职业',
-    locationPlaceholder: '例如：曼谷 / 仰光 / 广州',
+    locationPlaceholder: '',
+    cropAvatar: '裁切头像',
+    cropTip: '拖动图片调整位置，滑动缩放。建议裁到头像或半身。',
+    cropUse: '上传头像',
+    cropCancel: '取消',
     optional: '选填',
     tags: '标签',
     chooseTags: '选择标签',
@@ -101,6 +108,17 @@
     greetAlready: '你已经打过招呼了',
     greetLimit: '今天打招呼次数已用完',
     greetFail: '打招呼失败',
+    comments: '评论',
+    commentAction: '评价',
+    commentTitle: '语伴印象',
+    commentPlaceholder: '写一句真实印象，最多80字',
+    commentSubmit: '发布',
+    commentSaving: '发布中...',
+    commentEmpty: '还没有语伴印象',
+    commentLogin: '请先登录后评论',
+    commentTooShort: '至少写2个字',
+    commentSaved: '评论已保存',
+    commentFail: '评论失败',
     tagTitle: '选择标签',
     tagDone: '保存',
     tagClear: '清空',
@@ -231,6 +249,8 @@
     photoSwipers: new Map(),
     tagDraft: [],
     toastTimer: 0,
+    commentTargetUid: 0,
+    commentViewerItemId: '',
     nativeMode: false,
     settingsVisible: true
   };
@@ -406,20 +426,29 @@
     return (flag ? flag + ' ' : '') + (label || value || '');
   }
 
-  function genderIcon(value) {
+  function genderClass(value) {
     value = String(value || '').toLowerCase();
-    if (value === 'male' || value === 'm' || value === '男') return '♂';
-    if (value === 'female' || value === 'f' || value === '女') return '♀';
-    if (value === 'private' || value === 'secret' || value === '保密') return '·';
-    if (value) return '◇';
+    if (value === 'male' || value === 'm' || value === '男') return 'male';
+    if (value === 'female' || value === 'f' || value === '女') return 'female';
+    if (value === 'private' || value === 'secret' || value === '保密') return 'private';
+    return '';
+  }
+
+  function genderIcon(value) {
+    var cls = genderClass(value);
+    if (cls === 'male') return '♂';
+    if (cls === 'female') return '♀';
+    if (cls === 'private') return '•';
     return '';
   }
 
   function genderMeta(user) {
-    var icon = genderIcon(user.gender || user.genderCode);
+    var gender = user.gender || user.genderCode;
+    var cls = genderClass(gender);
+    var icon = genderIcon(gender);
     var age = Number(user.age || 0);
     var html = '';
-    if (icon) html += '<span class="pps-gender-icon" aria-label="' + escapeHtml(TEXT.gender) + '">' + escapeHtml(icon) + '</span>';
+    if (icon) html += '<span class="pps-gender-icon pps-gender-' + escapeHtml(cls || 'private') + '" aria-label="' + escapeHtml(TEXT.gender) + '">' + escapeHtml(icon) + '</span>';
     if (age) html += '<span class="pps-age">' + age + '岁</span>';
     return html;
   }
@@ -555,6 +584,31 @@
     });
   }
 
+
+  function normalPathname() {
+    var base = (window.config && window.config.relative_path) || '';
+    var path = window.location && window.location.pathname || '';
+    if (base && path.indexOf(base) === 0) path = path.slice(base.length) || '/';
+    return path.replace(/\/+$/, '') || '/';
+  }
+
+  function isSwipeRoute() {
+    var path = normalPathname();
+    return path === '/partners/swipe' || path === '/nearby/swipe' || path === '/nearby';
+  }
+
+  function currentMode() {
+    var path = normalPathname();
+    var dataMode = state.root && state.root.getAttribute('data-mode');
+    if (path === '/nearby' || path === '/nearby/swipe') return 'nearby';
+    return dataMode === 'nearby' ? 'nearby' : 'recommend';
+  }
+
+  function cleanupFullScreenMode() {
+    document.documentElement.classList.remove('peipe-swipe-html');
+    document.body.classList.remove('peipe-swipe-mode');
+  }
+
   function buildChrome() {
     state.root.innerHTML = '' +
       '<div class="pps-native-feed" hidden></div>' +
@@ -564,8 +618,104 @@
       '<div class="pps-toast" hidden></div>' +
       '<div class="pps-sheet-backdrop"></div>' +
       '<section class="pps-profile-sheet" role="dialog" aria-modal="true"></section>' +
+      '<div class="pps-comment-backdrop"></div>' +
+      '<section class="pps-comment-sheet" role="dialog" aria-modal="true"></section>' +
       '<div class="pps-tag-backdrop"></div>' +
       '<section class="pps-tag-sheet" role="dialog" aria-modal="true"></section>';
+  }
+
+
+  function renderFloatComments(user) {
+    var list = Array.isArray(user.floatComments) ? user.floatComments : [];
+    list = list.filter(function (item) { return item && norm(item.content); }).slice(0, 3);
+    if (!list.length) return '';
+    return '<div class="pps-float-comments">' + list.map(function (item, index) {
+      var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml(String(item.authorName || 'U').slice(0, 1).toUpperCase()) + '</span>';
+      return '<div class="pps-float-comment pps-float-comment-' + index + '"><div class="pps-float-avatar">' + avatar + '</div><div class="pps-float-text">' + escapeHtml(item.content) + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function commentHtml(item) {
+    item = item || {};
+    var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml(String(item.authorName || 'U').slice(0, 1).toUpperCase()) + '</span>';
+    var mine = item.mine ? ' is-mine' : '';
+    return '<div class="pps-comment-item' + mine + '" data-id="' + escapeHtml(item.id || '') + '">' +
+      '<div class="pps-comment-avatar">' + avatar + '</div>' +
+      '<div class="pps-comment-body"><div class="pps-comment-name">' + escapeHtml(item.authorName || 'User') + '</div><div class="pps-comment-content">' + escapeHtml(item.content || '') + '</div></div>' +
+    '</div>';
+  }
+
+  function getUserByUid(uid) {
+    uid = Number(uid || 0);
+    return state.users.filter(function (item) { return Number(item.uid) === uid; })[0] || null;
+  }
+
+  function renderCommentSheet(targetUid, loading) {
+    var user = getUserByUid(targetUid) || {};
+    var sheet = $('.pps-comment-sheet', state.root);
+    if (!sheet) return;
+    sheet.innerHTML = '' +
+      '<div class="pps-comment-head"><div><strong>' + escapeHtml(TEXT.commentTitle) + '</strong><span>' + escapeHtml(user.displayName || user.username || '') + '</span></div><button type="button" class="pps-comment-close">×</button></div>' +
+      '<div class="pps-comment-list">' + (loading ? '<div class="pps-comment-muted">' + escapeHtml(TEXT.loading) + '</div>' : '') + '</div>' +
+      '<div class="pps-comment-editor"><textarea class="pps-comment-input" maxlength="80" placeholder="' + escapeHtml(TEXT.commentPlaceholder) + '"></textarea><button type="button" class="pps-comment-submit">' + escapeHtml(TEXT.commentSubmit) + '</button></div>';
+  }
+
+  function openComments(targetUid) {
+    if (!targetUid) return;
+    state.commentTargetUid = Number(targetUid);
+    renderCommentSheet(targetUid, true);
+    $('.pps-comment-backdrop', state.root).classList.add('is-open');
+    $('.pps-comment-sheet', state.root).classList.add('is-open');
+    loadComments(targetUid);
+  }
+
+  function closeComments() {
+    state.commentTargetUid = 0;
+    $('.pps-comment-backdrop', state.root).classList.remove('is-open');
+    $('.pps-comment-sheet', state.root).classList.remove('is-open');
+  }
+
+  function loadComments(targetUid) {
+    var list = $('.pps-comment-list', state.root);
+    if (!list) return;
+    apiFetch('/api/peipe-partners/comments/' + encodeURIComponent(targetUid) + '?limit=30').then(function (json) {
+      var comments = Array.isArray(json.comments) ? json.comments : [];
+      var viewer = json.viewerComment || null;
+      list.innerHTML = comments.length ? comments.map(commentHtml).join('') : '<div class="pps-comment-muted">' + escapeHtml(TEXT.commentEmpty) + '</div>';
+      var input = $('.pps-comment-input', state.root);
+      if (input && viewer && viewer.content) {
+        input.value = viewer.content;
+        state.commentViewerItemId = viewer.id || '';
+      } else {
+        state.commentViewerItemId = '';
+      }
+    }).catch(function (err) {
+      list.innerHTML = '<div class="pps-comment-muted">' + escapeHtml(err.message || TEXT.commentFail) + '</div>';
+    });
+  }
+
+  function submitComment() {
+    if (!isLoggedIn()) { toast(TEXT.commentLogin); return; }
+    var targetUid = Number(state.commentTargetUid || 0);
+    var input = $('.pps-comment-input', state.root);
+    var btn = $('.pps-comment-submit', state.root);
+    var content = norm(input && input.value);
+    if (!targetUid) return;
+    if (!content || content.length < 2) { toast(TEXT.commentTooShort); return; }
+    if (btn) { btn.disabled = true; btn.textContent = TEXT.commentSaving; }
+    apiFetch('/api/peipe-partners/comments/' + encodeURIComponent(targetUid), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
+      body: jsonBody({ content: content })
+    }).then(function () {
+      toast(TEXT.commentSaved);
+      loadComments(targetUid);
+      // Refresh the current card later so the new floating comment can enter the feed cache on the next pull.
+    }).catch(function (err) {
+      toast(err.message || TEXT.commentFail);
+    }).finally(function () {
+      if (btn) { btn.disabled = false; btn.textContent = TEXT.commentSubmit; }
+    });
   }
 
   function renderSlide(user, index) {
@@ -589,6 +739,7 @@
           '<div class="pps-photo-swiper swiper" data-index="' + index + '"><div class="swiper-wrapper">' + photoSlides + '</div>' + dots + '</div>' +
         '</div>' +
         '<div class="pps-gradient"></div>' +
+        renderFloatComments(user) +
         '<div class="pps-info">' +
           '<div class="pps-user-card">' +
             renderAvatarBlock(user) +
@@ -601,7 +752,7 @@
           '<div class="pps-bio">' + escapeHtml(bio) + '</div>' +
           (tags ? '<div class="pps-tags">' + tags + '</div>' : '') +
         '</div>' +
-        '<div class="pps-side-actions"><button type="button" class="pps-greet-btn" data-uid="' + Number(user.uid || 0) + '"><span class="pps-greet-wave">👋</span><span class="pps-greet-label">Hi</span></button></div>' +
+        '<div class="pps-side-actions"><button type="button" class="pps-comment-btn" data-uid="' + Number(user.uid || 0) + '"><span>💬</span><b>' + escapeHtml(TEXT.commentAction) + '</b></button><button type="button" class="pps-greet-btn" data-uid="' + Number(user.uid || 0) + '"><span class="pps-greet-wave">👋</span><span class="pps-greet-label">Hi</span></button></div>' +
       '</section>';
   }
 
@@ -748,6 +899,35 @@
     }
   }
 
+  function syncLocationIfPossible() {
+    if (!isLoggedIn() || !navigator.geolocation) return Promise.resolve(false);
+    var uid = String(currentUser() && currentUser().uid || '0');
+    var key = 'pps-location-sync:' + uid;
+    var last = Number(localStorage.getItem(key) || 0) || 0;
+    if (Date.now() - last < 6 * 60 * 60 * 1000) return Promise.resolve(false);
+    localStorage.setItem(key, String(Date.now()));
+    return new Promise(function (resolve) {
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        var c = pos && pos.coords;
+        if (!c) return resolve(false);
+        apiFetch('/api/peipe-partners/location', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
+          body: JSON.stringify({ lat: c.latitude, lng: c.longitude })
+        }).then(function () {
+          resolve(true);
+        }).catch(function (err) {
+          console.warn('[peipe-swipe] location save failed', err);
+          resolve(false);
+        });
+      }, function () { resolve(false); }, {
+        enableHighAccuracy: false,
+        timeout: 6500,
+        maximumAge: 60 * 60 * 1000
+      });
+    });
+  }
+
   function loadFeed(refresh) {
     if (state.loading || (state.done && !refresh)) return Promise.resolve();
     state.loading = true;
@@ -757,7 +937,7 @@
       state.index = 0;
       state.photoSwipers.clear();
     }
-    return apiFetch('/api/peipe-partners/swipe/feed?mode=recommend&limit=' + CONFIG.pageSize)
+    return apiFetch('/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize)
       .then(function (json) {
         var users = Array.isArray(json.users) ? json.users : [];
         state.users = refresh ? users : state.users.concat(users);
@@ -964,7 +1144,6 @@
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.displayName) + '</label><div class="pps-display-row"><button type="button" class="pps-avatar-upload" aria-label="' + escapeHtml(TEXT.uploadAvatar) + '">' + (avatar ? '<img class="pps-form-avatar pps-form-avatar-img" data-avatar="' + escapeHtml(avatar) + '" src="' + escapeHtml(avatar) + '" alt="avatar">' : '<span class="pps-form-avatar pps-form-avatar-img" data-avatar=""></span>') + '<span class="pps-avatar-plus">+</span></button><input class="pps-avatar-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" hidden><input name="displayName" maxlength="40" value="' + escapeHtml(profile.displayName || profile.username || me.username || '') + '"></div></div>' +
             '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.photos) + '</div><div class="pps-photos-row">' + renderPhotoTiles(profile.photos) + '</div><input class="pps-photo-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" multiple hidden><button type="button" class="pps-upload-btn">' + escapeHtml(TEXT.uploadPhotos) + '</button></div>' +
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.bio) + '</label><textarea name="bio" maxlength="180" placeholder="' + escapeHtml(TEXT.bioPlaceholder) + '">' + escapeHtml(profile.bio || '') + '</textarea></div>' +
-            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.location) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><input name="locationText" maxlength="40" placeholder="' + escapeHtml(TEXT.locationPlaceholder) + '" value="' + escapeHtml(profile.locationText || profile.location || '') + '"></div>' +
             '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.country) + '</label>' + buildChoicePicker('language_flag', OPTIONS.countries, profile.language_flag, 'country', false, 1, TEXT.country) + '</div>' +
             '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.gender) + '</label>' + buildChoicePicker('gender', OPTIONS.genders, profile.gender, 'text', false, 1, TEXT.gender) + '</div>' +
             '<div class="pps-lang-picker-row pps-span-2">' +
@@ -1019,7 +1198,6 @@
     return {
       displayName: norm($('[name="displayName"]', sheet).value),
       avatar: getProfileAvatarFromSheet(),
-      locationText: norm($('[name="locationText"]', sheet).value),
       photos: getProfilePhotosFromSheet(),
       bio: norm($('[name="bio"]', sheet).value),
       language_flag: getChoiceValue('language_flag'),
@@ -1395,17 +1573,76 @@
     });
   }
 
-  function handleAvatarFile(file) {
+  function closeAvatarCrop() {
+    var sheet = $('.pps-crop-sheet', state.root);
+    if (sheet) sheet.remove();
+    if (state.avatarCrop && state.avatarCrop.url) {
+      try { URL.revokeObjectURL(state.avatarCrop.url); } catch (e) {}
+    }
+    state.avatarCrop = null;
+  }
+
+  function updateAvatarCropTransform() {
+    var crop = state.avatarCrop;
+    var img = $('.pps-crop-img', state.root);
+    if (!crop || !img) return;
+    img.style.transform = 'translate(-50%, -50%) translate(' + Math.round(crop.x || 0) + 'px,' + Math.round(crop.y || 0) + 'px) scale(' + Number(crop.zoom || 1).toFixed(2) + ')';
+  }
+
+  function cropAvatarToFile() {
+    var crop = state.avatarCrop;
+    if (!crop || !crop.file || !crop.naturalWidth || !crop.naturalHeight) return Promise.resolve(crop && crop.file);
+    return canCanvasEncode('image/webp').then(function (webp) {
+      var cfg = imageConfig(CONFIG.avatarImageConfig || {});
+      var type = cfg.useWebp && webp ? 'image/webp' : 'image/jpeg';
+      var outSize = 720;
+      var box = 260;
+      var naturalW = crop.naturalWidth;
+      var naturalH = crop.naturalHeight;
+      var baseScale = Math.max(box / naturalW, box / naturalH);
+      var zoom = Math.max(1, Number(crop.zoom || 1));
+      var displayScale = baseScale * zoom;
+      var cropSize = Math.min(naturalW, naturalH, box / displayScale);
+      var centerX = naturalW / 2 - Number(crop.x || 0) / displayScale;
+      var centerY = naturalH / 2 - Number(crop.y || 0) / displayScale;
+      var sx = Math.max(0, Math.min(naturalW - cropSize, centerX - cropSize / 2));
+      var sy = Math.max(0, Math.min(naturalH - cropSize, centerY - cropSize / 2));
+      var canvas = document.createElement('canvas');
+      canvas.width = outSize;
+      canvas.height = outSize;
+      var ctx = canvas.getContext('2d');
+      if (!ctx || !canvas.toBlob) return crop.file;
+      ctx.drawImage(crop.image, sx, sy, cropSize, cropSize, 0, 0, outSize, outSize);
+      var qualities = Array.isArray(cfg.qualities) && cfg.qualities.length ? cfg.qualities : [0.58, 0.5, 0.42, 0.34, 0.28];
+      var targetBytes = imageTargetBytes(cfg);
+      var best = null;
+      var chain = Promise.resolve();
+      qualities.forEach(function (q) {
+        chain = chain.then(function () {
+          if (best && best.size <= targetBytes) return best;
+          return canvasToBlob(canvas, type, Number(q)).then(function (blob) {
+            if (blob && blob.size) best = blob;
+            return best;
+          });
+        });
+      });
+      return chain.then(function () {
+        if (!best || !best.size) return crop.file;
+        return makeCompressedFile(crop.file, best, type);
+      });
+    }).catch(function () {
+      return crop.file;
+    });
+  }
+
+  function uploadAvatarPreparedFile(file) {
     if (!file || file.size === 0) return toast(TEXT.imageOnly);
     if (state.uploadBusy) return toast(TEXT.uploading);
     state.uploadBusy = true;
     var btn = $('.pps-avatar-upload', state.root);
     if (btn) btn.classList.add('is-uploading');
-    toast(TEXT.compressing);
-    compressImageFile(file, CONFIG.avatarImageConfig || {}).then(function (nextFile) {
-      toast(TEXT.uploading);
-      return uploadToNodeBB(nextFile);
-    }).then(function (url) {
+    toast(TEXT.uploading);
+    uploadToNodeBB(file).then(function (url) {
       updateProfileAvatar(url);
       toast(TEXT.saveOk);
     }).catch(function (err) {
@@ -1415,6 +1652,43 @@
       state.uploadBusy = false;
       if (btn) btn.classList.remove('is-uploading');
     });
+  }
+
+  function openAvatarCrop(file) {
+    if (!file || file.size === 0) return toast(TEXT.imageOnly);
+    if (!isImageFile(file)) return uploadAvatarPreparedFile(file);
+    var type = mimeFromFile(file);
+    if (/heic|heif|gif|svg/i.test(type) || /^(heic|heif|gif|svg)$/i.test(fileExt(file))) {
+      return uploadAvatarPreparedFile(file);
+    }
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      state.avatarCrop = { file: file, url: url, image: img, naturalWidth: img.naturalWidth || img.width, naturalHeight: img.naturalHeight || img.height, zoom: 1.25, x: 0, y: 0, dragging: false };
+      var old = $('.pps-crop-sheet', state.root);
+      if (old) old.remove();
+      var host = document.createElement('section');
+      host.className = 'pps-crop-sheet is-open';
+      host.innerHTML = '' +
+        '<div class="pps-crop-panel">' +
+          '<div class="pps-crop-title">' + escapeHtml(TEXT.cropAvatar || '裁切头像') + '</div>' +
+          '<div class="pps-crop-tip">' + escapeHtml(TEXT.cropTip || '拖动图片调整位置，滑动缩放。') + '</div>' +
+          '<div class="pps-crop-box"><img class="pps-crop-img" src="' + escapeHtml(url) + '" alt="avatar crop"></div>' +
+          '<input class="pps-crop-range" type="range" min="1" max="3" step="0.01" value="1.25">' +
+          '<div class="pps-crop-actions"><button type="button" class="pps-crop-cancel">' + escapeHtml(TEXT.cropCancel || '取消') + '</button><button type="button" class="pps-crop-use">' + escapeHtml(TEXT.cropUse || '上传头像') + '</button></div>' +
+        '</div>';
+      state.root.appendChild(host);
+      updateAvatarCropTransform();
+    };
+    img.onerror = function () {
+      try { URL.revokeObjectURL(url); } catch (e) {}
+      uploadAvatarPreparedFile(file);
+    };
+    img.src = url;
+  }
+
+  function handleAvatarFile(file) {
+    openAvatarCrop(file);
   }
 
   function renderChoiceSheet(name) {
@@ -1534,10 +1808,26 @@
   function bindEvents() {
     state.root.addEventListener('click', function (e) {
       var btn;
+      if ((btn = e.target.closest('.pps-comment-btn'))) {
+        e.preventDefault();
+        e.stopPropagation();
+        openComments(Number(btn.dataset.uid || 0));
+        return;
+      }
       if ((btn = e.target.closest('.pps-greet-btn'))) {
         e.preventDefault();
         e.stopPropagation();
         greet(Number(btn.dataset.uid || 0), btn);
+        return;
+      }
+      if (e.target.closest('.pps-comment-close') || e.target.closest('.pps-comment-backdrop')) {
+        e.preventDefault();
+        closeComments();
+        return;
+      }
+      if (e.target.closest('.pps-comment-submit')) {
+        e.preventDefault();
+        submitComment();
         return;
       }
       if (e.target.closest('.pps-edit-profile')) {
@@ -1630,6 +1920,25 @@
         updateTagCount();
         return;
       }
+      if (e.target.closest('.pps-crop-cancel')) {
+        e.preventDefault();
+        closeAvatarCrop();
+        return;
+      }
+      if (e.target.closest('.pps-crop-use')) {
+        e.preventDefault();
+        var useBtn = e.target.closest('.pps-crop-use');
+        if (useBtn) { useBtn.disabled = true; useBtn.textContent = TEXT.uploading; }
+        cropAvatarToFile().then(function (file) {
+          closeAvatarCrop();
+          uploadAvatarPreparedFile(file);
+        }).catch(function () {
+          var original = state.avatarCrop && state.avatarCrop.file;
+          closeAvatarCrop();
+          uploadAvatarPreparedFile(original);
+        });
+        return;
+      }
       if ((btn = e.target.closest('.pps-tag-choice'))) {
         e.preventDefault();
         toggleTag(btn.dataset.key, btn);
@@ -1649,6 +1958,37 @@
         handlePhotoFiles(files);
       }
     });
+
+    state.root.addEventListener('input', function (e) {
+      if (e.target && e.target.classList.contains('pps-crop-range') && state.avatarCrop) {
+        state.avatarCrop.zoom = Number(e.target.value || 1.25) || 1.25;
+        updateAvatarCropTransform();
+      }
+    });
+
+    state.root.addEventListener('pointerdown', function (e) {
+      if (!e.target.closest || !e.target.closest('.pps-crop-box') || !state.avatarCrop) return;
+      state.avatarCrop.dragging = true;
+      state.avatarCrop.startX = e.clientX;
+      state.avatarCrop.startY = e.clientY;
+      state.avatarCrop.baseX = state.avatarCrop.x || 0;
+      state.avatarCrop.baseY = state.avatarCrop.y || 0;
+      try { e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+
+    state.root.addEventListener('pointermove', function (e) {
+      if (!state.avatarCrop || !state.avatarCrop.dragging) return;
+      e.preventDefault();
+      state.avatarCrop.x = (state.avatarCrop.baseX || 0) + e.clientX - state.avatarCrop.startX;
+      state.avatarCrop.y = (state.avatarCrop.baseY || 0) + e.clientY - state.avatarCrop.startY;
+      updateAvatarCropTransform();
+    });
+
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (name) {
+      state.root.addEventListener(name, function () {
+        if (state.avatarCrop) state.avatarCrop.dragging = false;
+      });
+    });
   }
 
   function enterFullScreenMode() {
@@ -1658,8 +1998,13 @@
 
   function init() {
     state.root = document.getElementById('peipe-swipe-app');
-    if (!state.root || state.root.dataset.ppsReady === '1') return;
+    if (!state.root || !isSwipeRoute()) {
+      cleanupFullScreenMode();
+      return;
+    }
+    if (state.root.dataset.ppsReady === '1') return;
     state.root.dataset.ppsReady = '1';
+    state.mode = currentMode();
     state.settingsVisible = true;
     state.swiper = null;
     state.users = [];
@@ -1671,6 +2016,7 @@
       bindEvents();
       Promise.all([loadOptions(), loadTags(), loadMe(), ensureSwiper()]).then(function () {
         loadFeed(true);
+        syncLocationIfPossible().then(function (updated) { if (updated) loadFeed(true); });
       });
     });
   }
@@ -1679,6 +2025,12 @@
   else init();
 
   if (window.ajaxify && window.ajaxify.on) {
-    window.ajaxify.on('action:ajaxify.end', init);
+    window.ajaxify.on('action:ajaxify.start', function () {
+      if (!isSwipeRoute()) cleanupFullScreenMode();
+    });
+    window.ajaxify.on('action:ajaxify.end', function () {
+      if (!isSwipeRoute()) cleanupFullScreenMode();
+      init();
+    });
   }
 })();
