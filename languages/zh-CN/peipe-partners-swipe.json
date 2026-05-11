@@ -84,5 +84,16 @@
   "tagNativeHelper": "母语帮助",
   "privateGender": "保密",
   "selectPlaceholder": "请选择",
-  "missingPrefix": "请先补全："
+  "missingPrefix": "请先补全：",
+  "height": "身高",
+  "weight": "体重",
+  "education": "学历",
+  "occupation": "职业",
+  "relationship": "感情状况",
+  "interests": "兴趣爱好",
+  "heightPlaceholder": "例如 170",
+  "weightPlaceholder": "例如 60",
+  "occupationPlaceholder": "例如 学生 / 设计师",
+  "interestsPlaceholder": "例如 电影、音乐、旅行",
+  "optional": "选填"
 }
