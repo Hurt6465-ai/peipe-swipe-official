@@ -3,6 +3,7 @@
 const routeHelpers = require.main.require('./src/routes/helpers');
 const partner = require('./lib/partner');
 const swipe = require('./swipe');
+const partnerComments = require('./swipe/comments');
 
 const plugin = {};
 
@@ -18,16 +19,26 @@ function json(res, payload) {
 }
 
 plugin.init = async ({ router, middleware }) => {
+  // Old list page is kept, so the original partner page continues to work.
   routeHelpers.setupPageRoute(router, '/partners', [], (req, res) => {
     res.render('peipe-partners', { uid: req.uid || 0 });
   });
 
+  // Nearby defaults to full-screen swipe. Old list stays available at /nearby/list.
   routeHelpers.setupPageRoute(router, '/nearby', [], (req, res) => {
+    res.render('peipe-partners-swipe', { uid: req.uid || 0, mode: 'nearby' });
+  });
+
+  routeHelpers.setupPageRoute(router, '/nearby/list', [], (req, res) => {
     res.render('peipe-nearby', { uid: req.uid || 0 });
   });
 
   routeHelpers.setupPageRoute(router, '/partners/swipe', [], (req, res) => {
-    res.render('peipe-partners-swipe', { uid: req.uid || 0 });
+    res.render('peipe-partners-swipe', { uid: req.uid || 0, mode: 'recommend' });
+  });
+
+  routeHelpers.setupPageRoute(router, '/nearby/swipe', [], (req, res) => {
+    res.render('peipe-partners-swipe', { uid: req.uid || 0, mode: 'nearby' });
   });
 
   router.get('/api/peipe-partners', asyncRoute(async (req, res) => {
@@ -72,6 +83,30 @@ plugin.init = async ({ router, middleware }) => {
 
   router.put('/api/peipe-partners/swipe/me', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
     json(res, await swipe.saveMe(req.uid, req.body || {}));
+  }));
+
+  router.get('/api/peipe-partners/comments/:uid', asyncRoute(async (req, res) => {
+    json(res, await partnerComments.listForTarget(req.params.uid, req.uid, req.query.limit));
+  }));
+
+  router.get('/api/peipe-partners/profile/:uid/comments', asyncRoute(async (req, res) => {
+    json(res, await partnerComments.listForTarget(req.params.uid, req.uid, req.query.limit));
+  }));
+
+  router.post('/api/peipe-partners/comments/:uid', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+    json(res, await partnerComments.upsert(req));
+  }));
+
+  router.post('/api/peipe-partners/profile/:uid/comments', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+    json(res, await partnerComments.upsert(req));
+  }));
+
+  router.put('/api/peipe-partners/comments/item/:id', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+    json(res, await partnerComments.update(req));
+  }));
+
+  router.delete('/api/peipe-partners/comments/item/:id', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+    json(res, await partnerComments.remove(req));
   }));
 };
 
@@ -118,6 +153,30 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
 
   routeHelpers.setupApiRoute(router, 'put', '/peipe-partners/swipe/me', [middleware.ensureLoggedIn], async (req, res) => {
     helpers.formatApiResponse(200, res, await swipe.saveMe(req.uid, req.body || {}));
+  });
+
+  routeHelpers.setupApiRoute(router, 'get', '/peipe-partners/comments/:uid', [], async (req, res) => {
+    helpers.formatApiResponse(200, res, await partnerComments.listForTarget(req.params.uid, req.uid, req.query.limit));
+  });
+
+  routeHelpers.setupApiRoute(router, 'get', '/peipe-partners/profile/:uid/comments', [], async (req, res) => {
+    helpers.formatApiResponse(200, res, await partnerComments.listForTarget(req.params.uid, req.uid, req.query.limit));
+  });
+
+  routeHelpers.setupApiRoute(router, 'post', '/peipe-partners/comments/:uid', [middleware.ensureLoggedIn], async (req, res) => {
+    helpers.formatApiResponse(200, res, await partnerComments.upsert(req));
+  });
+
+  routeHelpers.setupApiRoute(router, 'post', '/peipe-partners/profile/:uid/comments', [middleware.ensureLoggedIn], async (req, res) => {
+    helpers.formatApiResponse(200, res, await partnerComments.upsert(req));
+  });
+
+  routeHelpers.setupApiRoute(router, 'put', '/peipe-partners/comments/item/:id', [middleware.ensureLoggedIn], async (req, res) => {
+    helpers.formatApiResponse(200, res, await partnerComments.update(req));
+  });
+
+  routeHelpers.setupApiRoute(router, 'delete', '/peipe-partners/comments/item/:id', [middleware.ensureLoggedIn], async (req, res) => {
+    helpers.formatApiResponse(200, res, await partnerComments.remove(req));
   });
 };
 
