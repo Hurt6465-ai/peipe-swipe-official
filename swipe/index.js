@@ -5,13 +5,13 @@ const partner = require('../lib/partner');
 const tagData = require('./tags');
 
 const EXTRA_FIELDS = [
-  'uid', 'username', 'userslug', 'picture', 'uploadedpicture',
+  'uid', 'username', 'userslug', 'picture', 'uploadedpicture', 'location',
   'bio', 'aboutme', 'signature',
   'age', 'birthday', 'birthdate', 'peipe_partner_birthday',
   'gender', 'language_flag', 'language_fluent', 'language_learning',
   'peipe_partner_display_name', 'peipe_partner_photo', 'peipe_partner_photos', 'peipe_partner_tags',
   'peipe_partner_height', 'peipe_partner_weight', 'peipe_partner_education', 'peipe_partner_occupation',
-  'peipe_partner_relationship', 'relationship_status',
+  'peipe_partner_relationship', 'relationship_status', 'peipe_partner_location',
 ];
 
 const COUNTRY_TO_FLAG = {
@@ -177,7 +177,7 @@ function normaliseCountryCode(value) {
 }
 
 function normaliseProfile(raw) {
-  const accountPicture = cleanUrl(raw.picture || raw.uploadedpicture || '');
+  const accountPicture = cleanUrl(raw.picture || raw.uploadedpicture || raw.avatar || '');
   const mainPhoto = cleanUrl(raw.peipe_partner_photo || '');
   const photos = normalisePhotos(raw.peipe_partner_photos, mainPhoto);
   const tags = tagData.normaliseSelectedTags(parseJsonArray(raw.peipe_partner_tags));
@@ -209,6 +209,8 @@ function normaliseProfile(raw) {
     education: cleanText(raw.peipe_partner_education || '', 40),
     occupation: cleanText(raw.peipe_partner_occupation || '', 60),
     relationship: cleanText(raw.peipe_partner_relationship || raw.relationship_status || '', 40),
+    locationText: cleanText(raw.peipe_partner_location || raw.location || '', 60),
+    location: cleanText(raw.peipe_partner_location || raw.location || '', 60),
   };
 }
 
@@ -251,6 +253,8 @@ function decorateUser(baseUser, extra) {
     education: profile.education || baseUser.education || '',
     occupation: profile.occupation || baseUser.occupation || '',
     relationship: profile.relationship || baseUser.relationship || baseUser.relationshipStatus || '',
+    locationText: profile.locationText || baseUser.locationText || baseUser.location || '',
+    location: profile.locationText || baseUser.location || '',
   });
 }
 
@@ -294,11 +298,17 @@ async function saveMe(uid, body) {
   const birthday = cleanDate(body.birthday || body.birthdate || body.peipe_partner_birthday || current.peipe_partner_birthday || current.birthday || current.birthdate || '');
   const age = normaliseAge(body.age || current.age, birthday);
   const bio = cleanText(body.bio || body.aboutme || current.aboutme || current.bio || '', 180);
+  const avatar = cleanUrl(body.avatar || body.picture || body.uploadedpicture || current.picture || current.uploadedpicture || '');
+  const locationText = cleanText(body.locationText || body.location || current.peipe_partner_location || current.location || '', 60);
 
   const fields = {
     peipe_partner_display_name: displayName,
     peipe_partner_photo: photo,
     peipe_partner_photos: JSON.stringify(photos),
+    picture: avatar,
+    uploadedpicture: avatar,
+    peipe_partner_location: locationText,
+    location: locationText,
     peipe_partner_tags: JSON.stringify(tags),
     aboutme: bio,
     bio,
