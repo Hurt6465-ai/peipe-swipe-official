@@ -1053,3 +1053,179 @@ body.peipe-swipe-mode [component="container"] {
     min-height: 46px;
   }
 }
+
+/* Peipe Partners Swipe v4 exact mobile card refinements */
+.pps-info {
+  bottom: calc(54px + env(safe-area-inset-bottom));
+  right: 126px;
+  max-height: min(50vh, 380px);
+}
+
+.pps-user-card {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pps-avatar-wrap {
+  width: 64px;
+  height: 64px;
+  flex-basis: 64px;
+  margin-top: 1px;
+}
+
+.pps-avatar,
+.pps-avatar-fallback {
+  width: 64px !important;
+  height: 64px !important;
+  flex-basis: 64px !important;
+}
+
+.pps-avatar-flag {
+  left: -6px;
+  bottom: -5px;
+  font-size: 23px;
+  background: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+}
+
+.pps-online-dot {
+  right: 1px;
+  top: 1px;
+  width: 14px;
+  height: 14px;
+}
+
+.pps-name {
+  max-width: 43vw;
+  font-size: clamp(19px, 5.2vw, 25px);
+}
+
+.pps-gender-icon {
+  width: auto;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 2px;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-size: 16px;
+  color: rgba(255,255,255,.96);
+}
+
+.pps-age {
+  font-size: 12px;
+  opacity: .9;
+}
+
+.pps-lang-row {
+  margin-top: 2px;
+}
+
+.pps-lang-chip {
+  max-width: 34vw;
+  min-height: 22px;
+  padding: 3px 7px;
+  font-size: 12px;
+  background: rgba(255,255,255,.14);
+}
+
+.pps-detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 48px;
+  overflow: hidden;
+}
+
+.pps-detail-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.13);
+  color: rgba(255,255,255,.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.pps-bio {
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.34;
+  max-height: 4.1em;
+}
+
+.pps-tags {
+  max-height: 50px;
+}
+
+.pps-side-actions {
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(104px + env(safe-area-inset-bottom));
+}
+
+.pps-greet-btn {
+  width: auto !important;
+  min-width: 94px;
+  height: 50px;
+  min-height: 50px;
+  padding: 0 17px;
+  border-radius: 22px;
+  flex-direction: row !important;
+  gap: 7px;
+  color: #fff;
+  background: linear-gradient(135deg, #9b7cff, #7c5cff);
+  box-shadow: 0 13px 30px rgba(91, 65, 190, .36);
+}
+
+.pps-greet-btn:disabled {
+  opacity: .84;
+}
+
+.pps-greet-wave {
+  font-size: 20px;
+}
+
+.pps-greet-label {
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.pps-field label span {
+  font-size: 12px;
+  font-weight: 650;
+  color: rgba(17,24,39,.5);
+}
+
+@media (max-width: 390px) {
+  .pps-info {
+    right: 112px;
+    bottom: calc(48px + env(safe-area-inset-bottom));
+  }
+
+  .pps-avatar-wrap,
+  .pps-avatar,
+  .pps-avatar-fallback {
+    width: 58px !important;
+    height: 58px !important;
+    flex-basis: 58px !important;
+  }
+
+  .pps-name {
+    max-width: 40vw;
+    font-size: clamp(18px, 5vw, 23px);
+  }
+
+  .pps-greet-btn {
+    min-width: 86px;
+    height: 48px;
+    min-height: 48px;
+    padding: 0 14px;
+  }
+}
