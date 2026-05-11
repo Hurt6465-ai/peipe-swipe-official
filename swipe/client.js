@@ -1,16 +1,25 @@
-/* Peipe Partners Swipe v6
+/* Peipe Partners Swipe v8
    - full-screen mobile page
    - vertical swipe partners, horizontal swipe photos
    - profile setup with frosted glass sheet
-   - local photo upload with front-end compression, <= 5MB after compression
+   - direct NodeBB photo upload; optional compression must never block upload
    - no avatar-as-background: avatar is avatar, partner photos are separate
 */
 (function () {
   'use strict';
 
-  if (window.__peipePartnersSwipeV6) return;
+  if (window.__peipePartnersSwipeV8) return;
+  window.__peipePartnersSwipeV8 = true;
+  window.__peipePartnersSwipeV7 = true;
   window.__peipePartnersSwipeV6 = true;
   window.__peipePartnersSwipeV5 = true;
+
+  // NodeBB ajaxify tries to load a forum route module named after the template.
+  // Defining this small no-op module prevents the "Cannot find module ./peipe-partners-swipe" console error.
+  if (typeof define === 'function' && define.amd && !window.__peipePartnersSwipeForumModule) {
+    window.__peipePartnersSwipeForumModule = true;
+    define('forum/peipe-partners-swipe', [], function () { return { init: function () {} }; });
+  }
 
   var CONFIG = Object.assign({
     pageSize: 18,
@@ -39,7 +48,7 @@
     uploadPhotos: '上传手机图片',
     uploading: '上传中...',
     imageTooLarge: '图片压缩后仍超过 5MB，请换一张图片',
-    imageOnly: '图片读取失败，请换一张图片或重新选择',
+    imageOnly: '请选择图片',
     maxPhotos: '',
     bio: '介绍',
     bioPlaceholder: '介绍一下你想练什么语言、喜欢聊什么。',
@@ -937,8 +946,8 @@
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.bio) + '</label><textarea name="bio" maxlength="180" placeholder="' + escapeHtml(TEXT.bioPlaceholder) + '">' + escapeHtml(profile.bio || '') + '</textarea></div>' +
             '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.country) + '</label>' + buildChoicePicker('language_flag', OPTIONS.countries, profile.language_flag, 'country', false, 1, TEXT.country) + '</div>' +
             '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.gender) + '</label>' + buildChoicePicker('gender', OPTIONS.genders, profile.gender, 'text', false, 1, TEXT.gender) + '</div>' +
-            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.nativeLanguage) + '</label>' + buildChoicePicker('language_fluent', OPTIONS.languages, profile.language_fluent, 'language', true, 5, TEXT.nativeLanguage) + '</div>' +
-            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.learningLanguage) + '</label>' + buildChoicePicker('language_learning', OPTIONS.languages, profile.language_learning, 'language', true, 5, TEXT.learningLanguage) + '</div>' +
+            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.nativeLanguage) + '</label>' + buildChoicePicker('language_fluent', OPTIONS.languages, profile.language_fluent, 'language', true, 5, TEXT.nativeLanguage) + '</div>' +
+            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.learningLanguage) + '</label>' + buildChoicePicker('language_learning', OPTIONS.languages, profile.language_learning, 'language', true, 5, TEXT.learningLanguage) + '</div>' +
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.birthday) + '</label><input type="date" name="birthday" value="' + escapeHtml(profile.birthday || '') + '"></div>' +
             '<div class="pps-field"><label>' + escapeHtml(TEXT.height) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><div class="pps-unit-input"><input inputmode="decimal" name="heightCm" maxlength="5" placeholder="' + escapeHtml(TEXT.heightPlaceholder) + '" value="' + escapeHtml(profile.heightCm || '') + '"><span>cm</span></div></div>' +
             '<div class="pps-field"><label>' + escapeHtml(TEXT.weight) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><div class="pps-unit-input"><input inputmode="decimal" name="weightKg" maxlength="5" placeholder="' + escapeHtml(TEXT.weightPlaceholder) + '" value="' + escapeHtml(profile.weightKg || '') + '"><span>kg</span></div></div>' +
@@ -1098,9 +1107,43 @@
 
   function loadImageFromFile(file) {
     return new Promise(function (resolve, reject) {
+      if (!file) return reject(new Error('empty file'));
+      if (window.createImageBitmap) {
+        window.createImageBitmap(file).then(function (bitmap) {
+          resolve({
+            width: bitmap.width,
+            height: bitmap.height,
+            draw: function (ctx, w, h) { ctx.drawImage(bitmap, 0, 0, w, h); },
+            close: function () { try { bitmap.close && bitmap.close(); } catch (e) {} }
+          });
+        }).catch(function () {
+          var img = new Image();
+          var url = URL.createObjectURL(file);
+          img.onload = function () {
+            URL.revokeObjectURL(url);
+            resolve({
+              width: img.naturalWidth || img.width,
+              height: img.naturalHeight || img.height,
+              draw: function (ctx, w, h) { ctx.drawImage(img, 0, 0, w, h); },
+              close: function () {}
+            });
+          };
+          img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('decode failed')); };
+          img.src = url;
+        });
+        return;
+      }
       var img = new Image();
       var url = URL.createObjectURL(file);
-      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        resolve({
+          width: img.naturalWidth || img.width,
+          height: img.naturalHeight || img.height,
+          draw: function (ctx, w, h) { ctx.drawImage(img, 0, 0, w, h); },
+          close: function () {}
+        });
+      };
       img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('decode failed')); };
       img.src = url;
     });
@@ -1114,52 +1157,51 @@
 
   function compressImageFile(file) {
     if (!file) return Promise.reject(new Error(TEXT.imageOnly));
-    var mime = mimeFromFile(file);
-    var originalType = String(file.type || '').toLowerCase();
-    file = withMime(file, mime || (/^image\//.test(originalType) ? originalType : 'image/jpeg'));
-    if (file.size && file.size <= CONFIG.maxUploadBytes && /image\/(jpeg|jpg|png|webp|gif)/i.test(file.type || mime || '')) {
+
+    // Do not block normal phone photos. If it is already <= 5MB, upload the original file directly.
+    // This avoids Android/WeChat/Chrome decode quirks that caused "读取失败" before upload.
+    if (file.size && file.size <= CONFIG.maxUploadBytes) return Promise.resolve(file);
+
+    // HEIC/HEIF/GIF are often not decodable by canvas. Try original upload first if possible.
+    if (/gif|svg|heic|heif/i.test(file.type || '') || /^(heic|heif|gif)$/i.test(fileExt(file))) {
       return Promise.resolve(file);
     }
-    if (/gif|svg|heic|heif/i.test(file.type || '') || /^(heic|heif)$/i.test(fileExt(file))) {
-      if (file.size <= CONFIG.maxUploadBytes) return Promise.resolve(file);
-      return Promise.reject(new Error(TEXT.imageTooLarge));
-    }
-    return loadImageFromFile(file).catch(function () {
-      if (file.size <= CONFIG.maxUploadBytes) return null;
-      throw new Error(TEXT.imageTooLarge);
-    }).then(function (img) {
-      if (!img) return file;
+
+    return loadImageFromFile(file).then(function (img) {
       var maxSide = CONFIG.imageMaxSide;
-      var w = img.naturalWidth || img.width;
-      var h = img.naturalHeight || img.height;
+      var w = img.width || 1;
+      var h = img.height || 1;
       var scale = Math.min(1, maxSide / Math.max(w, h));
       var canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(w * scale));
       canvas.height = Math.max(1, Math.round(h * scale));
       var ctx = canvas.getContext('2d');
-      if (!ctx || !canvas.toBlob) {
-        if (file.size <= CONFIG.maxUploadBytes) return file;
-        throw new Error(TEXT.imageTooLarge);
-      }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      if (!ctx || !canvas.toBlob) return file;
+      img.draw(ctx, canvas.width, canvas.height);
+      img.close && img.close();
+
       return canCanvasEncode('image/webp').then(function (webp) {
         var type = webp ? 'image/webp' : 'image/jpeg';
         var quality = CONFIG.imageQualityStart;
         function step() {
           return canvasToBlob(canvas, type, quality).then(function (blob) {
-            if (!blob) throw new Error(TEXT.imageTooLarge);
+            if (!blob) return file;
             if (blob.size <= CONFIG.maxUploadBytes || quality <= CONFIG.imageQualityMin) return blob;
             quality = Math.max(CONFIG.imageQualityMin, quality - 0.10);
             return step();
           });
         }
         return step().then(function (blob) {
-          if (blob.size > CONFIG.maxUploadBytes) throw new Error(TEXT.imageTooLarge);
+          if (!blob || blob.size > CONFIG.maxUploadBytes) return file;
           var ext = type === 'image/webp' ? '.webp' : '.jpg';
-          var name = String(file.name || ('photo-' + Date.now())).replace(/\.[^.]+$/, '') + ext;
-          return new File([blob], name, { type: type, lastModified: Date.now() });
+          var base = String(file.name || ('photo-' + Date.now())).replace(/\.[^.]+$/, '');
+          return new File([blob], base + ext, { type: type, lastModified: Date.now() });
         });
       });
+    }).catch(function () {
+      // Never fail before upload only because browser cannot decode the local image.
+      // Upload original and let NodeBB return the real server error if it cannot accept it.
+      return file;
     });
   }
 
@@ -1179,55 +1221,64 @@
   }
 
   function uploadToNodeBB(file) {
-    var cids = [CONFIG.uploadCid || 6, 6, 1, 0].filter(function (cid, index, arr) {
-      cid = Number(cid || 0);
-      return arr.indexOf(cid) === index;
-    });
-    var lastError = null;
-    function tryOne(i) {
-      var cid = cids[i];
-      var form = new FormData();
-      form.append('files[]', file, file.name || ('photo-' + Date.now() + '.jpg'));
-      form.append('cid', String(cid));
-      return fetch(rel('/api/post/upload'), {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'x-csrf-token': csrfToken(), 'x-requested-with': 'XMLHttpRequest' },
-        body: form
-      }).then(function (res) {
-        return res.json().catch(function () { return {}; }).then(function (json) {
-          if (!res.ok) throw new Error(json.error || json.message || 'upload failed');
-          return extractUploadUrl(json);
-        });
-      }).catch(function (err) {
-        lastError = err;
-        if (i + 1 < cids.length) return tryOne(i + 1);
-        throw lastError || err;
+    if (!file) return Promise.reject(new Error(TEXT.imageOnly));
+
+    // This is intentionally the same shape as your working topic/video uploader.
+    // Do NOT pre-read the image with FileReader/Image/canvas here; some mobile browsers
+    // fail local decoding even though NodeBB can upload the File successfully.
+    var form = new FormData();
+    form.append('files[]', file);
+    form.append('cid', String(CONFIG.uploadCid || 6));
+
+    return fetch(rel('/api/post/upload'), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'x-csrf-token': csrfToken(),
+        'x-requested-with': 'XMLHttpRequest'
+      },
+      body: form
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        var json = {};
+        try { json = text ? JSON.parse(text) : {}; } catch (e) {}
+        if (!res.ok) {
+          throw new Error(json.error || json.message || (json.status && json.status.message) || ('upload failed ' + res.status));
+        }
+        var url = extractUploadUrl(json);
+        if (!url) throw new Error('上传成功但未返回文件地址');
+        return url;
       });
-    }
-    return tryOne(0);
+    });
   }
 
   function handlePhotoFiles(files) {
-    files = Array.prototype.slice.call(files || []).filter(isImageFile);
+    files = Array.prototype.slice.call(files || []).filter(function (file) { return file && file.size !== 0; });
     if (!files.length) return toast(TEXT.imageOnly);
+
     var current = getProfilePhotosFromSheet();
     files = files.slice(0, Math.max(0, CONFIG.maxPhotos - current.length));
     if (!files.length) return;
+
     state.uploadBusy = true;
     var btn = $('.pps-upload-btn', state.root);
     if (btn) { btn.disabled = true; btn.textContent = TEXT.uploading; }
+
     var chain = Promise.resolve();
     var uploaded = [];
     files.forEach(function (file) {
       chain = chain.then(function () {
-        return compressImageFile(file).then(uploadToNodeBB).then(function (url) {
+        // Upload original File directly. Compression can be reintroduced later only as a
+        // non-blocking optimization, never as a prerequisite for upload.
+        return uploadToNodeBB(file).then(function (url) {
           uploaded.push(url);
           updateProfilePhotoTiles(current.concat(uploaded).slice(0, CONFIG.maxPhotos));
         });
       });
     });
+
     chain.catch(function (err) {
+      console.warn('[peipe-swipe] photo upload failed', err);
       toast((err && err.message) || TEXT.imageTooLarge);
     }).finally(function () {
       state.uploadBusy = false;
@@ -1450,7 +1501,7 @@
 
     state.root.addEventListener('change', function (e) {
       if (e.target && e.target.classList.contains('pps-photo-input')) {
-        var files = e.target.files;
+        var files = Array.prototype.slice.call(e.target.files || []);
         e.target.value = '';
         handlePhotoFiles(files);
       }
