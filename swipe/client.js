@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v5
+/* Peipe Partners Swipe v6
    - full-screen mobile page
    - vertical swipe partners, horizontal swipe photos
    - profile setup with frosted glass sheet
@@ -8,7 +8,8 @@
 (function () {
   'use strict';
 
-  if (window.__peipePartnersSwipeV5) return;
+  if (window.__peipePartnersSwipeV6) return;
+  window.__peipePartnersSwipeV6 = true;
   window.__peipePartnersSwipeV5 = true;
 
   var CONFIG = Object.assign({
@@ -18,7 +19,7 @@
     imageMaxSide: 1600,
     imageQualityStart: 0.82,
     imageQualityMin: 0.48,
-    uploadCid: 1,
+    uploadCid: 6,
     preloadAhead: 2,
     swiperCss: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.css',
     swiperJs: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.js',
@@ -38,8 +39,8 @@
     uploadPhotos: '上传手机图片',
     uploading: '上传中...',
     imageTooLarge: '图片压缩后仍超过 5MB，请换一张图片',
-    imageOnly: '请选择 JPG / PNG / WebP 图片文件',
-    maxPhotos: '最多 5 张照片，前端会自动压缩。头像不会当成背景照片。',
+    imageOnly: '图片读取失败，请换一张图片或重新选择',
+    maxPhotos: '',
     bio: '介绍',
     bioPlaceholder: '介绍一下你想练什么语言、喜欢聊什么。',
     country: '国籍 / 地区',
@@ -52,11 +53,9 @@
     education: '学历',
     occupation: '职业',
     relationship: '感情状况',
-    interests: '兴趣爱好',
     heightPlaceholder: '170',
     weightPlaceholder: '60',
     occupationPlaceholder: '请选择职业',
-    interestsPlaceholder: '例如 电影、音乐、旅行',
     optional: '选填',
     tags: '标签',
     chooseTags: '选择标签',
@@ -76,7 +75,7 @@
     greetLimit: '今天打招呼次数已用完',
     greetFail: '打招呼失败',
     tagTitle: '选择标签',
-    tagDone: '完成',
+    tagDone: '保存',
     tagClear: '清空',
     selectedCount: '已选',
     male: '男',
@@ -87,6 +86,8 @@
     missingPrefix: '请先补全：',
     settings: '资料',
     back: '返回',
+    chooseOption: '请选择',
+    doneOption: '保存',
     tagCategoryPurpose: '练习目的',
     tagCategoryPersonality: '性格',
     tagCategoryInterests: '兴趣',
@@ -182,6 +183,7 @@
       { value: 'developer', label: '程序员' },
       { value: 'designer', label: '设计师' },
       { value: 'business_owner', label: '个体/老板' },
+      { value: 'unemployed', label: '无业' },
       { value: 'other', label: '其他' }
     ]
   };
@@ -407,14 +409,14 @@
 
   function renderLanguageChip(value, className) {
     var code = languageCodeText(value);
-    var flag = languageFlag(value || code);
-    return '<span class="pps-lang-chip ' + (className || '') + '" title="' + escapeHtml(languageLabel(value)) + '">' + (flag ? '<span class="pps-lang-flag">' + escapeHtml(flag) + '</span>' : '') + '<span>' + escapeHtml(code) + '</span></span>';
+    if (!code || code === '-') return '';
+    return '<span class="pps-lang-code ' + (className || '') + '" title="' + escapeHtml(languageLabel(value)) + '">' + escapeHtml(code) + '</span>';
   }
 
   function renderLanguageList(values, className, max) {
     values = normaliseCodeList(values, max || 5);
-    if (!values.length) return renderLanguageChip('', className);
-    return values.slice(0, max || 5).map(function (code) { return renderLanguageChip(code, className); }).join('');
+    if (!values.length) return '';
+    return values.slice(0, max || 5).map(function (code) { return renderLanguageChip(code, className); }).filter(Boolean).join('<span class="pps-lang-space"> </span>');
   }
 
   function optionLabel(list, value) {
@@ -432,7 +434,6 @@
     if (job && job !== TEXT.selectPlaceholder) chips.push(job);
     var rel = optionLabel(OPTIONS.relationships, user.relationship || user.relationshipStatus);
     if (rel && rel !== '保密') chips.push(rel);
-    if (user.interestsText) chips.push(user.interestsText);
     if (!chips.length) return '';
     return '<div class="pps-detail-row">' + chips.slice(0, 4).map(function (txt) { return '<span class="pps-detail-chip">' + escapeHtml(txt) + '</span>'; }).join('') + '</div>';
   }
@@ -454,7 +455,7 @@
   }
 
   function isProfileComplete(profile) {
-    return !!(profile && profile.displayName && profile.photos && profile.photos.length && profile.language_flag && profile.language_fluent && profile.language_learning && profile.gender && profile.birthday);
+    return !!(profile && profile.displayName && profile.language_flag && profile.language_fluent && profile.language_learning && profile.gender && profile.birthday);
   }
 
   function normalisePhotos(list) {
@@ -540,9 +541,10 @@
 
   function renderSlide(user, index) {
     var photos = normalisePhotos(user.photos);
+    if (!photos.length) photos = normalisePhotos([user.avatar || user.accountPicture || user.uploadedpicture || user.picture]);
     var photoSlides = photos.length ? photos.map(function (src) {
       return '<div class="swiper-slide"><img class="pps-photo" src="' + escapeHtml(src) + '" alt="photo" loading="eager" decoding="async"></div>';
-    }).join('') : '<div class="swiper-slide"><div class="pps-no-photo">' + escapeHtml(TEXT.noPhoto) + '</div></div>';
+    }).join('') : '<div class="swiper-slide"><div class="pps-empty-bg"></div></div>';
     var dots = photos.length > 1 ? '<div class="pps-pagination"></div>' : '';
     var seenTags = {};
     var tags = (user.tags || []).filter(function (key) { if (!key || seenTags[key]) return false; seenTags[key] = true; return true; }).slice(0, 8).map(function (key) { return '<span class="pps-tag">' + escapeHtml(tagLabel(key)) + '</span>'; }).join('');
@@ -563,7 +565,7 @@
             renderAvatarBlock(user) +
             '<div class="pps-user-main">' +
               '<div class="pps-name-row"><span class="pps-name">' + escapeHtml(user.displayName || user.username || 'User') + '</span>' + (meta ? '<span class="pps-user-meta">' + meta + '</span>' : '') + '</div>' +
-              '<div class="pps-lang-row"><div class="pps-lang-side">' + renderLanguageList(nativeList, 'pps-native-chip', 3) + '</div><span class="pps-arrow">⇄</span><div class="pps-lang-side pps-lang-learn">' + renderLanguageList(learnList, 'pps-learn-chip', 5) + '</div></div>' +
+              '<div class="pps-lang-row"><div class="pps-lang-side">' + renderLanguageList(nativeList, 'pps-native-chip', 3) + '</div><span class="pps-arrow">⇋</span><div class="pps-lang-side pps-lang-learn">' + renderLanguageList(learnList, 'pps-learn-chip', 5) + '</div></div>' +
               renderProfileDetails(user) +
             '</div>' +
           '</div>' +
@@ -828,6 +830,8 @@
     });
   }
 
+  var CHOICE_CONFIGS = {};
+
   function buildSelect(name, list, value) {
     var html = '';
     var hasEmpty = false;
@@ -842,36 +846,60 @@
     return '<select name="' + name + '">' + html + '</select>';
   }
 
+  function choiceValues(value, multiple, max) {
+    if (multiple) return normaliseCodeList(value, max || 5);
+    var code = normalCode(value);
+    return code ? [code] : [];
+  }
+
+  function choiceSummary(list, value, type, multiple, max) {
+    var values = choiceValues(value, multiple, max);
+    if (!values.length) return TEXT.selectPlaceholder;
+    return values.map(function (code) {
+      var opt = findOption(list, code) || { value: code, label: code };
+      return optionText(opt, type);
+    }).join('、');
+  }
+
+  function hiddenChoiceValue(value, multiple, max) {
+    var values = choiceValues(value, multiple, max);
+    return multiple ? JSON.stringify(values) : (values[0] || '');
+  }
+
+  function buildChoicePicker(name, list, value, type, multiple, max, title) {
+    CHOICE_CONFIGS[name] = { name: name, list: list || [], type: type || 'text', multiple: !!multiple, max: Number(max || 1) || 1, title: title || name };
+    var hidden = hiddenChoiceValue(value, multiple, max);
+    var summary = choiceSummary(list, value, type, multiple, max);
+    return '<div class="pps-choice-picker" data-name="' + escapeHtml(name) + '">' +
+      '<input type="hidden" name="' + escapeHtml(name) + '" value="' + escapeHtml(hidden) + '">' +
+      '<button type="button" class="pps-choice-open" data-name="' + escapeHtml(name) + '"><span class="pps-choice-summary">' + escapeHtml(summary) + '</span><span class="pps-choice-caret">›</span></button>' +
+    '</div>';
+  }
+
   function buildChoiceGrid(name, list, value, type, multiple, max) {
-    var values = multiple ? normaliseCodeList(value, max || 5) : [normalCode(value)].filter(Boolean);
-    var selected = {};
-    values.forEach(function (item) { selected[item] = true; });
-    var hidden = '<input type="hidden" name="' + escapeHtml(name) + '" value="' + escapeHtml(multiple ? JSON.stringify(values) : (values[0] || '')) + '">';
-    var buttons = (list || []).map(function (item) {
-      var code = normalCode(item.value || item.code || item.label);
-      var active = selected[code];
-      var label = optionText(item, type);
-      return '<button type="button" class="pps-choice-btn ' + (active ? 'is-selected' : '') + '" data-value="' + escapeHtml(code) + '">' + escapeHtml(label) + '</button>';
-    }).join('');
-    return '<div class="pps-choice-grid" data-name="' + escapeHtml(name) + '" data-multiple="' + (multiple ? '1' : '0') + '" data-max="' + Number(max || 5) + '">' + hidden + buttons + '</div>';
+    return buildChoicePicker(name, list, value, type, multiple, max, name);
   }
 
   function getChoiceValue(name) {
-    var grid = $('.pps-choice-grid[data-name="' + name + '"]', state.root);
-    if (!grid) {
-      var el = $('[name="' + name + '"]', state.root);
-      return el ? el.value : '';
-    }
-    var values = $$('.pps-choice-btn.is-selected', grid).map(function (btn) { return normalCode(btn.dataset.value); }).filter(Boolean);
-    return grid.dataset.multiple === '1' ? values : (values[0] || '');
+    var input = $('.pps-choice-picker[data-name="' + name + '"] input[type="hidden"]', state.root) || $('[name="' + name + '"]', state.root);
+    if (!input) return '';
+    var cfg = CHOICE_CONFIGS[name];
+    if (cfg && cfg.multiple) return normaliseCodeList(input.value, cfg.max || 5);
+    return input.value || '';
   }
 
-  function syncChoiceGrid(grid) {
-    if (!grid) return;
-    var input = $('input[type="hidden"]', grid);
-    var values = $$('.pps-choice-btn.is-selected', grid).map(function (btn) { return normalCode(btn.dataset.value); }).filter(Boolean);
-    if (input) input.value = grid.dataset.multiple === '1' ? JSON.stringify(values) : (values[0] || '');
+  function updateChoicePicker(name, values) {
+    var cfg = CHOICE_CONFIGS[name];
+    var picker = $('.pps-choice-picker[data-name="' + name + '"]', state.root);
+    if (!cfg || !picker) return;
+    var hidden = $('input[type="hidden"]', picker);
+    var summary = $('.pps-choice-summary', picker);
+    var value = cfg.multiple ? JSON.stringify((values || []).slice(0, cfg.max || 5)) : ((values && values[0]) || '');
+    if (hidden) hidden.value = value;
+    if (summary) summary.textContent = choiceSummary(cfg.list, value, cfg.type, cfg.multiple, cfg.max);
   }
+
+  function syncChoiceGrid() {}
 
   function renderPhotoTiles(photos) {
     photos = normalisePhotos(photos);
@@ -905,19 +933,18 @@
           '<div class="pps-profile-head"><div><div class="pps-profile-title">' + escapeHtml(title) + '</div><div class="pps-profile-subtitle">' + escapeHtml(TEXT.profileSubtitle) + '</div></div></div>' +
           '<div class="pps-form-grid">' +
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.displayName) + '</label><div class="pps-display-row">' + (avatar ? '<img class="pps-form-avatar" src="' + escapeHtml(avatar) + '" alt="avatar">' : '<div class="pps-form-avatar"></div>') + '<input name="displayName" maxlength="40" value="' + escapeHtml(profile.displayName || profile.username || me.username || '') + '"></div></div>' +
-            '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.photos) + '</div><div class="pps-photos-row">' + renderPhotoTiles(profile.photos) + '</div><input class="pps-photo-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" multiple hidden><button type="button" class="pps-upload-btn">' + escapeHtml(TEXT.uploadPhotos) + '</button><div class="pps-form-note">' + escapeHtml(TEXT.maxPhotos) + '</div></div>' +
+            '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.photos) + '</div><div class="pps-photos-row">' + renderPhotoTiles(profile.photos) + '</div><input class="pps-photo-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" multiple hidden><button type="button" class="pps-upload-btn">' + escapeHtml(TEXT.uploadPhotos) + '</button></div>' +
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.bio) + '</label><textarea name="bio" maxlength="180" placeholder="' + escapeHtml(TEXT.bioPlaceholder) + '">' + escapeHtml(profile.bio || '') + '</textarea></div>' +
-            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.country) + '</label>' + buildChoiceGrid('language_flag', OPTIONS.countries, profile.language_flag, 'country', false, 1) + '</div>' +
-            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.gender) + '</label>' + buildChoiceGrid('gender', OPTIONS.genders, profile.gender, 'text', false, 1) + '</div>' +
-            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.nativeLanguage) + '</label>' + buildChoiceGrid('language_fluent', OPTIONS.languages, profile.language_fluent, 'language', true, 5) + '</div>' +
-            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.learningLanguage) + '</label>' + buildChoiceGrid('language_learning', OPTIONS.languages, profile.language_learning, 'language', true, 5) + '</div>' +
+            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.country) + '</label>' + buildChoicePicker('language_flag', OPTIONS.countries, profile.language_flag, 'country', false, 1, TEXT.country) + '</div>' +
+            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.gender) + '</label>' + buildChoicePicker('gender', OPTIONS.genders, profile.gender, 'text', false, 1, TEXT.gender) + '</div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.nativeLanguage) + '</label>' + buildChoicePicker('language_fluent', OPTIONS.languages, profile.language_fluent, 'language', true, 5, TEXT.nativeLanguage) + '</div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.learningLanguage) + '</label>' + buildChoicePicker('language_learning', OPTIONS.languages, profile.language_learning, 'language', true, 5, TEXT.learningLanguage) + '</div>' +
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.birthday) + '</label><input type="date" name="birthday" value="' + escapeHtml(profile.birthday || '') + '"></div>' +
             '<div class="pps-field"><label>' + escapeHtml(TEXT.height) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><div class="pps-unit-input"><input inputmode="decimal" name="heightCm" maxlength="5" placeholder="' + escapeHtml(TEXT.heightPlaceholder) + '" value="' + escapeHtml(profile.heightCm || '') + '"><span>cm</span></div></div>' +
             '<div class="pps-field"><label>' + escapeHtml(TEXT.weight) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><div class="pps-unit-input"><input inputmode="decimal" name="weightKg" maxlength="5" placeholder="' + escapeHtml(TEXT.weightPlaceholder) + '" value="' + escapeHtml(profile.weightKg || '') + '"><span>kg</span></div></div>' +
             '<div class="pps-field"><label>' + escapeHtml(TEXT.education) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label>' + buildSelect('education', OPTIONS.educations, profile.education) + '</div>' +
             '<div class="pps-field"><label>' + escapeHtml(TEXT.relationship) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label>' + buildSelect('relationship', OPTIONS.relationships, profile.relationship || profile.relationshipStatus) + '</div>' +
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.occupation) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label>' + buildSelect('occupation', OPTIONS.occupations || [], profile.occupation) + '</div>' +
-            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.interests) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><input name="interestsText" maxlength="120" placeholder="' + escapeHtml(TEXT.interestsPlaceholder) + '" value="' + escapeHtml(profile.interestsText || '') + '"></div>' +
             '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.tags) + '</div><div class="pps-selected-tags">' + renderSelectedTags(state.selectedTags) + '</div><button type="button" class="pps-select-tags-btn">' + escapeHtml(TEXT.chooseTags) + '</button></div>' +
           '</div>' +
         '</div>' +
@@ -959,7 +986,7 @@
       education: $('[name="education"]', sheet).value,
       relationship: $('[name="relationship"]', sheet).value,
       occupation: $('[name="occupation"]', sheet).value,
-      interestsText: norm($('[name="interestsText"]', sheet).value),
+      interestsText: '',
       tags: state.selectedTags.slice(0, 12)
     };
   }
@@ -967,7 +994,6 @@
   function profileMissing(data) {
     var missing = [];
     if (!data.displayName) missing.push('displayName');
-    if (!data.photos.length) missing.push('photos');
     if (!data.language_flag) missing.push('country');
     if (!normaliseCodeList(data.language_fluent, 5).length) missing.push('nativeLanguage');
     if (!normaliseCodeList(data.language_learning, 5).length) missing.push('learningLanguage');
@@ -1045,7 +1071,12 @@
   }
 
   function isImageFile(file) {
-    return !!(file && (mimeFromFile(file) || /^image\//i.test(file.type || '')));
+    if (!file) return false;
+    var type = String(file.type || '').toLowerCase();
+    var ext = fileExt(file);
+    if (/^(jpg|jpeg|png|webp|gif|heic|heif)$/i.test(ext)) return true;
+    if (!type || type === 'application/octet-stream') return true;
+    return /^image\//.test(type);
   }
 
   function withMime(file, type) {
@@ -1070,7 +1101,7 @@
       var img = new Image();
       var url = URL.createObjectURL(file);
       img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
-      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error(TEXT.imageOnly)); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('decode failed')); };
       img.src = url;
     });
   }
@@ -1082,9 +1113,13 @@
   }
 
   function compressImageFile(file) {
-    if (!isImageFile(file)) return Promise.reject(new Error(TEXT.imageOnly));
+    if (!file) return Promise.reject(new Error(TEXT.imageOnly));
     var mime = mimeFromFile(file);
-    file = withMime(file, mime || 'image/jpeg');
+    var originalType = String(file.type || '').toLowerCase();
+    file = withMime(file, mime || (/^image\//.test(originalType) ? originalType : 'image/jpeg'));
+    if (file.size && file.size <= CONFIG.maxUploadBytes && /image\/(jpeg|jpg|png|webp|gif)/i.test(file.type || mime || '')) {
+      return Promise.resolve(file);
+    }
     if (/gif|svg|heic|heif/i.test(file.type || '') || /^(heic|heif)$/i.test(fileExt(file))) {
       if (file.size <= CONFIG.maxUploadBytes) return Promise.resolve(file);
       return Promise.reject(new Error(TEXT.imageTooLarge));
@@ -1107,8 +1142,8 @@
         throw new Error(TEXT.imageTooLarge);
       }
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      return Promise.resolve(true).then(function () {
-        var type = 'image/jpeg';
+      return canCanvasEncode('image/webp').then(function (webp) {
+        var type = webp ? 'image/webp' : 'image/jpeg';
         var quality = CONFIG.imageQualityStart;
         function step() {
           return canvasToBlob(canvas, type, quality).then(function (blob) {
@@ -1120,7 +1155,8 @@
         }
         return step().then(function (blob) {
           if (blob.size > CONFIG.maxUploadBytes) throw new Error(TEXT.imageTooLarge);
-          var name = String(file.name || ('photo-' + Date.now())).replace(/\.[^.]+$/, '') + '.jpg';
+          var ext = type === 'image/webp' ? '.webp' : '.jpg';
+          var name = String(file.name || ('photo-' + Date.now())).replace(/\.[^.]+$/, '') + ext;
           return new File([blob], name, { type: type, lastModified: Date.now() });
         });
       });
@@ -1143,18 +1179,16 @@
   }
 
   function uploadToNodeBB(file) {
-    var cids = [CONFIG.uploadCid || 1, 0, 1, 6].filter(function (cid, index, arr) {
+    var cids = [CONFIG.uploadCid || 6, 6, 1, 0].filter(function (cid, index, arr) {
       cid = Number(cid || 0);
       return arr.indexOf(cid) === index;
     });
     var lastError = null;
-
     function tryOne(i) {
       var cid = cids[i];
       var form = new FormData();
       form.append('files[]', file, file.name || ('photo-' + Date.now() + '.jpg'));
       form.append('cid', String(cid));
-
       return fetch(rel('/api/post/upload'), {
         method: 'POST',
         credentials: 'same-origin',
@@ -1171,7 +1205,6 @@
         throw lastError || err;
       });
     }
-
     return tryOne(0);
   }
 
@@ -1195,11 +1228,71 @@
       });
     });
     chain.catch(function (err) {
-      toast(err.message || TEXT.imageTooLarge);
+      toast((err && err.message) || TEXT.imageTooLarge);
     }).finally(function () {
       state.uploadBusy = false;
       if (btn) { btn.disabled = false; btn.textContent = TEXT.uploadPhotos; }
     });
+  }
+
+  function renderChoiceSheet(name) {
+    hideSettingsButton();
+    var cfg = CHOICE_CONFIGS[name];
+    if (!cfg) return;
+    state.choiceContext = cfg;
+    var input = $('.pps-choice-picker[data-name="' + name + '"] input[type="hidden"]', state.root);
+    var draft = cfg.multiple ? normaliseCodeList(input && input.value, cfg.max || 5) : choiceValues(input && input.value, false, 1);
+    state.choiceDraft = draft;
+    var sheet = $('.pps-tag-sheet', state.root);
+    var choices = (cfg.list || []).map(function (item) {
+      var code = normalCode(item.value || item.code || item.label);
+      if (!code) return '';
+      var selected = draft.indexOf(code) !== -1;
+      return '<button type="button" class="pps-choice-option ' + (selected ? 'is-selected' : '') + '" data-value="' + escapeHtml(code) + '">' + escapeHtml(optionText(item, cfg.type)) + '</button>';
+    }).join('');
+    sheet.dataset.mode = 'choice';
+    sheet.innerHTML = '' +
+      '<div class="pps-tag-panel pps-choice-panel">' +
+        '<div class="pps-tag-scroll pps-choice-scroll">' +
+          '<div class="pps-tag-head"><div><div class="pps-tag-title">' + escapeHtml(cfg.title || TEXT.chooseOption) + '</div>' +
+          '<div class="pps-profile-subtitle">' + (cfg.multiple ? (escapeHtml(TEXT.selectedCount) + ' <span class="pps-choice-count">' + draft.length + '/' + cfg.max + '</span>') : escapeHtml(TEXT.chooseOption)) + '</div></div></div>' +
+          '<div class="pps-choice-sheet-grid">' + choices + '</div>' +
+        '</div>' +
+        '<div class="pps-tag-actions"><button type="button" class="pps-choice-leave">' + escapeHtml(TEXT.leave) + '</button><button type="button" class="pps-choice-clear">' + escapeHtml(TEXT.tagClear) + '</button><button type="button" class="pps-choice-done">' + escapeHtml(TEXT.doneOption || TEXT.save) + '</button></div>' +
+      '</div>';
+    $('.pps-tag-backdrop', state.root).classList.add('is-open');
+    sheet.classList.add('is-open');
+  }
+
+  function updateChoiceCount() {
+    var el = $('.pps-choice-count', state.root);
+    if (el && state.choiceContext) el.textContent = state.choiceDraft.length + '/' + state.choiceContext.max;
+  }
+
+  function toggleChoice(value, btn) {
+    var cfg = state.choiceContext;
+    if (!cfg) return;
+    value = normalCode(value);
+    if (!value) return;
+    if (cfg.multiple) {
+      var idx = state.choiceDraft.indexOf(value);
+      if (idx !== -1) state.choiceDraft.splice(idx, 1);
+      else if (state.choiceDraft.length < (cfg.max || 5)) state.choiceDraft.push(value);
+      else return;
+      if (btn) btn.classList.toggle('is-selected', state.choiceDraft.indexOf(value) !== -1);
+    } else {
+      state.choiceDraft = [value];
+      $$('.pps-choice-option', state.root).forEach(function (node) { node.classList.toggle('is-selected', node === btn); });
+    }
+    updateChoiceCount();
+  }
+
+  function closeChoice(save) {
+    if (save && state.choiceContext) updateChoicePicker(state.choiceContext.name, state.choiceDraft);
+    state.choiceContext = null;
+    state.choiceDraft = [];
+    $('.pps-tag-backdrop', state.root).classList.remove('is-open');
+    $('.pps-tag-sheet', state.root).classList.remove('is-open');
   }
 
   function renderTagSheet() {
@@ -1282,18 +1375,31 @@
         closeProfile();
         return;
       }
-      if ((btn = e.target.closest('.pps-choice-btn'))) {
+      if ((btn = e.target.closest('.pps-choice-open'))) {
         e.preventDefault();
-        var grid = btn.closest('.pps-choice-grid');
-        if (!grid) return;
-        if (grid.dataset.multiple === '1') {
-          var max = Number(grid.dataset.max || 5) || 5;
-          if (!btn.classList.contains('is-selected') && $$('.pps-choice-btn.is-selected', grid).length >= max) return;
-          btn.classList.toggle('is-selected');
-        } else {
-          $$('.pps-choice-btn', grid).forEach(function (node) { node.classList.toggle('is-selected', node === btn); });
-        }
-        syncChoiceGrid(grid);
+        renderChoiceSheet(btn.dataset.name);
+        return;
+      }
+      if ((btn = e.target.closest('.pps-choice-option'))) {
+        e.preventDefault();
+        toggleChoice(btn.dataset.value, btn);
+        return;
+      }
+      if (e.target.closest('.pps-choice-leave')) {
+        e.preventDefault();
+        closeChoice(false);
+        return;
+      }
+      if (e.target.closest('.pps-choice-done')) {
+        e.preventDefault();
+        closeChoice(true);
+        return;
+      }
+      if (e.target.closest('.pps-choice-clear')) {
+        e.preventDefault();
+        state.choiceDraft = [];
+        $$('.pps-choice-option', state.root).forEach(function (node) { node.classList.remove('is-selected'); });
+        updateChoiceCount();
         return;
       }
       if (e.target.closest('.pps-upload-btn')) {
