@@ -1686,3 +1686,95 @@ body.peipe-swipe-mode [component="container"] {
     font-size: 12px !important;
   }
 }
+
+/* Peipe Partners Swipe v7 upload/layout/card cleanup */
+.pps-info {
+  bottom: calc(132px + env(safe-area-inset-bottom)) !important;
+  right: 110px !important;
+}
+.pps-slide.pps-has-tags .pps-info {
+  bottom: calc(176px + env(safe-area-inset-bottom)) !important;
+}
+.pps-side-actions {
+  bottom: calc(122px + env(safe-area-inset-bottom)) !important;
+  right: max(14px, env(safe-area-inset-right)) !important;
+}
+.pps-greet-btn {
+  transform: translateY(14px);
+}
+.pps-user-card,
+.pps-user-main,
+.pps-name-row,
+.pps-lang-row,
+.pps-detail-row,
+.pps-bio,
+.pps-tags {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.pps-bio {
+  padding: 0 !important;
+  border-radius: 0 !important;
+  color: rgba(255,255,255,.96) !important;
+  text-shadow: 0 2px 12px rgba(0,0,0,.58) !important;
+}
+.pps-tag,
+.pps-detail-chip {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  padding: 0 7px 0 0 !important;
+  color: rgba(255,255,255,.92) !important;
+  text-shadow: 0 2px 10px rgba(0,0,0,.58) !important;
+}
+.pps-lang-row {
+  max-width: min(66vw, 420px) !important;
+  overflow: hidden !important;
+}
+.pps-lang-side {
+  max-width: 29vw !important;
+  overflow: hidden !important;
+}
+.pps-lang-learn {
+  max-width: 36vw !important;
+}
+.pps-arrow {
+  font-size: 10px !important;
+  font-weight: 400 !important;
+  opacity: .68 !important;
+}
+.pps-profile-scroll {
+  padding-bottom: 16px !important;
+}
+.pps-field.pps-compact {
+  grid-column: span 1 !important;
+}
+.pps-choice-open {
+  min-height: 43px !important;
+}
+.pps-upload-btn {
+  margin-top: 0 !important;
+}
+@media (max-width: 390px) {
+  .pps-info {
+    bottom: calc(126px + env(safe-area-inset-bottom)) !important;
+    right: 104px !important;
+  }
+  .pps-slide.pps-has-tags .pps-info {
+    bottom: calc(166px + env(safe-area-inset-bottom)) !important;
+  }
+  .pps-side-actions {
+    bottom: calc(116px + env(safe-area-inset-bottom)) !important;
+  }
+  .pps-lang-side {
+    max-width: 28vw !important;
+  }
+  .pps-lang-learn {
+    max-width: 34vw !important;
+  }
+}
