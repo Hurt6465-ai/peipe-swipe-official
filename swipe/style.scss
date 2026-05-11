@@ -1778,3 +1778,200 @@ body.peipe-swipe-mode [component="container"] {
     max-width: 34vw !important;
   }
 }
+
+/* Peipe Partners Swipe v9 final polish: safe compression UI, avatar upload, location, cleaner card */
+.pps-gradient {
+  background:
+    linear-gradient(to top, rgba(0,0,0,.82) 0%, rgba(0,0,0,.54) 18%, rgba(0,0,0,.16) 50%, rgba(0,0,0,.10) 100%),
+    linear-gradient(to right, rgba(0,0,0,.34), rgba(0,0,0,.04) 58%, rgba(0,0,0,.14)) !important;
+}
+
+.pps-info {
+  bottom: calc(104px + env(safe-area-inset-bottom)) !important;
+  right: 106px !important;
+  max-height: min(47vh, 360px) !important;
+  text-shadow: 0 2px 12px rgba(0,0,0,.72), 0 0 2px rgba(0,0,0,.62) !important;
+}
+
+.pps-slide.pps-has-tags .pps-info {
+  bottom: calc(142px + env(safe-area-inset-bottom)) !important;
+}
+
+.pps-side-actions {
+  bottom: calc(94px + env(safe-area-inset-bottom)) !important;
+  right: max(14px, env(safe-area-inset-right)) !important;
+}
+
+.pps-greet-btn {
+  transform: none !important;
+  min-width: 88px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 15px !important;
+}
+
+.pps-avatar-wrap,
+.pps-avatar,
+.pps-avatar-fallback {
+  width: 60px !important;
+  height: 60px !important;
+  flex-basis: 60px !important;
+}
+
+.pps-avatar-flag {
+  left: -7px !important;
+  bottom: -5px !important;
+  font-size: 23px !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.55)) !important;
+}
+
+.pps-online-dot {
+  width: 9px !important;
+  height: 9px !important;
+  right: 2px !important;
+  top: 2px !important;
+  background: #22c55e !important;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.96), 0 0 9px rgba(34,197,94,.5) !important;
+}
+
+.pps-user-card,
+.pps-user-main,
+.pps-name-row,
+.pps-lang-row,
+.pps-detail-row,
+.pps-bio,
+.pps-tags,
+.pps-tag,
+.pps-detail-chip,
+.pps-lang-chip,
+.pps-gender-icon {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.pps-name {
+  font-size: clamp(18px, 4.9vw, 24px) !important;
+  max-width: 42vw !important;
+}
+
+.pps-lang-row,
+.pps-detail-row,
+.pps-bio,
+.pps-tags {
+  color: rgba(255,255,255,.95) !important;
+  text-shadow: 0 2px 12px rgba(0,0,0,.72), 0 0 2px rgba(0,0,0,.55) !important;
+}
+
+.pps-detail-row {
+  margin-top: 2px !important;
+  gap: 7px !important;
+}
+
+.pps-detail-chip {
+  padding: 0 7px 0 0 !important;
+  color: rgba(255,255,255,.92) !important;
+  font-size: 11px !important;
+  line-height: 1.2 !important;
+}
+
+.pps-location-icon {
+  display: inline-block;
+  margin-right: 2px;
+  transform: translateY(1px);
+  font-size: 11px;
+}
+
+.pps-tag {
+  padding: 0 8px 0 0 !important;
+  color: rgba(255,255,255,.9) !important;
+  font-size: 11px !important;
+}
+
+.pps-form-grid .pps-lang-picker-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.pps-avatar-upload {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  padding: 0;
+  border-radius: 18px;
+  background: transparent;
+  flex: 0 0 56px;
+}
+
+.pps-avatar-upload.is-uploading {
+  opacity: .72;
+  pointer-events: none;
+}
+
+.pps-form-avatar {
+  width: 56px !important;
+  height: 56px !important;
+  border-radius: 18px !important;
+  display: block;
+  object-fit: cover;
+  background: linear-gradient(135deg, rgba(167,139,250,.9), rgba(96,165,250,.7));
+}
+
+.pps-avatar-plus {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: #ef4444;
+  border: 2px solid rgba(255,255,255,.94);
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 950;
+  box-shadow: 0 6px 16px rgba(239,68,68,.35);
+}
+
+.pps-display-row {
+  grid-template-columns: 56px 1fr !important;
+}
+
+@media (max-width: 390px) {
+  .pps-info {
+    bottom: calc(98px + env(safe-area-inset-bottom)) !important;
+    right: 100px !important;
+  }
+  .pps-slide.pps-has-tags .pps-info {
+    bottom: calc(134px + env(safe-area-inset-bottom)) !important;
+  }
+  .pps-side-actions {
+    bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+  }
+  .pps-avatar-wrap,
+  .pps-avatar,
+  .pps-avatar-fallback {
+    width: 56px !important;
+    height: 56px !important;
+    flex-basis: 56px !important;
+  }
+  .pps-name {
+    max-width: 38vw !important;
+    font-size: clamp(17px, 4.7vw, 22px) !important;
+  }
+  .pps-form-grid .pps-lang-picker-row {
+    gap: 8px;
+  }
+}
