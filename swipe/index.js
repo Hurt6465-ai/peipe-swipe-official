@@ -3,9 +3,10 @@
 const user = require.main.require('./src/user');
 const partner = require('../lib/partner');
 const tagData = require('./tags');
+const comments = require('./comments');
 
 const EXTRA_FIELDS = [
-  'uid', 'username', 'userslug', 'picture', 'uploadedpicture', 'location',
+  'uid', 'username', 'userslug', 'picture', 'uploadedpicture', 'location', 'lat', 'lng', 'languagePartnerGeoUpdatedAt', 'languagePartnerGeoExpiresAt',
   'bio', 'aboutme', 'signature',
   'age', 'birthday', 'birthdate', 'peipe_partner_birthday',
   'gender', 'language_flag', 'language_fluent', 'language_learning',
@@ -184,6 +185,8 @@ function normaliseProfile(raw) {
   const birthday = cleanDate(raw.peipe_partner_birthday || raw.birthday || raw.birthdate || '');
   const age = normaliseAge(raw.age, birthday);
   const countryCode = normaliseCountryCode(raw.language_flag || '');
+  const lat = Number(raw.lat);
+  const lng = Number(raw.lng);
 
   return {
     uid: Number(raw.uid || 0),
@@ -211,7 +214,35 @@ function normaliseProfile(raw) {
     relationship: cleanText(raw.peipe_partner_relationship || raw.relationship_status || '', 40),
     locationText: cleanText(raw.peipe_partner_location || raw.location || '', 60),
     location: cleanText(raw.peipe_partner_location || raw.location || '', 60),
+    lat: Number.isFinite(lat) ? lat : null,
+    lng: Number.isFinite(lng) ? lng : null,
   };
+}
+
+function toRad(value) {
+  return Number(value || 0) * Math.PI / 180;
+}
+
+function distanceKmBetween(a, b) {
+  if (!a || !b) return 0;
+  const lat1 = Number(a.lat);
+  const lng1 = Number(a.lng);
+  const lat2 = Number(b.lat);
+  const lng2 = Number(b.lng);
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return 0;
+  const r = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return r * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+function formatDistance(km) {
+  km = Number(km || 0);
+  if (!Number.isFinite(km) || km <= 0) return '';
+  if (km < 1) return `${Math.max(50, Math.round(km * 1000 / 50) * 50)}m`;
+  if (km < 10) return `${km.toFixed(1).replace(/\.0$/, '')}km`;
+  return `${Math.round(km)}km`;
 }
 
 function getMissing(profile) {
@@ -225,8 +256,10 @@ function getMissing(profile) {
   return missing;
 }
 
-function decorateUser(baseUser, extra) {
+function decorateUser(baseUser, extra, viewerGeo) {
   const profile = normaliseProfile(Object.assign({}, baseUser, extra, { uid: baseUser.uid || extra.uid }));
+  const distanceKm = distanceKmBetween(viewerGeo, profile);
+  const distanceText = formatDistance(distanceKm);
   const photos = profile.photos.length ? profile.photos : [];
   return Object.assign({}, baseUser, {
     username: profile.displayName || baseUser.username,
@@ -255,7 +288,21 @@ function decorateUser(baseUser, extra) {
     relationship: profile.relationship || baseUser.relationship || baseUser.relationshipStatus || '',
     locationText: profile.locationText || baseUser.locationText || baseUser.location || '',
     location: profile.locationText || baseUser.location || '',
+    lat: profile.lat,
+    lng: profile.lng,
+    distanceKm,
+    distanceText,
   });
+}
+
+async function getViewerGeo(req) {
+  const uid = Number(req && req.uid);
+  if (!uid) return null;
+  const row = await user.getUserFields(uid, ['lat', 'lng']).catch(() => null);
+  if (!row) return null;
+  const lat = Number(row.lat);
+  const lng = Number(row.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
 }
 
 async function getExtraUsersFields(users) {
@@ -273,9 +320,17 @@ async function getExtraUsersFields(users) {
 async function feed(req) {
   const payload = await partner.list(req);
   const users = Array.isArray(payload && payload.users) ? payload.users : [];
-  const extras = await getExtraUsersFields(users);
+  const [extras, viewerGeo, floatComments] = await Promise.all([
+    getExtraUsersFields(users),
+    getViewerGeo(req),
+    comments.floatForTargets(users.map(item => Number(item && item.uid)).filter(Boolean), 6),
+  ]);
   return Object.assign({}, payload, {
-    users: users.map(item => decorateUser(item, extras.get(Number(item.uid)) || {})),
+    users: users.map((item) => {
+      const decorated = decorateUser(item, extras.get(Number(item.uid)) || {}, viewerGeo);
+      decorated.floatComments = floatComments.get(Number(item.uid)) || [];
+      return decorated;
+    }),
   });
 }
 
@@ -339,3 +394,4 @@ function tags() {
 }
 
 module.exports = { feed, getMe, saveMe, tags };
+
