@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v4
+/* Peipe Partners Swipe v5
    - full-screen mobile page
    - vertical swipe partners, horizontal swipe photos
    - profile setup with frosted glass sheet
@@ -8,8 +8,8 @@
 (function () {
   'use strict';
 
-  if (window.__peipePartnersSwipeV4) return;
-  window.__peipePartnersSwipeV4 = true;
+  if (window.__peipePartnersSwipeV5) return;
+  window.__peipePartnersSwipeV5 = true;
 
   var CONFIG = Object.assign({
     pageSize: 18,
@@ -38,7 +38,7 @@
     uploadPhotos: '上传手机图片',
     uploading: '上传中...',
     imageTooLarge: '图片压缩后仍超过 5MB，请换一张图片',
-    imageOnly: '请选择图片文件',
+    imageOnly: '请选择 JPG / PNG / WebP 图片文件',
     maxPhotos: '最多 5 张照片，前端会自动压缩。头像不会当成背景照片。',
     bio: '介绍',
     bioPlaceholder: '介绍一下你想练什么语言、喜欢聊什么。',
@@ -53,14 +53,15 @@
     occupation: '职业',
     relationship: '感情状况',
     interests: '兴趣爱好',
-    heightPlaceholder: '例如 170',
-    weightPlaceholder: '例如 60',
-    occupationPlaceholder: '例如 学生 / 设计师',
+    heightPlaceholder: '170',
+    weightPlaceholder: '60',
+    occupationPlaceholder: '请选择职业',
     interestsPlaceholder: '例如 电影、音乐、旅行',
     optional: '选填',
     tags: '标签',
     chooseTags: '选择标签',
     save: '保存资料',
+    leave: '离开',
     saving: '保存中...',
     saveOk: '资料已保存',
     saveFail: '保存失败',
@@ -149,16 +150,18 @@
     genders: [
       { value: 'male', label: TEXT.male },
       { value: 'female', label: TEXT.female },
-      { value: 'private', label: TEXT.privateGender },
-      { value: 'other', label: TEXT.other }
+      { value: 'private', label: TEXT.privateGender }
     ],
     relationships: [
+      { value: '', label: TEXT.selectPlaceholder },
       { value: 'private', label: '保密' },
       { value: 'single', label: '单身' },
       { value: 'dating', label: '恋爱中' },
-      { value: 'married', label: '已婚' }
+      { value: 'married', label: '已婚' },
+      { value: 'divorced', label: '离异' }
     ],
     educations: [
+      { value: '', label: TEXT.selectPlaceholder },
       { value: 'private', label: '保密' },
       { value: 'middle_school', label: '初中' },
       { value: 'high_school', label: '高中' },
@@ -166,6 +169,20 @@
       { value: 'bachelor', label: '本科' },
       { value: 'master', label: '硕士' },
       { value: 'doctor', label: '博士' }
+    ],
+    occupations: [
+      { value: '', label: TEXT.selectPlaceholder },
+      { value: 'student', label: '在校生' },
+      { value: 'worker', label: '普通职工' },
+      { value: 'waiter', label: '服务员' },
+      { value: 'teacher', label: '老师' },
+      { value: 'police', label: '警察' },
+      { value: 'driver', label: '司机' },
+      { value: 'sales', label: '销售' },
+      { value: 'developer', label: '程序员' },
+      { value: 'designer', label: '设计师' },
+      { value: 'business_owner', label: '个体/老板' },
+      { value: 'other', label: '其他' }
     ]
   };
 
@@ -312,9 +329,45 @@
     return found;
   }
 
+  function parseMaybeArray(value) {
+    if (Array.isArray(value)) return value;
+    if (value == null || value === '') return [];
+    var text = String(value).trim();
+    if (!text) return [];
+    try {
+      var parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === 'object') return Object.keys(parsed).map(function (key) { return parsed[key]; });
+      return [parsed];
+    } catch (e) {
+      return text.split(/[\n,，|/]+/g);
+    }
+  }
+
+  function normaliseCodeList(value, max) {
+    var seen = {};
+    var list = [];
+    parseMaybeArray(value).forEach(function (item) {
+      var code = normalCode(item);
+      if (!code || seen[code]) return;
+      seen[code] = true;
+      list.push(code);
+    });
+    return list.slice(0, max || 5);
+  }
+
   function languageLabel(value) {
     var opt = findOption(OPTIONS.languages, value);
-    return (opt && (opt.label || opt.value)) || String(value || '-').replace(/^\[["']?/, '').replace(/["']?\]$/, '') || '-';
+    var code = normalCode(value);
+    return (opt && (opt.label || opt.value)) || code || '-';
+  }
+
+  function languageCodeText(value) {
+    var code = normalCode(value);
+    if (!code) return '-';
+    if (code === 'VI') return 'VN';
+    if (code === 'JP') return 'JP';
+    return code;
   }
 
   function optionText(item, type) {
@@ -353,11 +406,16 @@
   }
 
   function renderLanguageChip(value, className) {
-    var label = languageLabel(value);
-    var flag = languageFlag(value || label);
-    return '<span class="pps-lang-chip ' + (className || '') + '">' + (flag ? '<span class="pps-lang-flag">' + escapeHtml(flag) + '</span>' : '') + '<span>' + escapeHtml(label) + '</span></span>';
+    var code = languageCodeText(value);
+    var flag = languageFlag(value || code);
+    return '<span class="pps-lang-chip ' + (className || '') + '" title="' + escapeHtml(languageLabel(value)) + '">' + (flag ? '<span class="pps-lang-flag">' + escapeHtml(flag) + '</span>' : '') + '<span>' + escapeHtml(code) + '</span></span>';
   }
 
+  function renderLanguageList(values, className, max) {
+    values = normaliseCodeList(values, max || 5);
+    if (!values.length) return renderLanguageChip('', className);
+    return values.slice(0, max || 5).map(function (code) { return renderLanguageChip(code, className); }).join('');
+  }
 
   function optionLabel(list, value) {
     var opt = findOption(list, value);
@@ -370,7 +428,8 @@
     if (user.weightKg) chips.push(user.weightKg + 'kg');
     var edu = optionLabel(OPTIONS.educations, user.education);
     if (edu && edu !== '保密') chips.push(edu);
-    if (user.occupation) chips.push(user.occupation);
+    var job = optionLabel(OPTIONS.occupations || [], user.occupation) || user.occupation;
+    if (job && job !== TEXT.selectPlaceholder) chips.push(job);
     var rel = optionLabel(OPTIONS.relationships, user.relationship || user.relationshipStatus);
     if (rel && rel !== '保密') chips.push(rel);
     if (user.interestsText) chips.push(user.interestsText);
@@ -485,14 +544,16 @@
       return '<div class="swiper-slide"><img class="pps-photo" src="' + escapeHtml(src) + '" alt="photo" loading="eager" decoding="async"></div>';
     }).join('') : '<div class="swiper-slide"><div class="pps-no-photo">' + escapeHtml(TEXT.noPhoto) + '</div></div>';
     var dots = photos.length > 1 ? '<div class="pps-pagination"></div>' : '';
-    var tags = (user.tags || []).slice(0, 8).map(function (key) { return '<span class="pps-tag">' + escapeHtml(tagLabel(key)) + '</span>'; }).join('');
+    var seenTags = {};
+    var tags = (user.tags || []).filter(function (key) { if (!key || seenTags[key]) return false; seenTags[key] = true; return true; }).slice(0, 8).map(function (key) { return '<span class="pps-tag">' + escapeHtml(tagLabel(key)) + '</span>'; }).join('');
     var meta = genderMeta(user);
     var bio = norm(user.bio) || TEXT.noBio;
-    var native = user.nativeCode || user.language_fluent || '';
-    var learn = user.learnCode || user.language_learning || '';
+    var nativeList = user.nativeCodes || user.language_fluent || user.nativeCode || '';
+    var learnList = user.learnCodes || user.language_learning || user.learnCode || '';
+    var slideClass = tags ? ' swiper-slide pps-slide pps-has-tags' : ' swiper-slide pps-slide';
 
     return '' +
-      '<section class="swiper-slide pps-slide" data-index="' + index + '" data-uid="' + Number(user.uid || 0) + '">' +
+      '<section class="' + slideClass + '" data-index="' + index + '" data-uid="' + Number(user.uid || 0) + '">' +
         '<div class="pps-photo-layer">' +
           '<div class="pps-photo-swiper swiper" data-index="' + index + '"><div class="swiper-wrapper">' + photoSlides + '</div>' + dots + '</div>' +
         '</div>' +
@@ -502,7 +563,7 @@
             renderAvatarBlock(user) +
             '<div class="pps-user-main">' +
               '<div class="pps-name-row"><span class="pps-name">' + escapeHtml(user.displayName || user.username || 'User') + '</span>' + (meta ? '<span class="pps-user-meta">' + meta + '</span>' : '') + '</div>' +
-              '<div class="pps-lang-row">' + renderLanguageChip(native, 'pps-native-chip') + '<span class="pps-arrow">→</span>' + renderLanguageChip(learn, 'pps-learn-chip') + '</div>' +
+              '<div class="pps-lang-row"><div class="pps-lang-side">' + renderLanguageList(nativeList, 'pps-native-chip', 3) + '</div><span class="pps-arrow">⇄</span><div class="pps-lang-side pps-lang-learn">' + renderLanguageList(learnList, 'pps-learn-chip', 5) + '</div></div>' +
               renderProfileDetails(user) +
             '</div>' +
           '</div>' +
@@ -700,11 +761,11 @@
   function ensureGenderOptions() {
     var seen = {};
     OPTIONS.genders = (OPTIONS.genders || []).filter(function (item) {
-      if (!item || !item.value || seen[item.value]) return false;
+      if (!item || !item.value || item.value === 'other' || seen[item.value]) return false;
       seen[item.value] = true;
       return true;
     });
-    if (!seen.private && !seen['保密']) OPTIONS.genders.unshift({ value: 'private', label: TEXT.privateGender });
+    if (!seen.private && !seen['保密']) OPTIONS.genders.push({ value: 'private', label: TEXT.privateGender });
   }
 
   function loadOptions() {
@@ -716,6 +777,7 @@
         if (Array.isArray(json.genders)) OPTIONS.genders = json.genders;
         if (Array.isArray(json.relationships)) OPTIONS.relationships = json.relationships;
         if (Array.isArray(json.educations)) OPTIONS.educations = json.educations;
+        if (Array.isArray(json.occupations)) OPTIONS.occupations = json.occupations;
         ensureGenderOptions();
       })
       .catch(function () { ensureGenderOptions(); });
@@ -767,13 +829,48 @@
   }
 
   function buildSelect(name, list, value) {
-    var type = name === 'language_flag' ? 'country' : ((name === 'language_fluent' || name === 'language_learning') ? 'language' : 'text');
-    var html = '<option value="">' + escapeHtml(TEXT.selectPlaceholder) + '</option>';
+    var html = '';
+    var hasEmpty = false;
+    (list || []).forEach(function (item) {
+      if (String(item.value || '') === '') hasEmpty = true;
+    });
+    if (!hasEmpty) html += '<option value="">' + escapeHtml(TEXT.selectPlaceholder) + '</option>';
     html += (list || []).map(function (item) {
-      var selected = String(item.value) === String(value || '') ? ' selected' : '';
-      return '<option value="' + escapeHtml(item.value) + '"' + selected + '>' + escapeHtml(optionText(item, type)) + '</option>';
+      var selected = String(item.value || '') === String(value || '') ? ' selected' : '';
+      return '<option value="' + escapeHtml(item.value || '') + '"' + selected + '>' + escapeHtml(item.label || item.value || TEXT.selectPlaceholder) + '</option>';
     }).join('');
     return '<select name="' + name + '">' + html + '</select>';
+  }
+
+  function buildChoiceGrid(name, list, value, type, multiple, max) {
+    var values = multiple ? normaliseCodeList(value, max || 5) : [normalCode(value)].filter(Boolean);
+    var selected = {};
+    values.forEach(function (item) { selected[item] = true; });
+    var hidden = '<input type="hidden" name="' + escapeHtml(name) + '" value="' + escapeHtml(multiple ? JSON.stringify(values) : (values[0] || '')) + '">';
+    var buttons = (list || []).map(function (item) {
+      var code = normalCode(item.value || item.code || item.label);
+      var active = selected[code];
+      var label = optionText(item, type);
+      return '<button type="button" class="pps-choice-btn ' + (active ? 'is-selected' : '') + '" data-value="' + escapeHtml(code) + '">' + escapeHtml(label) + '</button>';
+    }).join('');
+    return '<div class="pps-choice-grid" data-name="' + escapeHtml(name) + '" data-multiple="' + (multiple ? '1' : '0') + '" data-max="' + Number(max || 5) + '">' + hidden + buttons + '</div>';
+  }
+
+  function getChoiceValue(name) {
+    var grid = $('.pps-choice-grid[data-name="' + name + '"]', state.root);
+    if (!grid) {
+      var el = $('[name="' + name + '"]', state.root);
+      return el ? el.value : '';
+    }
+    var values = $$('.pps-choice-btn.is-selected', grid).map(function (btn) { return normalCode(btn.dataset.value); }).filter(Boolean);
+    return grid.dataset.multiple === '1' ? values : (values[0] || '');
+  }
+
+  function syncChoiceGrid(grid) {
+    if (!grid) return;
+    var input = $('input[type="hidden"]', grid);
+    var values = $$('.pps-choice-btn.is-selected', grid).map(function (btn) { return normalCode(btn.dataset.value); }).filter(Boolean);
+    if (input) input.value = grid.dataset.multiple === '1' ? JSON.stringify(values) : (values[0] || '');
   }
 
   function renderPhotoTiles(photos) {
@@ -792,6 +889,7 @@
 
   function openProfile(required) {
     state.requiredProfile = !!required;
+    hideSettingsButton();
     var profile = Object.assign({}, state.profile || {});
     profile.photos = normalisePhotos(profile.photos);
     state.selectedTags = Array.isArray(profile.tags) ? profile.tags.slice(0, 12) : [];
@@ -802,34 +900,36 @@
     var title = required ? TEXT.profileTitle : TEXT.editProfileTitle;
 
     sheet.innerHTML = '' +
-      '<div class="pps-profile-scroll">' +
-        '<div class="pps-profile-head"><div><div class="pps-profile-title">' + escapeHtml(title) + '</div><div class="pps-profile-subtitle">' + escapeHtml(TEXT.profileSubtitle) + '</div></div><button type="button" class="pps-close-btn pps-profile-close" ' + (required ? 'hidden' : '') + '>×</button></div>' +
-        '<div class="pps-form-grid">' +
-          '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.displayName) + '</label><div class="pps-display-row">' + (avatar ? '<img class="pps-form-avatar" src="' + escapeHtml(avatar) + '" alt="avatar">' : '<div class="pps-form-avatar"></div>') + '<input name="displayName" maxlength="40" value="' + escapeHtml(profile.displayName || profile.username || me.username || '') + '"></div></div>' +
-          '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.photos) + '</div><div class="pps-photos-row">' + renderPhotoTiles(profile.photos) + '</div><input class="pps-photo-input" type="file" accept="image/*" multiple hidden><button type="button" class="pps-upload-btn">' + escapeHtml(TEXT.uploadPhotos) + '</button><div class="pps-form-note">' + escapeHtml(TEXT.maxPhotos) + '</div></div>' +
-          '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.bio) + '</label><textarea name="bio" maxlength="180" placeholder="' + escapeHtml(TEXT.bioPlaceholder) + '">' + escapeHtml(profile.bio || '') + '</textarea></div>' +
-          '<div class="pps-field"><label>' + escapeHtml(TEXT.country) + '</label>' + buildSelect('language_flag', OPTIONS.countries, profile.language_flag) + '</div>' +
-          '<div class="pps-field"><label>' + escapeHtml(TEXT.gender) + '</label>' + buildSelect('gender', OPTIONS.genders, profile.gender) + '</div>' +
-          '<div class="pps-field"><label>' + escapeHtml(TEXT.nativeLanguage) + '</label>' + buildSelect('language_fluent', OPTIONS.languages, profile.language_fluent) + '</div>' +
-          '<div class="pps-field"><label>' + escapeHtml(TEXT.learningLanguage) + '</label>' + buildSelect('language_learning', OPTIONS.languages, profile.language_learning) + '</div>' +
-          '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.birthday) + '</label><input type="date" name="birthday" value="' + escapeHtml(profile.birthday || '') + '"></div>' +
-          '<div class="pps-field"><label>' + escapeHtml(TEXT.height) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><input inputmode="decimal" name="heightCm" maxlength="5" placeholder="' + escapeHtml(TEXT.heightPlaceholder) + '" value="' + escapeHtml(profile.heightCm || '') + '"></div>' +
-          '<div class="pps-field"><label>' + escapeHtml(TEXT.weight) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><input inputmode="decimal" name="weightKg" maxlength="5" placeholder="' + escapeHtml(TEXT.weightPlaceholder) + '" value="' + escapeHtml(profile.weightKg || '') + '"></div>' +
-          '<div class="pps-field"><label>' + escapeHtml(TEXT.education) + '</label>' + buildSelect('education', OPTIONS.educations, profile.education) + '</div>' +
-          '<div class="pps-field"><label>' + escapeHtml(TEXT.relationship) + '</label>' + buildSelect('relationship', OPTIONS.relationships, profile.relationship || profile.relationshipStatus) + '</div>' +
-          '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.occupation) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><input name="occupation" maxlength="60" placeholder="' + escapeHtml(TEXT.occupationPlaceholder) + '" value="' + escapeHtml(profile.occupation || '') + '"></div>' +
-          '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.interests) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><input name="interestsText" maxlength="120" placeholder="' + escapeHtml(TEXT.interestsPlaceholder) + '" value="' + escapeHtml(profile.interestsText || '') + '"></div>' +
-          '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.tags) + '</div><div class="pps-selected-tags">' + renderSelectedTags(state.selectedTags) + '</div><button type="button" class="pps-select-tags-btn">' + escapeHtml(TEXT.chooseTags) + '</button></div>' +
-          '<div class="pps-field pps-span-2"><button type="button" class="pps-save-btn">' + escapeHtml(TEXT.save) + '</button></div>' +
+      '<div class="pps-profile-panel">' +
+        '<div class="pps-profile-scroll">' +
+          '<div class="pps-profile-head"><div><div class="pps-profile-title">' + escapeHtml(title) + '</div><div class="pps-profile-subtitle">' + escapeHtml(TEXT.profileSubtitle) + '</div></div></div>' +
+          '<div class="pps-form-grid">' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.displayName) + '</label><div class="pps-display-row">' + (avatar ? '<img class="pps-form-avatar" src="' + escapeHtml(avatar) + '" alt="avatar">' : '<div class="pps-form-avatar"></div>') + '<input name="displayName" maxlength="40" value="' + escapeHtml(profile.displayName || profile.username || me.username || '') + '"></div></div>' +
+            '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.photos) + '</div><div class="pps-photos-row">' + renderPhotoTiles(profile.photos) + '</div><input class="pps-photo-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" multiple hidden><button type="button" class="pps-upload-btn">' + escapeHtml(TEXT.uploadPhotos) + '</button><div class="pps-form-note">' + escapeHtml(TEXT.maxPhotos) + '</div></div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.bio) + '</label><textarea name="bio" maxlength="180" placeholder="' + escapeHtml(TEXT.bioPlaceholder) + '">' + escapeHtml(profile.bio || '') + '</textarea></div>' +
+            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.country) + '</label>' + buildChoiceGrid('language_flag', OPTIONS.countries, profile.language_flag, 'country', false, 1) + '</div>' +
+            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.gender) + '</label>' + buildChoiceGrid('gender', OPTIONS.genders, profile.gender, 'text', false, 1) + '</div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.nativeLanguage) + '</label>' + buildChoiceGrid('language_fluent', OPTIONS.languages, profile.language_fluent, 'language', true, 5) + '</div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.learningLanguage) + '</label>' + buildChoiceGrid('language_learning', OPTIONS.languages, profile.language_learning, 'language', true, 5) + '</div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.birthday) + '</label><input type="date" name="birthday" value="' + escapeHtml(profile.birthday || '') + '"></div>' +
+            '<div class="pps-field"><label>' + escapeHtml(TEXT.height) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><div class="pps-unit-input"><input inputmode="decimal" name="heightCm" maxlength="5" placeholder="' + escapeHtml(TEXT.heightPlaceholder) + '" value="' + escapeHtml(profile.heightCm || '') + '"><span>cm</span></div></div>' +
+            '<div class="pps-field"><label>' + escapeHtml(TEXT.weight) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><div class="pps-unit-input"><input inputmode="decimal" name="weightKg" maxlength="5" placeholder="' + escapeHtml(TEXT.weightPlaceholder) + '" value="' + escapeHtml(profile.weightKg || '') + '"><span>kg</span></div></div>' +
+            '<div class="pps-field"><label>' + escapeHtml(TEXT.education) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label>' + buildSelect('education', OPTIONS.educations, profile.education) + '</div>' +
+            '<div class="pps-field"><label>' + escapeHtml(TEXT.relationship) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label>' + buildSelect('relationship', OPTIONS.relationships, profile.relationship || profile.relationshipStatus) + '</div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.occupation) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label>' + buildSelect('occupation', OPTIONS.occupations || [], profile.occupation) + '</div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.interests) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><input name="interestsText" maxlength="120" placeholder="' + escapeHtml(TEXT.interestsPlaceholder) + '" value="' + escapeHtml(profile.interestsText || '') + '"></div>' +
+            '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.tags) + '</div><div class="pps-selected-tags">' + renderSelectedTags(state.selectedTags) + '</div><button type="button" class="pps-select-tags-btn">' + escapeHtml(TEXT.chooseTags) + '</button></div>' +
+          '</div>' +
         '</div>' +
+        '<div class="pps-profile-actions"><button type="button" class="pps-profile-leave">' + escapeHtml(TEXT.leave) + '</button><button type="button" class="pps-save-btn">' + escapeHtml(TEXT.save) + '</button></div>' +
       '</div>';
 
     backdrop.classList.add('is-open');
     sheet.classList.add('is-open');
   }
 
-  function closeProfile() {
-    if (state.requiredProfile) return;
+  function closeProfile(force) {
+    if (state.requiredProfile && !force) return;
     $('.pps-sheet-backdrop', state.root).classList.remove('is-open');
     $('.pps-profile-sheet', state.root).classList.remove('is-open');
   }
@@ -849,16 +949,16 @@
       displayName: norm($('[name="displayName"]', sheet).value),
       photos: getProfilePhotosFromSheet(),
       bio: norm($('[name="bio"]', sheet).value),
-      language_flag: $('[name="language_flag"]', sheet).value,
-      language_fluent: $('[name="language_fluent"]', sheet).value,
-      language_learning: $('[name="language_learning"]', sheet).value,
-      gender: $('[name="gender"]', sheet).value,
+      language_flag: getChoiceValue('language_flag'),
+      language_fluent: getChoiceValue('language_fluent'),
+      language_learning: getChoiceValue('language_learning'),
+      gender: getChoiceValue('gender'),
       birthday: $('[name="birthday"]', sheet).value,
       heightCm: norm($('[name="heightCm"]', sheet).value),
       weightKg: norm($('[name="weightKg"]', sheet).value),
       education: $('[name="education"]', sheet).value,
       relationship: $('[name="relationship"]', sheet).value,
-      occupation: norm($('[name="occupation"]', sheet).value),
+      occupation: $('[name="occupation"]', sheet).value,
       interestsText: norm($('[name="interestsText"]', sheet).value),
       tags: state.selectedTags.slice(0, 12)
     };
@@ -869,8 +969,8 @@
     if (!data.displayName) missing.push('displayName');
     if (!data.photos.length) missing.push('photos');
     if (!data.language_flag) missing.push('country');
-    if (!data.language_fluent) missing.push('nativeLanguage');
-    if (!data.language_learning) missing.push('learningLanguage');
+    if (!normaliseCodeList(data.language_fluent, 5).length) missing.push('nativeLanguage');
+    if (!normaliseCodeList(data.language_learning, 5).length) missing.push('learningLanguage');
     if (!data.gender) missing.push('gender');
     if (!data.birthday) missing.push('birthday');
     return missing;
@@ -925,6 +1025,35 @@
     });
   }
 
+  function fileExt(file) {
+    var name = String(file && file.name || '').toLowerCase();
+    var m = name.match(/\.([a-z0-9]+)$/);
+    return m ? m[1] : '';
+  }
+
+  function mimeFromFile(file) {
+    var type = String(file && file.type || '').toLowerCase();
+    if (/^image\//.test(type)) return type;
+    var ext = fileExt(file);
+    if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+    if (ext === 'png') return 'image/png';
+    if (ext === 'webp') return 'image/webp';
+    if (ext === 'gif') return 'image/gif';
+    if (ext === 'heic') return 'image/heic';
+    if (ext === 'heif') return 'image/heif';
+    return '';
+  }
+
+  function isImageFile(file) {
+    return !!(file && (mimeFromFile(file) || /^image\//i.test(file.type || '')));
+  }
+
+  function withMime(file, type) {
+    if (!file || !type || file.type === type) return file;
+    try { return new File([file], file.name || ('photo-' + Date.now() + '.jpg'), { type: type, lastModified: file.lastModified || Date.now() }); }
+    catch (e) { return file; }
+  }
+
   function canCanvasEncode(type) {
     return new Promise(function (resolve) {
       try {
@@ -953,12 +1082,18 @@
   }
 
   function compressImageFile(file) {
-    if (!file || !/^image\//i.test(file.type)) return Promise.reject(new Error(TEXT.imageOnly));
-    if (/gif|svg/i.test(file.type)) {
+    if (!isImageFile(file)) return Promise.reject(new Error(TEXT.imageOnly));
+    var mime = mimeFromFile(file);
+    file = withMime(file, mime || 'image/jpeg');
+    if (/gif|svg|heic|heif/i.test(file.type || '') || /^(heic|heif)$/i.test(fileExt(file))) {
       if (file.size <= CONFIG.maxUploadBytes) return Promise.resolve(file);
       return Promise.reject(new Error(TEXT.imageTooLarge));
     }
-    return loadImageFromFile(file).then(function (img) {
+    return loadImageFromFile(file).catch(function () {
+      if (file.size <= CONFIG.maxUploadBytes) return null;
+      throw new Error(TEXT.imageTooLarge);
+    }).then(function (img) {
+      if (!img) return file;
       var maxSide = CONFIG.imageMaxSide;
       var w = img.naturalWidth || img.width;
       var h = img.naturalHeight || img.height;
@@ -972,8 +1107,8 @@
         throw new Error(TEXT.imageTooLarge);
       }
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      return canCanvasEncode('image/webp').then(function (webp) {
-        var type = webp ? 'image/webp' : 'image/jpeg';
+      return Promise.resolve(true).then(function () {
+        var type = 'image/jpeg';
         var quality = CONFIG.imageQualityStart;
         function step() {
           return canvasToBlob(canvas, type, quality).then(function (blob) {
@@ -985,7 +1120,7 @@
         }
         return step().then(function (blob) {
           if (blob.size > CONFIG.maxUploadBytes) throw new Error(TEXT.imageTooLarge);
-          var name = String(file.name || ('photo-' + Date.now())).replace(/\.[^.]+$/, '') + (type === 'image/webp' ? '.webp' : '.jpg');
+          var name = String(file.name || ('photo-' + Date.now())).replace(/\.[^.]+$/, '') + '.jpg';
           return new File([blob], name, { type: type, lastModified: Date.now() });
         });
       });
@@ -1017,8 +1152,7 @@
     function tryOne(i) {
       var cid = cids[i];
       var form = new FormData();
-      form.append('files[]', file);
-      form.append('file', file);
+      form.append('files[]', file, file.name || ('photo-' + Date.now() + '.jpg'));
       form.append('cid', String(cid));
 
       return fetch(rel('/api/post/upload'), {
@@ -1042,7 +1176,7 @@
   }
 
   function handlePhotoFiles(files) {
-    files = Array.prototype.slice.call(files || []).filter(function (file) { return /^image\//i.test(file.type); });
+    files = Array.prototype.slice.call(files || []).filter(isImageFile);
     if (!files.length) return toast(TEXT.imageOnly);
     var current = getProfilePhotosFromSheet();
     files = files.slice(0, Math.max(0, CONFIG.maxPhotos - current.length));
@@ -1069,21 +1203,30 @@
   }
 
   function renderTagSheet() {
-    state.tagDraft = state.selectedTags.slice(0, 12);
+    hideSettingsButton();
+    state.tagDraft = Array.from(new Set(state.selectedTags)).slice(0, 12);
     var sheet = $('.pps-tag-sheet', state.root);
+    var used = {};
     var groups = (state.tagCategories || []).map(function (cat) {
-      var choices = (cat.tags || []).map(function (tag) {
+      var choices = (cat.tags || []).filter(function (tag) {
+        if (!tag || !tag.key || used[tag.key]) return false;
+        used[tag.key] = true;
+        return true;
+      }).map(function (tag) {
         var selected = state.tagDraft.indexOf(tag.key) !== -1;
         return '<button type="button" class="pps-tag-choice ' + (selected ? 'is-selected' : '') + '" data-key="' + escapeHtml(tag.key) + '">' + escapeHtml(TEXT[tag.labelKey] || tag.label || tag.key) + '</button>';
       }).join('');
+      if (!choices) return '';
       return '<div class="pps-tag-category">' + escapeHtml(categoryLabel(cat)) + '</div><div class="pps-tag-grid">' + choices + '</div>';
     }).join('');
 
     sheet.innerHTML = '' +
-      '<div class="pps-tag-scroll">' +
-        '<div class="pps-tag-head"><div><div class="pps-tag-title">' + escapeHtml(TEXT.tagTitle) + '</div><div class="pps-profile-subtitle"><span class="pps-tag-count">' + escapeHtml(TEXT.selectedCount) + ' ' + state.tagDraft.length + '/12</span></div></div><button type="button" class="pps-close-btn pps-tag-close">×</button></div>' +
-        groups +
-        '<div class="pps-tag-actions"><button type="button" class="pps-tag-clear">' + escapeHtml(TEXT.tagClear) + '</button><button type="button" class="pps-tag-done">' + escapeHtml(TEXT.tagDone) + '</button></div>' +
+      '<div class="pps-tag-panel">' +
+        '<div class="pps-tag-scroll">' +
+          '<div class="pps-tag-head"><div><div class="pps-tag-title">' + escapeHtml(TEXT.tagTitle) + '</div><div class="pps-profile-subtitle"><span class="pps-tag-count">' + escapeHtml(TEXT.selectedCount) + ' ' + state.tagDraft.length + '/12</span></div></div></div>' +
+          groups +
+        '</div>' +
+        '<div class="pps-tag-actions"><button type="button" class="pps-tag-leave">' + escapeHtml(TEXT.leave) + '</button><button type="button" class="pps-tag-clear">' + escapeHtml(TEXT.tagClear) + '</button><button type="button" class="pps-tag-done">' + escapeHtml(TEXT.tagDone) + '</button></div>' +
       '</div>';
     $('.pps-tag-backdrop', state.root).classList.add('is-open');
     sheet.classList.add('is-open');
@@ -1128,9 +1271,29 @@
         openProfile(false);
         return;
       }
+      if (e.target.closest('.pps-profile-leave')) {
+        e.preventDefault();
+        if (state.requiredProfile && window.history && window.history.length > 1) window.history.back();
+        else closeProfile(true);
+        return;
+      }
       if (e.target.closest('.pps-profile-close')) {
         e.preventDefault();
         closeProfile();
+        return;
+      }
+      if ((btn = e.target.closest('.pps-choice-btn'))) {
+        e.preventDefault();
+        var grid = btn.closest('.pps-choice-grid');
+        if (!grid) return;
+        if (grid.dataset.multiple === '1') {
+          var max = Number(grid.dataset.max || 5) || 5;
+          if (!btn.classList.contains('is-selected') && $$('.pps-choice-btn.is-selected', grid).length >= max) return;
+          btn.classList.toggle('is-selected');
+        } else {
+          $$('.pps-choice-btn', grid).forEach(function (node) { node.classList.toggle('is-selected', node === btn); });
+        }
+        syncChoiceGrid(grid);
         return;
       }
       if (e.target.closest('.pps-upload-btn')) {
@@ -1156,7 +1319,7 @@
         saveProfile();
         return;
       }
-      if (e.target.closest('.pps-tag-close')) {
+      if (e.target.closest('.pps-tag-leave') || e.target.closest('.pps-tag-close')) {
         e.preventDefault();
         closeTags(false);
         return;
