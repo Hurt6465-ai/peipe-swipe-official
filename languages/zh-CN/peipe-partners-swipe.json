@@ -10,7 +10,7 @@
   "uploadPhotos": "上传手机图片",
   "uploading": "上传中...",
   "imageTooLarge": "图片压缩后仍超过 5MB，请换一张图片",
-  "imageOnly": "请选择图片文件",
+  "imageOnly": "请选择 JPG / PNG / WebP 图片文件",
   "maxPhotos": "最多 5 张照片，前端会自动压缩。头像不会当成背景照片。",
   "bio": "介绍",
   "bioPlaceholder": "介绍一下你想练什么语言、喜欢聊什么。",
@@ -36,7 +36,7 @@
   "greetLimit": "今天打招呼次数已用完",
   "greetFail": "打招呼失败",
   "tagTitle": "选择标签",
-  "tagDone": "完成",
+  "tagDone": "保存",
   "tagClear": "清空",
   "selectedCount": "已选",
   "male": "男",
@@ -91,9 +91,10 @@
   "occupation": "职业",
   "relationship": "感情状况",
   "interests": "兴趣爱好",
-  "heightPlaceholder": "例如 170",
-  "weightPlaceholder": "例如 60",
-  "occupationPlaceholder": "例如 学生 / 设计师",
+  "heightPlaceholder": "170",
+  "weightPlaceholder": "60",
+  "occupationPlaceholder": "请选择职业",
   "interestsPlaceholder": "例如 电影、音乐、旅行",
-  "optional": "选填"
+  "optional": "选填",
+  "leave": "离开"
 }
