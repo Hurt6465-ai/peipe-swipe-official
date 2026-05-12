@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v20 overlay
+/* Peipe Partners Swipe v21 overlay
    - no floating comments
    - reviews require chat duration >= 24h (server enforced)
    - shared translator settings with topic detail: x-topic-translate-settings
@@ -211,36 +211,41 @@
   function bindLongPress(el, cb) {
     if (!el || el.dataset.ppstLongBound === '1') return;
     el.dataset.ppstLongBound = '1';
-    var sx = 0, sy = 0, fired = false;
+    var sx = 0, sy = 0, fired = false, active = false;
     function point(e) {
       var t = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0] || e;
       return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
     }
     function start(e) {
-      if (e.type === 'touchstart' && window.PointerEvent) return;
+      if (active && e.type === 'touchstart') return;
+      active = true;
       var p = point(e); sx = p.x; sy = p.y; fired = false;
       clearTimeout(state.longPressTimer);
       state.longPressTimer = setTimeout(function () {
         fired = true;
-        state.translateSuppressClickUntil = Date.now() + 900;
+        state.translateSuppressClickUntil = Date.now() + 1200;
         try { e.preventDefault && e.preventDefault(); } catch (err) {}
+        try { e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch (err2) {}
         cb(e);
-      }, 560);
+      }, 430);
     }
     function move(e) {
+      if (!active) return;
       var p = point(e);
-      if (Math.hypot(p.x - sx, p.y - sy) > 10) clearTimeout(state.longPressTimer);
+      if (Math.hypot(p.x - sx, p.y - sy) > 14) clearTimeout(state.longPressTimer);
     }
     function end(e) {
       clearTimeout(state.longPressTimer);
-      if (fired) { try { e.preventDefault && e.preventDefault(); } catch (err) {} }
+      if (fired) {
+        try { e.preventDefault && e.preventDefault(); } catch (err) {}
+        try { e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch (err2) {}
+      }
+      setTimeout(function () { active = false; fired = false; }, 0);
     }
-    el.addEventListener('pointerdown', start, { passive: false });
-    el.addEventListener('touchstart', start, { passive: false });
-    el.addEventListener('pointermove', move, { passive: true });
-    el.addEventListener('touchmove', move, { passive: true });
-    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel'].forEach(function (n) { el.addEventListener(n, end, { passive: false }); });
-    el.addEventListener('contextmenu', function (e) { e.preventDefault(); cb(e); });
+    ['pointerdown','touchstart','mousedown'].forEach(function (n) { el.addEventListener(n, start, { passive: false }); });
+    ['pointermove','touchmove','mousemove'].forEach(function (n) { el.addEventListener(n, move, { passive: true }); });
+    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel', 'mouseup', 'mouseleave'].forEach(function (n) { el.addEventListener(n, end, { passive: false }); });
+    el.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopImmediatePropagation(); cb(e); });
   }
   function getTextValue(el) {
     if (!el) return '';
@@ -547,42 +552,53 @@
   function bindDelegatedLongPress() {
     if (state.delegatedLongPressBound) return;
     state.delegatedLongPressBound = true;
-    var startX = 0, startY = 0, target = null, fired = false;
+    var startX = 0, startY = 0, target = null, fired = false, active = false;
     function point(e) {
       var t = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0] || e;
       return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
     }
     function isTranslateButton(el) { return el && el.closest && el.closest('.ppst-inline-translate,.ppst-review-translate,.ppst-input-translate'); }
     function start(e) {
-      if (e.type === 'touchstart' && window.PointerEvent) return;
       target = isTranslateButton(e.target);
       if (!target) return;
+      if (active && e.type === 'touchstart') return;
+      active = true;
       var p = point(e); startX = p.x; startY = p.y; fired = false;
       clearTimeout(state.longPressTimer);
       state.longPressTimer = setTimeout(function () {
         fired = true;
-        state.translateSuppressClickUntil = Date.now() + 900;
+        state.translateSuppressClickUntil = Date.now() + 1200;
         try { e.preventDefault && e.preventDefault(); } catch (err) {}
+        try { e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch (err2) {}
         openTranslateSettings();
-      }, 520);
+      }, 430);
     }
     function move(e) {
       if (!target) return;
       var p = point(e);
-      if (Math.hypot(p.x - startX, p.y - startY) > 10) clearTimeout(state.longPressTimer);
+      if (Math.hypot(p.x - startX, p.y - startY) > 14) clearTimeout(state.longPressTimer);
     }
     function end(e) {
       if (!target) return;
       clearTimeout(state.longPressTimer);
       if (fired) { e.preventDefault && e.preventDefault(); e.stopImmediatePropagation && e.stopImmediatePropagation(); }
-      target = null; fired = false;
+      target = null;
+      setTimeout(function () { active = false; fired = false; }, 0);
     }
-    document.addEventListener('pointerdown', start, { passive: false, capture: true });
-    document.addEventListener('touchstart', start, { passive: false, capture: true });
-    document.addEventListener('pointermove', move, { passive: true, capture: true });
-    document.addEventListener('touchmove', move, { passive: true, capture: true });
-    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel'].forEach(function (name) { document.addEventListener(name, end, { passive: false, capture: true }); });
-    document.addEventListener('contextmenu', function (e) { if (isTranslateButton(e.target)) { e.preventDefault(); openTranslateSettings(); } }, true);
+    ['pointerdown','touchstart','mousedown'].forEach(function (name) { document.addEventListener(name, start, { passive: false, capture: true }); });
+    ['pointermove','touchmove','mousemove'].forEach(function (name) { document.addEventListener(name, move, { passive: true, capture: true }); });
+    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel', 'mouseup', 'mouseleave'].forEach(function (name) { document.addEventListener(name, end, { passive: false, capture: true }); });
+    document.addEventListener('contextmenu', function (e) { if (isTranslateButton(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); openTranslateSettings(); } }, true);
+  }
+
+  function bindGreetBlockers() {
+    ['pointerdown','touchstart','mousedown'].forEach(function (name) {
+      document.addEventListener(name, function (e) {
+        var btn = e.target && e.target.closest && e.target.closest('.pps-greet-btn');
+        if (!btn) return;
+        e.stopImmediatePropagation();
+      }, { capture: true, passive: true });
+    });
   }
 
 
@@ -634,32 +650,8 @@
   function sendWukongText(toUid, text) {
     return ensureWukongReady().then(function () {
       if (!window.wk || !window.wk.WKSDK) throw new Error('悟空 SDK 不可用');
-      var clientMsgNo = 'pps_greet_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
       var channel = new window.wk.Channel(String(toUid), 1);
       var msgContent = new window.wk.MessageText(text);
-      msgContent.text = text;
-      msgContent.content = text;
-      var encode = typeof msgContent.encode === 'function' ? msgContent.encode.bind(msgContent) : null;
-      msgContent.encode = function () {
-        var obj = {};
-        try {
-          var raw = encode ? encode() : null;
-          if (raw instanceof Uint8Array && window.TextDecoder) raw = new TextDecoder('utf-8').decode(raw);
-          if (typeof raw === 'string') {
-            var clean = raw.trim();
-            if (clean && (clean.charAt(0) === '{' || clean.charAt(0) === '[')) obj = JSON.parse(clean);
-            else if (clean) obj = { text: clean, content: clean };
-          } else if (raw && typeof raw === 'object') {
-            obj = Object.assign({}, raw);
-          }
-        } catch (err) { obj = {}; }
-        obj.text = text;
-        obj.content = text;
-        obj.client_msg_no = clientMsgNo;
-        obj.clientMsgNo = clientMsgNo;
-        obj.type = 1;
-        return JSON.stringify(obj);
-      };
       return window.wk.WKSDK.shared().chatManager.send(msgContent, channel);
     });
   }
@@ -816,6 +808,7 @@
     enhance(document);
     bindGlobal();
     bindDelegatedLongPress();
+    bindGreetBlockers();
     requestDailyLocation();
     renderGreetStickers(document.body);
     loadOverlayFeedOnce();
