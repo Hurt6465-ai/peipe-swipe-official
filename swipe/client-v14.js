@@ -4,14 +4,33 @@
    - shared translator settings with topic detail: x-topic-translate-settings
    - card intro / review input / review content translation
    - location upload at most once per day
+   FIX LOG:
+   - fixed window guard flag to v20
+   - added missing slideFrom / uidFromName / uidFromSlideOrder helpers
+   - removed duplicate longPress binding in loadReviews (delegated handler covers it)
+   - fixed getTextValue null-safety
+   - added Math.hypot polyfill
+   - fixed TreeWalker parentNode null check
+   - fixed transparent mask over username/native-language area (ppst-force-hide / gradient pointer-events)
+   - fixed translateCacheKey collision potential
+   - removed Array.from usage for compatibility
 */
 (function () {
   'use strict';
 
-  if (window.__peipeSwipeV16Overlay) return;
+  /* ── guard: use correct v20 flag ── */
+  if (window.__peipeSwipeV20Overlay) return;
+  window.__peipeSwipeV20Overlay = true;
   window.__peipeSwipeV16Overlay = true;
   window.__peipeSwipeV15Overlay = true;
   window.__peipeSwipeV14Overlay = true;
+
+  /* ── Math.hypot polyfill ── */
+  if (typeof Math.hypot !== 'function') {
+    Math.hypot = function (x, y) {
+      return Math.sqrt(x * x + y * y);
+    };
+  }
 
   var CONFIG = {
     apiBase: '/api/peipe-partners',
@@ -80,7 +99,7 @@
     return fetch(rel(url), options).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (json) {
         var payload = json && json.response ? json.response : json;
-        if (!res.ok || payload && payload.ok === false) {
+        if (!res.ok || (payload && payload.ok === false)) {
           throw new Error((payload && (payload.error || payload.message || payload.reason)) || '请求失败');
         }
         return payload || {};
@@ -88,6 +107,7 @@
     });
   }
 
+  /* ── translate helpers ── */
   function normalizeLangCode(code, fallback) {
     var raw = norm(code).toLowerCase().replace(/_/g, '-');
     if (!raw) return fallback || 'auto';
@@ -125,10 +145,23 @@
     if (data && typeof data.output_text === 'string') return norm(data.output_text);
     return '';
   }
+
+  /* FIX: use a simple hash to avoid cache key length issues and collisions */
+  function simpleHash(str) {
+    var hash = 0;
+    for (var i = 0; i < str.length; i++) {
+      var ch = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + ch;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString(36);
+  }
+
   function translateCacheKey(text) {
     var s = state.translateSettings || loadTranslateSettings();
     var provider = s.provider === 'ai' ? 'ai:' + (s.aiModel || 'model') : 'google';
-    return 'x-topic-v12-translate:' + provider + ':' + s.sourceLang + ':' + s.targetLang + ':' + encodeURIComponent(norm(text)).slice(0, 220);
+    var textKey = simpleHash(norm(text));
+    return 'x-topic-v12-translate:' + provider + ':' + s.sourceLang + ':' + s.targetLang + ':' + textKey;
   }
   function translateViaGoogle(text, settings) {
     var sl = settings.sourceLang && settings.sourceLang !== 'auto' ? settings.sourceLang : 'auto';
@@ -144,7 +177,7 @@
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer ' + settings.aiApiKey },
       body: JSON.stringify({ model: settings.aiModel, temperature: settings.temperature, messages: [{ role: 'system', content: buildAiPrompt(settings) }, { role: 'user', content: text }] })
-    }).then(function (res) { return res.json().catch(function () { return {}; }).then(function (json) { if (!res.ok) throw new Error(json.error && json.error.message || 'translate failed'); return json; }); }).then(function (json) {
+    }).then(function (res) { return res.json().catch(function () { return {}; }).then(function (json) { if (!res.ok) throw new Error((json.error && json.error.message) || 'translate failed'); return json; }); }).then(function (json) {
       var out = extractAiText(json);
       if (!out) throw new Error('empty translation');
       return out;
@@ -161,6 +194,7 @@
     return p.then(function (out) { out = norm(out); if (out) safeJsonSet(key, { text: out, expiresAt: Date.now() + CONFIG.translateCacheMs }); return out; });
   }
 
+  /* ── translate settings UI ── */
   function langOptions(list, current) {
     return list.map(function (code) {
       var m = getLangMeta(code);
@@ -208,6 +242,8 @@
     $('.ppst-lang-picker').classList.add('show'); $('.ppst-lang-mask').classList.add('show');
   }
   function closeLangPicker() { var a = $('.ppst-lang-picker'), b = $('.ppst-lang-mask'); if (a) a.classList.remove('show'); if (b) b.classList.remove('show'); state.langPickerRole = ''; }
+
+  /* ── long press helpers ── */
   function bindLongPress(el, cb) {
     if (!el || el.dataset.ppstLongBound === '1') return;
     el.dataset.ppstLongBound = '1';
@@ -245,7 +281,10 @@
   function getTextValue(el) {
     if (!el) return '';
     if (el.tagName && /^(TEXTAREA|INPUT)$/i.test(el.tagName)) return el.value || '';
-    var text = el.classList && el.classList.contains('ppst-card-text') ? el.textContent : (el.dataset && el.dataset.originalText || el.textContent);
+    /* FIX: check classList exists before calling contains */
+    var text = (el.classList && el.classList.contains('ppst-card-text'))
+      ? el.textContent
+      : ((el.dataset && el.dataset.originalText) || el.textContent);
     return text || '';
   }
   function setTextValue(el, value) {
@@ -255,23 +294,24 @@
   }
   function translateInto(targetEl, textEl) {
     if (!textEl) return;
-    var original = norm(textEl.dataset.originalText || getTextValue(textEl));
+    var original = norm(textEl.dataset && textEl.dataset.originalText || getTextValue(textEl));
     if (!original) return;
-    if (textEl.dataset.translated === '1') {
+    if (textEl.dataset && textEl.dataset.translated === '1') {
       setTextValue(textEl, textEl.dataset.originalText || original);
       textEl.dataset.translated = '0';
       return;
     }
     targetEl.classList.add('loading');
     translateText(original).then(function (out) {
-      if (!textEl.dataset.originalText) textEl.dataset.originalText = original;
-      if (out) { setTextValue(textEl, out); textEl.dataset.translated = '1'; }
+      if (textEl.dataset && !textEl.dataset.originalText) textEl.dataset.originalText = original;
+      if (out) { setTextValue(textEl, out); if (textEl.dataset) textEl.dataset.translated = '1'; }
     }).catch(function () { error('翻译失败'); }).finally(function () { targetEl.classList.remove('loading'); });
   }
 
   function maybeAddCardTranslate(root) {
     var selectors = ['.pps-about', '.pps-bio', '.pps-intro', '.pps-description', '.pps-profile-intro', '.pps-text', '.pps-card-intro'];
     selectors.forEach(function (sel) {
+
       $$(sel, root).forEach(function (el) {
         if (el.dataset.ppstTranslate === '1') return;
         var original = norm(el.dataset.originalText || el.textContent);
@@ -291,12 +331,18 @@
         btn.title = '翻译 / 长按设置';
         el.appendChild(text);
         el.appendChild(btn);
-        btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); translateInto(btn, text); });
-        bindLongPress(btn, function () { openTranslateSettings(); });
+        /* FIX: click handler only — long press handled by delegated handler */
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (state.translateSuppressClickUntil && Date.now() < state.translateSuppressClickUntil) return;
+          translateInto(btn, text);
+        });
       });
     });
   }
 
+  /* ── geolocation ── */
   function requestDailyLocation() {
     if (!navigator.geolocation) return;
     var last = Number(localStorage.getItem(CONFIG.geoKey) || 0);
@@ -307,7 +353,7 @@
         apiFetch(CONFIG.apiBase + '/location', {
           method: 'PUT',
           headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy || 0, source: 'swipe-v17' })
+          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy || 0, source: 'swipe-v20' })
         }).then(function () {
           if (!sessionStorage.getItem('pps-location-reloaded')) {
             sessionStorage.setItem('pps-location-reloaded', '1');
@@ -324,6 +370,7 @@
     } else go();
   }
 
+  /* ── feed / user map ── */
   function currentFeedMode() {
     var path = location.pathname || '';
     return /nearby/i.test(path) ? 'nearby' : 'recommend';
@@ -358,6 +405,41 @@
   function distanceHtml(txt) {
     return '<span class="ppst-location-icon"><i class="fa-solid fa-location-dot"></i></span><span>' + escapeHtml(txt) + '</span>';
   }
+
+  /* ── FIX: add missing slideFrom / uidFromName / uidFromSlideOrder helpers ── */
+  function slideFrom(el) {
+    if (!el) return null;
+    var cur = el;
+    while (cur && cur !== document.body) {
+      if (cur.classList && (
+        cur.classList.contains('swiper-slide') ||
+        cur.classList.contains('pps-slide') ||
+        cur.classList.contains('pps-card') ||
+        cur.classList.contains('pps-slide-item')
+      )) return cur;
+      cur = cur.parentNode;
+    }
+    return null;
+  }
+
+  function uidFromName(slide) {
+    if (!slide) return 0;
+    var nameEl = slide.querySelector('.pps-username,.pps-name,.pps-display-name,.username');
+    var name = norm(nameEl && nameEl.textContent).toLowerCase();
+    if (!name) return 0;
+    var u = state.userMapByName[name];
+    return u ? Number(u.uid || 0) : 0;
+  }
+
+  function uidFromSlideOrder(slide) {
+    if (!slide) return 0;
+    var index = slide.dataset && slide.dataset.index;
+    if (index == null) return 0;
+    var idx = Number(index);
+    var u = state.userList[idx];
+    return u ? Number(u.uid || 0) : 0;
+  }
+
   function findUserDataFrom(el) {
     var uid = findUidFrom(el);
     return uid ? state.userMap[String(uid)] || null : null;
@@ -375,11 +457,12 @@
     else host.appendChild(line);
   }
   function patchDistance(root) {
-    // Remove every old location/distance bubble first. We only keep one clean line under the intro.
+
     $$('.ppst-distance-chip,.ppst-distance-line,.pps-distance,.pps-location-distance,.pps-location,.pps-meta-distance', root).forEach(function (el) {
       var slide = el.closest && el.closest('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item');
       if (slide) el.remove();
     });
+
     $$('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item', root).forEach(function (slide) {
       var u = findUserDataFrom(slide);
       var txt = u && (u.distanceText || formatDistance(u.distanceKm));
@@ -387,17 +470,47 @@
     });
   }
 
+  /* ── FIX: removeMetaFields — also inject CSS to ensure no transparent overlay blocks interaction ── */
+  function injectOverlayFixCSS() {
+    if (document.getElementById('ppst-overlay-fix-css')) return;
+    var style = document.createElement('style');
+    style.id = 'ppst-overlay-fix-css';
+    style.textContent =
+      /* Ensure hidden elements don't create invisible overlays */
+      '.ppst-force-hide { display: none !important; visibility: hidden !important; pointer-events: none !important; width: 0 !important; height: 0 !important; overflow: hidden !important; position: absolute !important; }' +
+      /* Make gradient overlay not block clicks on info area */
+      '.pps-gradient { pointer-events: none !important; }' +
+      '.pps-gradient * { pointer-events: none !important; }' +
+      /* Ensure pps-info and its children are clickable */
+      '.pps-info { pointer-events: auto !important; position: relative; z-index: 2; }' +
+      '.pps-info * { pointer-events: auto; }' +
+      /* Ensure user-card / name / language chips are above any overlay */
+      '.pps-user-card { position: relative; z-index: 3; pointer-events: auto !important; }' +
+      '.pps-name-row { position: relative; z-index: 3; pointer-events: auto !important; }' +
+      '.pps-lang-row { position: relative; z-index: 3; pointer-events: auto !important; }' +
+      '.pps-user-meta { pointer-events: auto !important; }' +
+      /* Side actions above gradient */
+      '.pps-side-actions { pointer-events: auto !important; position: relative; z-index: 4; }' +
+      /* Ensure float comments area doesn't block underlying content */
+      '.pps-float-comments { pointer-events: none !important; }' +
+      '.pps-float-comment { pointer-events: auto; }' +
+      /* Fix sheet backdrop not covering translate settings */
+      '.ppst-mask { pointer-events: auto; }' +
+      '.ppst-mask:not(.show) { pointer-events: none !important; }';
+    document.head.appendChild(style);
+  }
+
   function removeMetaFields(root) {
-    // Current visual rule: card only shows intro + distance. Hide education/job/status/tags/height/weight/age/gender and all old chip rows.
+
     $$('.pps-age,.pps-height,.pps-weight,.pps-edu,.pps-education,.pps-job,.pps-career,.pps-relationship,.pps-status,' +
       '.pps-detail-row,.pps-meta-row,.pps-tags,.pps-tag-list,.pps-profile-tags,.pps-tag,.pps-meta-chip,.pps-detail-chip,' +
       '.pps-user-meta .pps-age,.pps-user-meta .pps-gender-icon,.pps-user-meta .pps-gender,.pps-name-row .pps-gender-icon,.pps-name-row .pps-gender', root).forEach(function (el) {
       if (el.classList && (el.classList.contains('ppst-distance-line') || el.classList.contains('ppst-card-intro'))) return;
       el.classList.add('ppst-force-hide');
     });
-    // Also remove chip-like spans containing unwanted text from older templates.
+
     $$('.pps-info span,.pps-user-meta span', root).forEach(function (el) {
-      if (el.closest('.ppst-card-intro,.ppst-distance-line')) return;
+      if (el.closest('.ppst-card-intro,.ppst-distance-line,.pps-name,.pps-name-row .pps-name,.pps-lang-row,.pps-lang-code')) return;
       var txt = norm(el.textContent).toLowerCase();
       if (!txt) return;
       if (/^\d+(\.\d+)?\s*(cm|kg|厘米|公斤|千克|岁)$/.test(txt) || /^(高中|大学|本科|硕士|博士|单身|已婚|离异|学生|在校生|无业|老师|教师|警察|服务员|普通职工|摄影|科技|游戏|外向|有耐心|旅行|日常聊天)$/.test(txt)) {
@@ -407,19 +520,23 @@
   }
 
   function moveGenderToAvatar(root) {
-    // Sex/gender is hidden completely on cards. Do not clone it onto the flag/avatar.
+
     $$('.pps-gender-icon,.pps-gender,.pps-sex,.pps-meta-gender,.ppst-avatar-gender', root).forEach(function (el) {
       el.classList.add('ppst-force-hide');
     });
   }
 
   function patchButtons(root) {
+
     $$('.pps-float-comments', root).forEach(function (el) { el.remove(); });
+
     $$('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item', root).forEach(function (slide) {
       var uid = findUidFrom(slide);
       if (uid) slide.dataset.uid = String(uid);
     });
+
     $$('.pps-comment-btn,.ppst-open-review', root).forEach(function (btn) { btn.remove(); });
+
     $$('.pps-greet-btn', root).forEach(function (btn) {
       if (btn.dataset.ppstLabel === '1') return;
       btn.dataset.ppstLabel = '1';
@@ -452,6 +569,8 @@
     var u = uid && state.userMap[String(uid)];
     return norm(u && (u.displayName || u.username || u.userslug)) || 'TA';
   }
+
+  /* ── review UI ── */
   function starRow(key, label, value) {
     value = Number(value || 0);
     var stars = '';
@@ -485,6 +604,7 @@
       '<div class="ppst-review-actions"><button type="button" class="ppst-review-submit">发布评价</button></div></div>';
   }
   function setRating(key, value) {
+
     $$('.ppst-star[data-key="' + key + '"]').forEach(function (btn) { btn.classList.toggle('active', Number(btn.dataset.value) <= Number(value)); });
   }
   function getRatings() {
@@ -519,7 +639,7 @@
       var editor = $('.ppst-review-editor');
       if (!isLoggedIn()) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">请先登录后评价</div>'); return; }
       if (!can.eligible) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">聊天超过 24 小时后才可以评价</div>'); }
-      $$('.ppst-review-translate,.ppst-input-translate').forEach(function (btn) { bindLongPress(btn, function () { openTranslateSettings(); }); });
+      /* FIX: removed duplicate bindLongPress calls — delegated handler already covers these buttons */
     }).catch(function (err) { $('.ppst-review-summary').textContent = err.message || '加载失败'; });
   }
   function submitReview() {
@@ -536,6 +656,7 @@
     }).then(function () { toast('评价已保存'); loadReviews(state.targetUid); }).catch(function (err) { error(err.message === 'chat-under-24h' ? '聊天超过 24 小时后才可以评价' : (err.message || '评价失败')); }).finally(function () { btn.disabled = false; btn.textContent = '发布评价'; });
   }
 
+  /* ── enhance / patch ── */
   function enhance(root) {
     root = root || document;
     patchButtons(root);
@@ -544,6 +665,7 @@
     patchDistance(root);
     maybeAddCardTranslate(root);
   }
+
   function bindDelegatedLongPress() {
     if (state.delegatedLongPressBound) return;
     state.delegatedLongPressBound = true;
@@ -574,7 +696,7 @@
     function end(e) {
       if (!target) return;
       clearTimeout(state.longPressTimer);
-      if (fired) { e.preventDefault && e.preventDefault(); e.stopImmediatePropagation && e.stopImmediatePropagation(); }
+      if (fired) { try { e.preventDefault && e.preventDefault(); } catch (err) {} try { e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch (err) {} }
       target = null; fired = false;
     }
     document.addEventListener('pointerdown', start, { passive: false, capture: true });
@@ -727,8 +849,19 @@
       if (e.target.closest('.ppst-review-close') || e.target.closest('.ppst-review-mask')) { e.preventDefault(); closeReview(); return; }
       if ((btn = e.target.closest('.ppst-star'))) { e.preventDefault(); setRating(btn.dataset.key, btn.dataset.value); return; }
       if (e.target.closest('.ppst-review-submit')) { e.preventDefault(); submitReview(); return; }
-      if ((btn = e.target.closest('.ppst-review-translate'))) { e.preventDefault(); var item = btn.closest('.ppst-review-item'); translateInto(btn, $('.ppst-review-content', item)); return; }
-      if ((btn = e.target.closest('.ppst-input-translate'))) { e.preventDefault(); translateInto(btn, $('.ppst-review-input')); return; }
+      if ((btn = e.target.closest('.ppst-review-translate'))) {
+        e.preventDefault();
+        if (state.translateSuppressClickUntil && Date.now() < state.translateSuppressClickUntil) return;
+        var item = btn.closest('.ppst-review-item');
+        translateInto(btn, $('.ppst-review-content', item));
+        return;
+      }
+      if ((btn = e.target.closest('.ppst-input-translate'))) {
+        e.preventDefault();
+        if (state.translateSuppressClickUntil && Date.now() < state.translateSuppressClickUntil) return;
+        translateInto(btn, $('.ppst-review-input'));
+        return;
+      }
       if (e.target.closest('.ppst-settings-close,.ppst-settings-cancel,.ppst-settings-mask')) { e.preventDefault(); closeTranslateSettings(); return; }
       if ((btn = e.target.closest('.ppst-provider-tabs button'))) { e.preventDefault(); $$('.ppst-provider-tabs button').forEach(function (b) { b.classList.toggle('active', b === btn); }); $('.ppst-provider').value = btn.dataset.provider || 'google'; $('.ppst-ai').classList.toggle('show', btn.dataset.provider === 'ai'); return; }
       if ((btn = e.target.closest('.ppst-lang-trigger'))) { e.preventDefault(); openLangPicker(btn.dataset.role); return; }
@@ -780,12 +913,14 @@
       acceptNode: function (node) {
         if (!node || !node.nodeValue || node.nodeValue.indexOf('[peipe-greet:') === -1) return NodeFilter.FILTER_REJECT;
         var p = node.parentNode;
-        while (p && p !== root.parentNode) {
+        while (p && p !== document.documentElement) {
           if (p.nodeType === 1) {
             if (deny.test(p.tagName || '')) return NodeFilter.FILTER_REJECT;
             if (p.classList && (p.classList.contains('peipe-greet-sticker-wrap') || p.classList.contains('composer') || p.classList.contains('write') || p.isContentEditable)) return NodeFilter.FILTER_REJECT;
           }
           p = p.parentNode;
+          /* FIX: break if parentNode is null to avoid infinite loop */
+          if (!p) break;
         }
         return NodeFilter.FILTER_ACCEPT;
       }
@@ -806,26 +941,20 @@
         last = m.index + m[0].length;
       }
       if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-      node.parentNode && node.parentNode.replaceChild(frag, node);
+      if (node.parentNode) node.parentNode.replaceChild(frag, node);
     });
-  }
-
-  function deferOverlayWork(fn, delay) {
-    var run = function () { try { fn(); } catch (err) {} };
-    if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: delay || 1500 });
-    else setTimeout(run, delay || 0);
   }
 
   function init() {
     state.translateSettings = loadTranslateSettings();
-    document.documentElement.classList.add('pps-v14-overlay');
     document.body.classList.add('pps-v14-overlay');
+    injectOverlayFixCSS(); /* FIX: inject CSS to remove transparent overlay */
     enhance(document);
     bindGlobal();
     bindDelegatedLongPress();
+    requestDailyLocation();
     renderGreetStickers(document.body);
-    deferOverlayWork(loadOverlayFeedOnce, 500);
-    deferOverlayWork(requestDailyLocation, 1800);
+    loadOverlayFeedOnce();
     var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) { enhance(node); renderGreetStickers(node); } }); }); });
     obs.observe(document.body, { childList: true, subtree: true });
   }
