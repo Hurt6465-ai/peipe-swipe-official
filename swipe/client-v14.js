@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v14 overlay
+/* Peipe Partners Swipe v15 overlay
    - no floating comments
    - reviews require chat duration >= 24h (server enforced)
    - shared translator settings with topic detail: x-topic-translate-settings
@@ -8,7 +8,8 @@
 (function () {
   'use strict';
 
-  if (window.__peipeSwipeV14Overlay) return;
+  if (window.__peipeSwipeV15Overlay) return;
+  window.__peipeSwipeV15Overlay = true;
   window.__peipeSwipeV14Overlay = true;
 
   var CONFIG = {
@@ -39,7 +40,9 @@
     viewerReviewId: '',
     translateSettings: null,
     longPressTimer: 0,
-    langPickerRole: ''
+    langPickerRole: '',
+    userMap: {},
+    overlayFeedLoaded: false
   };
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -197,15 +200,40 @@
   function bindLongPress(el, cb) {
     if (!el || el.dataset.ppstLongBound === '1') return;
     el.dataset.ppstLongBound = '1';
-    var sx = 0, sy = 0;
-    el.addEventListener('pointerdown', function (e) { sx = e.clientX; sy = e.clientY; clearTimeout(state.longPressTimer); state.longPressTimer = setTimeout(function () { cb(e); }, 620); });
-    el.addEventListener('pointermove', function (e) { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 12) clearTimeout(state.longPressTimer); });
-    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (n) { el.addEventListener(n, function () { clearTimeout(state.longPressTimer); }); });
+    var sx = 0, sy = 0, fired = false;
+    function point(e) {
+      var t = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0] || e;
+      return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
+    }
+    function start(e) {
+      var p = point(e); sx = p.x; sy = p.y; fired = false;
+      clearTimeout(state.longPressTimer);
+      state.longPressTimer = setTimeout(function () {
+        fired = true;
+        try { e.preventDefault && e.preventDefault(); } catch (err) {}
+        cb(e);
+      }, 560);
+    }
+    function move(e) {
+      var p = point(e);
+      if (Math.hypot(p.x - sx, p.y - sy) > 10) clearTimeout(state.longPressTimer);
+    }
+    function end(e) {
+      clearTimeout(state.longPressTimer);
+      if (fired) { try { e.preventDefault && e.preventDefault(); } catch (err) {} }
+    }
+    el.addEventListener('pointerdown', start, { passive: false });
+    el.addEventListener('touchstart', start, { passive: false });
+    el.addEventListener('pointermove', move, { passive: true });
+    el.addEventListener('touchmove', move, { passive: true });
+    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel'].forEach(function (n) { el.addEventListener(n, end, { passive: false }); });
+    el.addEventListener('contextmenu', function (e) { e.preventDefault(); cb(e); });
   }
   function getTextValue(el) {
     if (!el) return '';
     if (el.tagName && /^(TEXTAREA|INPUT)$/i.test(el.tagName)) return el.value || '';
-    return el.textContent || '';
+    var text = el.classList && el.classList.contains('ppst-card-text') ? el.textContent : (el.dataset && el.dataset.originalText || el.textContent);
+    return text || '';
   }
   function setTextValue(el, value) {
     if (!el) return;
@@ -229,16 +257,29 @@
   }
 
   function maybeAddCardTranslate(root) {
-    var selectors = ['.pps-about', '.pps-bio', '.pps-intro', '.pps-description', '.pps-profile-intro', '.pps-text'];
+    var selectors = ['.pps-about', '.pps-bio', '.pps-intro', '.pps-description', '.pps-profile-intro', '.pps-text', '.pps-card-intro'];
     selectors.forEach(function (sel) {
       $$(sel, root).forEach(function (el) {
-        if (!norm(el.textContent) || el.dataset.ppstTranslate === '1') return;
+        if (el.dataset.ppstTranslate === '1') return;
+        var original = norm(el.dataset.originalText || el.textContent);
+        if (!original || original.length < 2) return;
         el.dataset.ppstTranslate = '1';
+        el.dataset.originalText = original;
         el.classList.add('ppst-card-intro');
+        el.innerHTML = '';
+        var text = document.createElement('span');
+        text.className = 'ppst-card-text';
+        text.dataset.originalText = original;
+        text.textContent = original;
         var btn = document.createElement('button');
-        btn.type = 'button'; btn.className = 'ppst-inline-translate'; btn.innerHTML = '<i class="fa-solid fa-language"></i>'; btn.title = '翻译';
-        el.insertAdjacentElement('afterend', btn);
-        btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); translateInto(btn, el); });
+        btn.type = 'button';
+        btn.className = 'ppst-inline-translate';
+        btn.innerHTML = '<i class="fa-solid fa-language"></i>';
+        btn.title = '翻译';
+        el.appendChild(text);
+        el.appendChild(document.createTextNode(' '));
+        el.appendChild(btn);
+        btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); translateInto(btn, text); });
         bindLongPress(btn, function () { openTranslateSettings(); });
       });
     });
@@ -263,12 +304,44 @@
     } else go();
   }
 
+  function currentFeedMode() {
+    var path = location.pathname || '';
+    return /nearby/i.test(path) ? 'nearby' : 'recommend';
+  }
+  function rememberUsers(users) {
+    (users || []).forEach(function (u) {
+      if (u && u.uid) state.userMap[String(u.uid)] = u;
+    });
+  }
+  function loadOverlayFeedOnce() {
+    if (state.overlayFeedLoaded) return;
+    state.overlayFeedLoaded = true;
+    apiFetch(CONFIG.apiBase + '/swipe/feed?mode=' + encodeURIComponent(currentFeedMode()) + '&limit=36').then(function (json) {
+      rememberUsers(json.users || []);
+      patchDistance(document);
+    }).catch(function () {});
+  }
   function formatDistance(km) {
     km = Number(km || 0);
     if (!Number.isFinite(km) || km <= 0) return '';
-    if (km < 0.5) return '500 米内';
-    if (km < 1) return Math.round(km * 1000) + ' m';
-    return Math.round(km) + ' km';
+    if (km < 0.5) return '500米内';
+    if (km < 1) return Math.round(km * 1000) + '米';
+    return Math.round(km) + 'km';
+  }
+  function distanceHtml(txt) {
+    return '<span class="ppst-location-icon"><i class="fa-solid fa-location-dot"></i></span><span>' + escapeHtml(txt) + '</span>';
+  }
+  function findUserDataFrom(el) {
+    var uid = findUidFrom(el);
+    return uid ? state.userMap[String(uid)] || null : null;
+  }
+  function ensureDistanceChip(slide, txt) {
+    if (!slide || !txt || slide.querySelector('.ppst-distance-chip')) return;
+    var host = $('.pps-detail-row,.pps-meta-row,.pps-user-meta,.pps-info', slide) || slide;
+    var chip = document.createElement('span');
+    chip.className = 'ppst-distance-chip';
+    chip.innerHTML = distanceHtml(txt);
+    host.insertBefore(chip, host.firstChild || null);
   }
   function patchDistance(root) {
     $$('.pps-distance,.pps-location-distance,.pps-location,.pps-meta-distance', root).forEach(function (el) {
@@ -276,10 +349,35 @@
       el.dataset.ppstDistance = '1';
       var raw = el.dataset.distanceKm || el.dataset.km || (el.textContent.match(/[\d.]+/) || [''])[0];
       var txt = formatDistance(raw);
-      if (txt) el.innerHTML = '<i class="fa-solid fa-location-dot"></i><span>' + escapeHtml(txt) + '</span>';
+      if (txt) { el.classList.add('ppst-distance-chip'); el.innerHTML = distanceHtml(txt); }
+    });
+    $$('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item', root).forEach(function (slide) {
+      if (slide.dataset.ppstDistanceAdded === '1') return;
+      var u = findUserDataFrom(slide);
+      var txt = u && (u.distanceText || formatDistance(u.distanceKm));
+      if (txt) { slide.dataset.ppstDistanceAdded = '1'; ensureDistanceChip(slide, txt); }
     });
   }
 
+  function removeMetaFields(root) {
+    $$('.pps-detail-chip,.pps-meta-chip,.pps-info span,.pps-user-meta span', root).forEach(function (el) {
+      var txt = norm(el.textContent).toLowerCase();
+      if (/^\d+(\.\d+)?\s*(cm|kg|厘米|公斤|千克)$/.test(txt)) el.remove();
+    });
+  }
+  function moveGenderToAvatar(root) {
+    $$('.pps-gender-icon,.pps-gender,.pps-sex,.pps-meta-gender', root).forEach(function (el) {
+      if (el.closest('.pps-avatar-wrap,.pps-avatar-box')) return;
+      var slide = el.closest('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item') || root;
+      var avatar = $('.pps-avatar-wrap,.pps-avatar-box,.pps-avatar-holder', slide);
+      if (avatar && !avatar.querySelector('.ppst-avatar-gender')) {
+        var badge = el.cloneNode(true);
+        badge.classList.add('ppst-avatar-gender');
+        avatar.appendChild(badge);
+      }
+      el.classList.add('ppst-hide-gender-source');
+    });
+  }
   function patchButtons(root) {
     $$('.pps-float-comments', root).forEach(function (el) { el.remove(); });
 
@@ -312,8 +410,13 @@
   function findUidFrom(el) {
     var cur = el;
     while (cur && cur !== document.body) {
-      var uid = cur.dataset && (cur.dataset.uid || cur.dataset.targetUid || cur.dataset.userUid);
+      var uid = cur.dataset && (cur.dataset.uid || cur.dataset.targetUid || cur.dataset.userUid || cur.dataset.authorUid);
       if (uid) return Number(uid || 0);
+      var child = cur.querySelector && cur.querySelector('[data-uid],[data-target-uid],[data-user-uid],.pps-greet-btn');
+      if (child && child.dataset) {
+        uid = child.dataset.uid || child.dataset.targetUid || child.dataset.userUid;
+        if (uid) return Number(uid || 0);
+      }
       cur = cur.parentNode;
     }
     return 0;
@@ -410,6 +513,8 @@
   function enhance(root) {
     root = root || document;
     patchButtons(root);
+    removeMetaFields(root);
+    moveGenderToAvatar(root);
     patchDistance(root);
     maybeAddCardTranslate(root);
   }
@@ -418,7 +523,18 @@
       var btn;
       if ((btn = e.target.closest('.pps-comment-btn,.ppst-open-review'))) {
         e.preventDefault(); e.stopImmediatePropagation();
-        openReview(Number(btn.dataset.uid || findUidFrom(btn)), findNameFrom(btn));
+        var uid = Number(btn.dataset.uid || findUidFrom(btn));
+        if (!uid) { error('没有找到用户ID，请刷新后再试'); return; }
+        openReview(uid, findNameFrom(btn));
+        return;
+      }
+      if (e.target.closest('.pps-tags,.pps-tag-list,.pps-profile-tags')) {
+        var tags = e.target.closest('.pps-tags,.pps-tag-list,.pps-profile-tags');
+        tags.classList.toggle('is-expanded');
+        return;
+      }
+      if (e.target.closest('.ppst-card-intro') && !e.target.closest('.ppst-inline-translate')) {
+        e.target.closest('.ppst-card-intro').classList.toggle('is-expanded');
         return;
       }
       if (e.target.closest('.ppst-review-close') || e.target.closest('.ppst-review-mask')) { e.preventDefault(); closeReview(); return; }
@@ -452,6 +568,7 @@
     enhance(document);
     bindGlobal();
     requestDailyLocation();
+    loadOverlayFeedOnce();
     var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) enhance(node); }); }); });
     obs.observe(document.body, { childList: true, subtree: true });
   }
