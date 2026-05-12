@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v15 overlay
+/* Peipe Partners Swipe v16 overlay
    - no floating comments
    - reviews require chat duration >= 24h (server enforced)
    - shared translator settings with topic detail: x-topic-translate-settings
@@ -8,7 +8,8 @@
 (function () {
   'use strict';
 
-  if (window.__peipeSwipeV15Overlay) return;
+  if (window.__peipeSwipeV16Overlay) return;
+  window.__peipeSwipeV16Overlay = true;
   window.__peipeSwipeV15Overlay = true;
   window.__peipeSwipeV14Overlay = true;
 
@@ -42,7 +43,10 @@
     longPressTimer: 0,
     langPickerRole: '',
     userMap: {},
-    overlayFeedLoaded: false
+    overlayFeedLoaded: false,
+    userList: [],
+    userMapByName: {},
+    delegatedLongPressBound: false
   };
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -275,9 +279,8 @@
         btn.type = 'button';
         btn.className = 'ppst-inline-translate';
         btn.innerHTML = '<i class="fa-solid fa-language"></i>';
-        btn.title = '翻译';
+        btn.title = '翻译 / 长按设置';
         el.appendChild(text);
-        el.appendChild(document.createTextNode(' '));
         el.appendChild(btn);
         btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); translateInto(btn, text); });
         bindLongPress(btn, function () { openTranslateSettings(); });
@@ -309,8 +312,14 @@
     return /nearby/i.test(path) ? 'nearby' : 'recommend';
   }
   function rememberUsers(users) {
+    state.userList = Array.isArray(users) ? users.slice() : [];
     (users || []).forEach(function (u) {
-      if (u && u.uid) state.userMap[String(u.uid)] = u;
+      if (!u || !u.uid) return;
+      state.userMap[String(u.uid)] = u;
+      [u.username, u.displayName, u.name, u.userslug].forEach(function (name) {
+        name = norm(name).toLowerCase();
+        if (name) state.userMapByName[name] = u;
+      });
     });
   }
   function loadOverlayFeedOnce() {
@@ -336,68 +345,78 @@
     return uid ? state.userMap[String(uid)] || null : null;
   }
   function ensureDistanceChip(slide, txt) {
-    if (!slide || !txt || slide.querySelector('.ppst-distance-chip')) return;
-    var host = $('.pps-detail-row,.pps-meta-row,.pps-user-meta,.pps-info', slide) || slide;
-    var chip = document.createElement('span');
-    chip.className = 'ppst-distance-chip';
-    chip.innerHTML = distanceHtml(txt);
-    host.insertBefore(chip, host.firstChild || null);
+    if (!slide || !txt) return;
+    var old = slide.querySelector('.ppst-distance-chip,.ppst-distance-line');
+    if (old) old.remove();
+    var intro = $('.ppst-card-intro,.pps-about,.pps-bio,.pps-intro,.pps-description,.pps-profile-intro,.pps-text,.pps-card-intro', slide);
+    var host = intro && intro.parentNode || $('.pps-info', slide) || slide;
+    var line = document.createElement('div');
+    line.className = 'ppst-distance-line';
+    line.innerHTML = distanceHtml(txt);
+    if (intro && intro.nextSibling) host.insertBefore(line, intro.nextSibling);
+    else host.appendChild(line);
   }
   function patchDistance(root) {
-    $$('.pps-distance,.pps-location-distance,.pps-location,.pps-meta-distance', root).forEach(function (el) {
-      if (el.dataset.ppstDistance === '1') return;
-      el.dataset.ppstDistance = '1';
-      var raw = el.dataset.distanceKm || el.dataset.km || (el.textContent.match(/[\d.]+/) || [''])[0];
-      var txt = formatDistance(raw);
-      if (txt) { el.classList.add('ppst-distance-chip'); el.innerHTML = distanceHtml(txt); }
+    // Remove every old location/distance bubble first. We only keep one clean line under the intro.
+    $$('.ppst-distance-chip,.ppst-distance-line,.pps-distance,.pps-location-distance,.pps-location,.pps-meta-distance', root).forEach(function (el) {
+      var slide = el.closest && el.closest('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item');
+      if (slide) el.remove();
     });
     $$('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item', root).forEach(function (slide) {
-      if (slide.dataset.ppstDistanceAdded === '1') return;
       var u = findUserDataFrom(slide);
       var txt = u && (u.distanceText || formatDistance(u.distanceKm));
-      if (txt) { slide.dataset.ppstDistanceAdded = '1'; ensureDistanceChip(slide, txt); }
+      if (txt) ensureDistanceChip(slide, txt);
     });
   }
 
   function removeMetaFields(root) {
-    $$('.pps-detail-chip,.pps-meta-chip,.pps-info span,.pps-user-meta span', root).forEach(function (el) {
+    // Current visual rule: card only shows intro + distance. Hide education/job/status/tags/height/weight/age/gender and all old chip rows.
+    $$('.pps-age,.pps-height,.pps-weight,.pps-edu,.pps-education,.pps-job,.pps-career,.pps-relationship,.pps-status,' +
+      '.pps-detail-row,.pps-meta-row,.pps-tags,.pps-tag-list,.pps-profile-tags,.pps-tag,.pps-meta-chip,.pps-detail-chip,' +
+      '.pps-user-meta .pps-age,.pps-user-meta .pps-gender-icon,.pps-user-meta .pps-gender,.pps-name-row .pps-gender-icon,.pps-name-row .pps-gender', root).forEach(function (el) {
+      if (el.classList && (el.classList.contains('ppst-distance-line') || el.classList.contains('ppst-card-intro'))) return;
+      el.classList.add('ppst-force-hide');
+    });
+    // Also remove chip-like spans containing unwanted text from older templates.
+    $$('.pps-info span,.pps-user-meta span', root).forEach(function (el) {
+      if (el.closest('.ppst-card-intro,.ppst-distance-line')) return;
       var txt = norm(el.textContent).toLowerCase();
-      if (/^\d+(\.\d+)?\s*(cm|kg|厘米|公斤|千克)$/.test(txt)) el.remove();
-    });
-  }
-  function moveGenderToAvatar(root) {
-    $$('.pps-gender-icon,.pps-gender,.pps-sex,.pps-meta-gender', root).forEach(function (el) {
-      if (el.closest('.pps-avatar-wrap,.pps-avatar-box')) return;
-      var slide = el.closest('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item') || root;
-      var avatar = $('.pps-avatar-wrap,.pps-avatar-box,.pps-avatar-holder', slide);
-      if (avatar && !avatar.querySelector('.ppst-avatar-gender')) {
-        var badge = el.cloneNode(true);
-        badge.classList.add('ppst-avatar-gender');
-        avatar.appendChild(badge);
+      if (!txt) return;
+      if (/^\d+(\.\d+)?\s*(cm|kg|厘米|公斤|千克|岁)$/.test(txt) || /^(高中|大学|本科|硕士|博士|单身|已婚|离异|学生|在校生|无业|老师|教师|警察|服务员|普通职工|摄影|科技|游戏|外向|有耐心|旅行|日常聊天)$/.test(txt)) {
+        el.classList.add('ppst-force-hide');
       }
-      el.classList.add('ppst-hide-gender-source');
     });
   }
+
+  function moveGenderToAvatar(root) {
+    // Sex/gender is hidden completely on cards. Do not clone it onto the flag/avatar.
+    $$('.pps-gender-icon,.pps-gender,.pps-sex,.pps-meta-gender,.ppst-avatar-gender', root).forEach(function (el) {
+      el.classList.add('ppst-force-hide');
+    });
+  }
+
   function patchButtons(root) {
     $$('.pps-float-comments', root).forEach(function (el) { el.remove(); });
-
-    // Some earlier builds do not have a review button in renderSlide.
-    // Insert it next to the greet button so this overlay is complete even on older base files.
+    $$('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item', root).forEach(function (slide) {
+      var uid = findUidFrom(slide);
+      if (uid) slide.dataset.uid = String(uid);
+    });
     $$('.pps-greet-btn', root).forEach(function (greet) {
+      var uid = Number(greet.dataset.uid || findUidFrom(greet));
+      if (uid) greet.dataset.uid = String(uid);
       var host = greet.closest('.pps-side-actions') || greet.parentNode;
-      if (host && !host.querySelector('.pps-comment-btn')) {
+      if (host && !host.querySelector('.pps-comment-btn,.ppst-open-review')) {
         var review = document.createElement('button');
         review.type = 'button';
         review.className = 'pps-comment-btn ppst-open-review';
-        review.dataset.uid = greet.dataset.uid || String(findUidFrom(greet) || '');
+        review.dataset.uid = uid ? String(uid) : '';
         review.innerHTML = '<span class="ppst-action-icon">💬</span><b>看评价</b>';
         host.insertBefore(review, greet);
       }
     });
-
-    $$('.pps-comment-btn', root).forEach(function (btn) {
-      if (btn.dataset.ppstLabel === '1') return;
-      btn.dataset.ppstLabel = '1';
+    $$('.pps-comment-btn,.ppst-open-review', root).forEach(function (btn) {
+      var uid = Number(btn.dataset.uid || findUidFrom(btn));
+      if (uid) btn.dataset.uid = String(uid);
       btn.innerHTML = '<span class="ppst-action-icon">💬</span><b>看评价</b>';
     });
     $$('.pps-greet-btn', root).forEach(function (btn) {
@@ -410,21 +429,27 @@
   function findUidFrom(el) {
     var cur = el;
     while (cur && cur !== document.body) {
-      var uid = cur.dataset && (cur.dataset.uid || cur.dataset.targetUid || cur.dataset.userUid || cur.dataset.authorUid);
+      var uid = cur.dataset && (cur.dataset.uid || cur.dataset.targetUid || cur.dataset.userUid || cur.dataset.authorUid || cur.dataset.uidRaw);
       if (uid) return Number(uid || 0);
-      var child = cur.querySelector && cur.querySelector('[data-uid],[data-target-uid],[data-user-uid],.pps-greet-btn');
+      var child = cur.querySelector && cur.querySelector('[data-uid],[data-target-uid],[data-user-uid],.pps-greet-btn,.pps-comment-btn');
       if (child && child.dataset) {
         uid = child.dataset.uid || child.dataset.targetUid || child.dataset.userUid;
         if (uid) return Number(uid || 0);
       }
       cur = cur.parentNode;
     }
-    return 0;
+    var slide = slideFrom(el);
+    return uidFromName(slide) || uidFromSlideOrder(slide) || 0;
   }
+
   function findNameFrom(el) {
-    var slide = el.closest('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item') || document;
+    var slide = slideFrom(el) || document;
     var nameEl = $('.pps-username,.pps-name,.pps-display-name,.username', slide);
-    return norm(nameEl && nameEl.textContent) || 'TA';
+    var name = norm(nameEl && nameEl.textContent);
+    if (name) return name;
+    var uid = findUidFrom(el);
+    var u = uid && state.userMap[String(uid)];
+    return norm(u && (u.displayName || u.username || u.userslug)) || 'TA';
   }
   function starRow(key, label, value) {
     value = Number(value || 0);
@@ -518,12 +543,52 @@
     patchDistance(root);
     maybeAddCardTranslate(root);
   }
+  function bindDelegatedLongPress() {
+    if (state.delegatedLongPressBound) return;
+    state.delegatedLongPressBound = true;
+    var startX = 0, startY = 0, target = null, fired = false;
+    function point(e) {
+      var t = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0] || e;
+      return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
+    }
+    function isTranslateButton(el) { return el && el.closest && el.closest('.ppst-inline-translate,.ppst-review-translate,.ppst-input-translate'); }
+    function start(e) {
+      target = isTranslateButton(e.target);
+      if (!target) return;
+      var p = point(e); startX = p.x; startY = p.y; fired = false;
+      clearTimeout(state.longPressTimer);
+      state.longPressTimer = setTimeout(function () {
+        fired = true;
+        e.preventDefault && e.preventDefault();
+        openTranslateSettings();
+      }, 520);
+    }
+    function move(e) {
+      if (!target) return;
+      var p = point(e);
+      if (Math.hypot(p.x - startX, p.y - startY) > 10) clearTimeout(state.longPressTimer);
+    }
+    function end(e) {
+      if (!target) return;
+      clearTimeout(state.longPressTimer);
+      if (fired) { e.preventDefault && e.preventDefault(); e.stopImmediatePropagation && e.stopImmediatePropagation(); }
+      target = null; fired = false;
+    }
+    document.addEventListener('pointerdown', start, { passive: false, capture: true });
+    document.addEventListener('touchstart', start, { passive: false, capture: true });
+    document.addEventListener('pointermove', move, { passive: true, capture: true });
+    document.addEventListener('touchmove', move, { passive: true, capture: true });
+    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel'].forEach(function (name) { document.addEventListener(name, end, { passive: false, capture: true }); });
+    document.addEventListener('contextmenu', function (e) { if (isTranslateButton(e.target)) { e.preventDefault(); openTranslateSettings(); } }, true);
+  }
+
   function bindGlobal() {
     document.addEventListener('click', function (e) {
       var btn;
       if ((btn = e.target.closest('.pps-comment-btn,.ppst-open-review'))) {
         e.preventDefault(); e.stopImmediatePropagation();
         var uid = Number(btn.dataset.uid || findUidFrom(btn));
+        if (!uid) { enhance(document); uid = Number(btn.dataset.uid || findUidFrom(btn)); }
         if (!uid) { error('没有找到用户ID，请刷新后再试'); return; }
         openReview(uid, findNameFrom(btn));
         return;
@@ -567,6 +632,7 @@
     document.body.classList.add('pps-v14-overlay');
     enhance(document);
     bindGlobal();
+    bindDelegatedLongPress();
     requestDailyLocation();
     loadOverlayFeedOnce();
     var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) enhance(node); }); }); });
