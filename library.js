@@ -6,6 +6,8 @@ const swipe = require('./swipe');
 const partnerReviews = require('./swipe/comments');
 const user = require.main.require('./src/user');
 const db = require.main.require('./src/database');
+let messaging = null;
+try { messaging = require.main.require('./src/messaging'); } catch (err) { messaging = null; }
 
 const plugin = {};
 
@@ -69,17 +71,26 @@ function formatDistance(km) {
   if (!Number.isFinite(km) || km <= 0) return '';
   if (km < 0.5) return '500米内';
   if (km < 1) return `${Math.round(km * 1000)}米`;
+  if (km > 1000) return '1000km外';
   return `${Math.round(km)}km`;
+}
+
+function parseGeoRow(row) {
+  if (!row) return null;
+  const expiresAt = Number(row.peipe_partner_location_expires_at || row.location_expires_at || 0);
+  if (expiresAt && expiresAt < Date.now()) return null;
+  const lat = Number(row.lat || row.peipe_partner_lat);
+  const lng = Number(row.lng || row.peipe_partner_lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001) return null;
+  return { lat, lng };
 }
 
 async function getViewerGeo(uid) {
   uid = Number(uid || 0);
   if (!uid) return null;
-  const row = await user.getUserFields(uid, ['lat', 'lng', 'peipe_partner_lat', 'peipe_partner_lng']).catch(() => null);
-  if (!row) return null;
-  const lat = Number(row.lat || row.peipe_partner_lat);
-  const lng = Number(row.lng || row.peipe_partner_lng);
-  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+  const row = await user.getUserFields(uid, ['lat', 'lng', 'peipe_partner_lat', 'peipe_partner_lng', 'peipe_partner_location_expires_at']).catch(() => null);
+  return parseGeoRow(row);
 }
 
 async function decorateFeedWithDistance(req, payload) {
@@ -88,12 +99,11 @@ async function decorateFeedWithDistance(req, payload) {
   const viewerGeo = await getViewerGeo(req.uid);
   if (!viewerGeo) return payload;
   const uids = users.map(item => Number(item && item.uid)).filter(Boolean);
-  const rows = await user.getUsersFields(uids, ['uid', 'lat', 'lng', 'peipe_partner_lat', 'peipe_partner_lng']).catch(() => []);
+  const rows = await user.getUsersFields(uids, ['uid', 'lat', 'lng', 'peipe_partner_lat', 'peipe_partner_lng', 'peipe_partner_location_expires_at']).catch(() => []);
   const geo = new Map();
   rows.forEach((row) => {
-    const lat = Number(row && (row.lat || row.peipe_partner_lat));
-    const lng = Number(row && (row.lng || row.peipe_partner_lng));
-    if (Number.isFinite(lat) && Number.isFinite(lng)) geo.set(Number(row.uid), { lat, lng });
+    const point = parseGeoRow(row);
+    if (point) geo.set(Number(row.uid), point);
   });
   payload.users = users.map((item) => {
     const targetGeo = geo.get(Number(item.uid));
@@ -105,6 +115,40 @@ async function decorateFeedWithDistance(req, payload) {
     return item;
   });
   return payload;
+}
+
+function randomWaveMessage() {
+  const items = [
+    '👋', '👋✨', '👋💫', '👋🌟', '👋😊', '👋💬', '✨👋✨', '🙋‍♀️👋', '🙋‍♂️👋'
+  ];
+  return items[Math.floor(Math.random() * items.length)] || '👋';
+}
+
+async function sendPrivateGreeting(req) {
+  const fromUid = Number(req.uid || 0);
+  const toUid = Number(req.body && (req.body.uid || req.body.toUid || req.body.targetUid));
+  if (!fromUid) return { ok: false, error: 'login-required' };
+  if (!toUid || toUid === fromUid) return { ok: false, error: 'invalid-user' };
+
+  if (!messaging || typeof messaging.hasPrivateChat !== 'function') {
+    return partner.greet(fromUid, req.body || {});
+  }
+
+  await messaging.canMessageUser(fromUid, toUid);
+  let roomId = await messaging.hasPrivateChat(fromUid, toUid);
+  if (!roomId) {
+    roomId = await messaging.newRoom(fromUid, { uids: [String(toUid)] });
+  }
+
+  const content = randomWaveMessage();
+  const message = await messaging.sendMessage({ uid: fromUid, roomId, content });
+  if (message && typeof messaging.notifyUsersInRoom === 'function') {
+    await messaging.notifyUsersInRoom(fromUid, roomId, message).catch(() => {});
+  }
+  if (partner && typeof partner.markChatted === 'function') {
+    await partner.markChatted(fromUid, { uid: toUid, toUid }).catch(() => {});
+  }
+  return { ok: true, mode: 'chat', roomId, message, content };
 }
 
 plugin.init = async ({ router, middleware }) => {
@@ -153,7 +197,7 @@ plugin.init = async ({ router, middleware }) => {
   }));
 
   router.post('/api/peipe-partners/me/greet', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partner.greet(req.uid, req.body || {}));
+    json(res, await sendPrivateGreeting(req));
   }));
 
   router.get('/api/peipe-partners/swipe/feed', asyncRoute(async (req, res) => {
@@ -227,7 +271,7 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
   });
 
   routeHelpers.setupApiRoute(router, 'post', '/peipe-partners/me/greet', [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partner.greet(req.uid, req.body || {}));
+    helpers.formatApiResponse(200, res, await sendPrivateGreeting(req));
   });
 
   routeHelpers.setupApiRoute(router, 'get', '/peipe-partners/swipe/feed', [], async (req, res) => {
@@ -276,4 +320,3 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
 };
 
 module.exports = plugin;
-
