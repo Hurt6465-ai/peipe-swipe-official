@@ -129,6 +129,36 @@ function randomWaveMessage() {
   return name ? `[peipe-greet:${name}]` : '👋';
 }
 
+
+async function prepareWukongChatRoute(req) {
+  const fromUid = Number(req.uid || 0);
+  const toUid = Number(req.body && (req.body.uid || req.body.toUid || req.body.targetUid));
+  if (!fromUid) return { ok: false, error: 'login-required' };
+  if (!toUid || toUid === fromUid) return { ok: false, error: 'invalid-user' };
+
+  let roomId = '';
+  if (messaging && typeof messaging.hasPrivateChat === 'function') {
+    await messaging.canMessageUser(fromUid, toUid).catch(() => {});
+    roomId = await messaging.hasPrivateChat(fromUid, toUid).catch(() => '') || '';
+    if (!roomId && typeof messaging.newRoom === 'function') {
+      roomId = await messaging.newRoom(fromUid, { uids: [String(toUid)] }).catch(() => '') || '';
+    }
+  }
+
+  let userslug = '';
+  try {
+    const row = await user.getUserFields(toUid, ['userslug', 'username']);
+    userslug = row && (row.userslug || row.username) || '';
+  } catch (err) {}
+
+  if (partner && typeof partner.markChatted === 'function') {
+    await partner.markChatted(fromUid, { uid: toUid, toUid }).catch(() => {});
+  }
+
+  const chatUrl = userslug ? ('/user/' + encodeURIComponent(userslug) + '/chats' + (roomId ? '/' + encodeURIComponent(roomId) : '')) : '';
+  return { ok: true, mode: 'wukong', roomId, uid: toUid, userslug, chatUrl };
+}
+
 async function sendPrivateGreeting(req) {
   const fromUid = Number(req.uid || 0);
   const toUid = Number(req.body && (req.body.uid || req.body.toUid || req.body.targetUid));
@@ -205,6 +235,10 @@ plugin.init = async ({ router, middleware }) => {
     json(res, await sendPrivateGreeting(req));
   }));
 
+  router.post('/api/peipe-partners/me/chat-route', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+    json(res, await prepareWukongChatRoute(req));
+  }));
+
   router.get('/api/peipe-partners/swipe/feed', asyncRoute(async (req, res) => {
     json(res, await decorateFeedWithDistance(req, await swipe.feed(req)));
   }));
@@ -277,6 +311,10 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
 
   routeHelpers.setupApiRoute(router, 'post', '/peipe-partners/me/greet', [middleware.ensureLoggedIn], async (req, res) => {
     helpers.formatApiResponse(200, res, await sendPrivateGreeting(req));
+  });
+
+  routeHelpers.setupApiRoute(router, 'post', '/peipe-partners/me/chat-route', [middleware.ensureLoggedIn], async (req, res) => {
+    helpers.formatApiResponse(200, res, await prepareWukongChatRoute(req));
   });
 
   routeHelpers.setupApiRoute(router, 'get', '/peipe-partners/swipe/feed', [], async (req, res) => {
