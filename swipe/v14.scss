@@ -1,0 +1,288 @@
+/* Peipe swipe v14 visual overlay */
+.pps-v14-overlay .pps-float-comments { display: none !important; }
+
+/* Remove all text glass/background blocks on the card. Keep text directly on media with clear shadow. */
+.pps-v14-overlay .pps-info,
+.pps-v14-overlay .pps-user-block,
+.pps-v14-overlay .pps-profile-text,
+.pps-v14-overlay .pps-meta,
+.pps-v14-overlay .pps-langs,
+.pps-v14-overlay .pps-about,
+.pps-v14-overlay .pps-bio,
+.pps-v14-overlay .pps-intro,
+.pps-v14-overlay .pps-description,
+.pps-v14-overlay .pps-profile-intro,
+.pps-v14-overlay .pps-text {
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: #fff !important;
+  text-shadow:
+    0 1px 1px rgba(0,0,0,.78),
+    0 2px 8px rgba(0,0,0,.58),
+    0 0 1px rgba(0,0,0,.95) !important;
+}
+
+/* Hide fields removed from card. Gender is kept as small avatar badge if existing markup uses sex/gender classes. */
+.pps-v14-overlay .pps-age,
+.pps-v14-overlay .pps-height,
+.pps-v14-overlay .pps-weight,
+.pps-v14-overlay .pps-meta-age,
+.pps-v14-overlay .pps-meta-height,
+.pps-v14-overlay .pps-meta-weight,
+.pps-v14-overlay [data-field="age"],
+.pps-v14-overlay [data-field="height"],
+.pps-v14-overlay [data-field="weight"] {
+  display: none !important;
+}
+.pps-v14-overlay .pps-gender,
+.pps-v14-overlay .pps-sex,
+.pps-v14-overlay .pps-meta-gender {
+  position: absolute !important;
+  left: -6px !important;
+  bottom: -8px !important;
+  z-index: 4 !important;
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  display: grid !important;
+  place-items: center !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  background: rgba(255,255,255,.92) !important;
+  text-shadow: none !important;
+  box-shadow: 0 3px 10px rgba(0,0,0,.24) !important;
+}
+.pps-v14-overlay .pps-gender.is-female,
+.pps-v14-overlay .pps-sex.is-female,
+.pps-v14-overlay [data-gender="female"] { color: #a855f7 !important; }
+.pps-v14-overlay .pps-gender.is-male,
+.pps-v14-overlay .pps-sex.is-male,
+.pps-v14-overlay [data-gender="male"] { color: #3b82f6 !important; }
+
+/* Distance */
+.pps-v14-overlay .pps-distance,
+.pps-v14-overlay .pps-location-distance,
+.pps-v14-overlay .pps-location,
+.pps-v14-overlay .pps-meta-distance {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  color: #fff !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  text-shadow: 0 1px 1px rgba(0,0,0,.78), 0 2px 8px rgba(0,0,0,.58) !important;
+}
+.pps-v14-overlay .pps-distance i,
+.pps-v14-overlay .pps-location-distance i,
+.pps-v14-overlay .pps-location i,
+.pps-v14-overlay .pps-meta-distance i {
+  font-size: 12px !important;
+  color: #fff !important;
+}
+
+/* Tags: bigger, capsule, three rows default. */
+.pps-v14-overlay .pps-tags,
+.pps-v14-overlay .pps-tag-list,
+.pps-v14-overlay .pps-profile-tags {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 7px !important;
+  max-height: 100px !important;
+  overflow: hidden !important;
+  padding: 2px 0 4px !important;
+  background: transparent !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.pps-v14-overlay .pps-tags.is-expanded,
+.pps-v14-overlay .pps-tag-list.is-expanded,
+.pps-v14-overlay .pps-profile-tags.is-expanded { max-height: none !important; }
+.pps-v14-overlay .pps-tag,
+.pps-v14-overlay .pps-tags span,
+.pps-v14-overlay .pps-profile-tags span {
+  font-size: 13px !important;
+  line-height: 1.25 !important;
+  font-weight: 850 !important;
+  color: rgba(255,255,255,.98) !important;
+  padding: 6px 11px !important;
+  border-radius: 999px !important;
+  background: linear-gradient(135deg, rgba(255,255,255,.26), rgba(255,255,255,.10)) !important;
+  border: 1px solid rgba(255,255,255,.34) !important;
+  box-shadow: 0 8px 22px rgba(0,0,0,.16) !important;
+  text-shadow: 0 1px 6px rgba(0,0,0,.32) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(130%) !important;
+  backdrop-filter: blur(8px) saturate(130%) !important;
+}
+
+/* Intro: two rows default, click handled by base/overlay classes; Burmese-safe line height. */
+.pps-v14-overlay .ppst-card-intro,
+.pps-v14-overlay .pps-about,
+.pps-v14-overlay .pps-bio,
+.pps-v14-overlay .pps-intro,
+.pps-v14-overlay .pps-description,
+.pps-v14-overlay .pps-profile-intro,
+.pps-v14-overlay .pps-text {
+  font-size: 15px !important;
+  line-height: 1.58 !important;
+  max-height: 3.16em !important;
+  overflow: hidden !important;
+  padding-bottom: .18em !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+}
+.pps-v14-overlay .ppst-card-intro.is-expanded,
+.pps-v14-overlay .pps-about.is-expanded,
+.pps-v14-overlay .pps-bio.is-expanded,
+.pps-v14-overlay .pps-intro.is-expanded,
+.pps-v14-overlay .pps-description.is-expanded,
+.pps-v14-overlay .pps-profile-intro.is-expanded,
+.pps-v14-overlay .pps-text.is-expanded { max-height: none !important; }
+
+.ppst-inline-translate {
+  width: 30px;
+  height: 30px;
+  margin: 2px 0 0;
+  border: 0;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  background: transparent;
+  text-shadow: 0 1px 6px rgba(0,0,0,.7);
+}
+.ppst-inline-translate.loading { opacity: .55; }
+
+/* Side buttons: same shape, lighter background, no Hi text. */
+.pps-v14-overlay .pps-side-actions {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+.pps-v14-overlay .pps-comment-btn,
+.pps-v14-overlay .pps-greet-btn {
+  width: 58px !important;
+  height: 52px !important;
+  min-width: 58px !important;
+  border: 1px solid rgba(255,255,255,.24) !important;
+  border-radius: 20px !important;
+  color: #fff !important;
+  background: rgba(255,255,255,.12) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(128%) !important;
+  backdrop-filter: blur(8px) saturate(128%) !important;
+  box-shadow: 0 10px 24px rgba(0,0,0,.14) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  text-shadow: 0 1px 8px rgba(0,0,0,.38) !important;
+}
+.pps-v14-overlay .pps-comment-btn b { font-size: 11px !important; line-height: 1 !important; font-weight: 950 !important; }
+.pps-v14-overlay .pps-greet-btn b,
+.pps-v14-overlay .pps-greet-label { display: none !important; }
+.pps-v14-overlay .ppst-action-icon,
+.pps-v14-overlay .pps-greet-wave { font-size: 21px !important; line-height: 1 !important; }
+
+/* Review sheet */
+.ppst-mask { position: fixed; inset: 0; z-index: 7900; background: rgba(15,23,42,.34); opacity: 0; pointer-events: none; transition: opacity .22s ease; }
+.ppst-mask.show { opacity: 1; pointer-events: auto; }
+.ppst-review-sheet,
+.ppst-settings,
+.ppst-lang-picker {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 7901;
+  max-height: min(86vh, 760px);
+  transform: translateY(105%);
+  transition: transform .26s cubic-bezier(.2,.85,.2,1);
+  border-radius: 30px 30px 0 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,255,.94));
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
+  backdrop-filter: blur(22px) saturate(145%);
+  box-shadow: 0 -22px 60px rgba(15,23,42,.22);
+  color: #111827;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  overflow: auto;
+}
+.ppst-review-sheet.show,
+.ppst-settings.show,
+.ppst-lang-picker.show { transform: translateY(0); }
+.ppst-head,
+.ppst-review-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 2px 14px; }
+.ppst-head strong,
+.ppst-review-head strong { display: block; font-size: 18px; line-height: 1.1; font-weight: 950; }
+.ppst-review-head span { display: block; margin-top: 3px; font-size: 12px; color: #6b7280; font-weight: 750; }
+.ppst-head button,
+.ppst-review-close { width: 38px; height: 38px; border: 0; border-radius: 50%; background: rgba(15,23,42,.06); color: #111827; font-size: 24px; line-height: 1; }
+.ppst-summary-title { font-size: 16px; font-weight: 950; margin-bottom: 10px; }
+.ppst-progress-row { margin: 8px 0; }
+.ppst-progress-row div { display: flex; justify-content: space-between; font-size: 12px; font-weight: 850; color: #475569; margin-bottom: 4px; }
+.ppst-progress-row i { display: block; height: 8px; border-radius: 999px; background: rgba(15,23,42,.08); overflow: hidden; }
+.ppst-progress-row em { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #7c3aed, #4f46e5); }
+.ppst-review-list { max-height: 240px; overflow: auto; -webkit-overflow-scrolling: touch; padding: 8px 0; }
+.ppst-review-item { display: flex; gap: 10px; padding: 10px 2px; }
+.ppst-review-avatar { width: 38px; height: 38px; border-radius: 50%; overflow: hidden; flex: 0 0 auto; display: grid; place-items: center; background: linear-gradient(135deg, #e0e7ff, #f5d0fe); color: #4c1d95; font-weight: 950; }
+.ppst-review-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ppst-review-main { flex: 1; min-width: 0; position: relative; }
+.ppst-review-top { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: #6b7280; font-weight: 850; margin-bottom: 3px; padding-right: 30px; }
+.ppst-review-content { font-size: 15px; line-height: 1.55; color: #111827; word-break: break-word; padding-bottom: .12em; }
+.ppst-review-translate { position: absolute; right: 0; top: 0; width: 28px; height: 28px; border: 0; border-radius: 50%; background: rgba(79,70,229,.08); color: #4f46e5; }
+.ppst-empty-review { padding: 24px 8px; color: #6b7280; text-align: center; font-size: 14px; font-weight: 750; }
+.ppst-review-editor { border-top: 1px solid rgba(15,23,42,.08); padding-top: 10px; }
+.ppst-review-editor.disabled { opacity: .78; pointer-events: none; }
+.ppst-review-lock { pointer-events: auto; margin-bottom: 10px; padding: 10px 12px; border-radius: 16px; color: #7c2d12; background: #ffedd5; font-size: 13px; font-weight: 850; }
+.ppst-rating-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
+.ppst-rating-row > span { color: #334155; font-size: 13px; font-weight: 900; }
+.ppst-stars { display: inline-flex; gap: 3px; }
+.ppst-star { border: 0; background: transparent; color: #d1d5db; font-size: 23px; line-height: 1; padding: 2px; }
+.ppst-star.active { color: #f59e0b; text-shadow: 0 2px 8px rgba(245,158,11,.24); }
+.ppst-anon { display: inline-flex; align-items: center; gap: 6px; color: #64748b; font-size: 13px; font-weight: 800; margin: 6px 0 8px; }
+.ppst-input-wrap { position: relative; }
+.ppst-review-input { width: 100%; height: 68px; border: 0; outline: 0; border-radius: 18px; background: rgba(15,23,42,.06); color: #111827; padding: 13px 44px 13px 14px; font-size: 15px; line-height: 1.5; font-weight: 650; resize: vertical; }
+.ppst-input-translate { position: absolute; right: 8px; top: 8px; width: 34px; height: 34px; border: 0; border-radius: 50%; color: #4f46e5; background: rgba(79,70,229,.09); }
+.ppst-review-actions { display: flex; justify-content: flex-end; padding-top: 10px; }
+.ppst-review-submit,
+.ppst-settings-save { height: 44px; border: 0; border-radius: 16px; color: #fff; background: linear-gradient(135deg, #7c3aed, #4f46e5); font-weight: 950; padding: 0 18px; box-shadow: 0 12px 28px rgba(79,70,229,.22); }
+.ppst-review-submit:disabled { opacity: .72; }
+
+/* Translate settings */
+.ppst-settings { z-index: 8001; }
+.ppst-settings-mask { z-index: 8000; }
+.ppst-lang-picker { z-index: 8003; max-height: 72vh; }
+.ppst-lang-mask { z-index: 8002; }
+.ppst-preview-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 14px; }
+.ppst-preview-row i { font-style: normal; color: #64748b; }
+.ppst-lang-trigger { min-width: 132px; height: 40px; padding: 0 16px; border-radius: 999px; background: #f8fafc; border: 1px solid #e2e8f0; color: #0f172a; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; font-weight: 850; }
+.ppst-provider-tabs { display: inline-flex; gap: 6px; padding: 4px; margin: 4px 0 14px; border-radius: 999px; background: #f1f5f9; }
+.ppst-provider-tabs button { height: 36px; border: none; border-radius: 999px; padding: 0 16px; background: transparent; color: #475569; font-size: 14px; font-weight: 900; }
+.ppst-provider-tabs button.active { background: #fff; color: #2563eb; box-shadow: 0 2px 8px rgba(15,23,42,.08); }
+.ppst-ai { display: none; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.ppst-ai.show { display: grid; }
+.ppst-ai label { display: flex; flex-direction: column; gap: 5px; color: #334155; font-size: 13px; font-weight: 850; }
+.ppst-ai label:first-child,
+.ppst-ai label:nth-child(3),
+.ppst-ai label:nth-child(4) { grid-column: 1 / -1; }
+.ppst-ai input,
+.ppst-ai textarea { width: 100%; border: 1px solid #dbe3ef; border-radius: 12px; padding: 10px 12px; font-size: 14px; color: #0f172a; background: #f8fafc; outline: none; }
+.ppst-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.ppst-settings-cancel { height: 44px; border: 0; border-radius: 16px; background: #e2e8f0; color: #334155; font-weight: 900; padding: 0 18px; }
+.ppst-lang-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.ppst-lang-option { min-height: 46px; border: 1px solid #dbe3ef; border-radius: 14px; background: #fff; color: #0f172a; display: inline-flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 12px; font-size: 14px; font-weight: 850; }
+.ppst-lang-option span { font-size: 18px; line-height: 1; }
+.ppst-lang-option.active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; box-shadow: inset 0 0 0 1px rgba(37,99,235,.18); }
+
+@media (max-width: 390px) {
+  .ppst-review-sheet,.ppst-settings,.ppst-lang-picker { border-radius: 26px 26px 0 0; padding-left: 14px; padding-right: 14px; }
+  .ppst-star { font-size: 21px; padding: 1px; }
+  .pps-v14-overlay .pps-tag,
+  .pps-v14-overlay .pps-tags span,
+  .pps-v14-overlay .pps-profile-tags span { font-size: 12.5px !important; padding: 5px 9px !important; }
+}
