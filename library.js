@@ -117,11 +117,16 @@ async function decorateFeedWithDistance(req, payload) {
   return payload;
 }
 
+const GREET_STICKERS = [
+  'hello-01', 'hello-02', 'hello-03', 'hello-04', 'hello-05',
+  'hello-06', 'hello-07', 'hello-08', 'hello-09', 'hello-10'
+];
+
 function randomWaveMessage() {
-  const items = [
-    '👋', '👋✨', '👋💫', '👋🌟', '👋😊', '👋💬', '✨👋✨', '🙋‍♀️👋', '🙋‍♂️👋'
-  ];
-  return items[Math.floor(Math.random() * items.length)] || '👋';
+  const name = GREET_STICKERS[Math.floor(Math.random() * GREET_STICKERS.length)];
+  // Send a stable shortcode, then client-v14 renders it as a WEBM video sticker.
+  // Do not send Markdown image here because .webm is not a normal image.
+  return name ? `[peipe-greet:${name}]` : '👋';
 }
 
 async function sendPrivateGreeting(req) {
