@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v16 overlay
+/* Peipe Partners Swipe v19 overlay
    - no floating comments
    - reviews require chat duration >= 24h (server enforced)
    - shared translator settings with topic detail: x-topic-translate-settings
@@ -616,6 +616,61 @@
     }, true);
   }
 
+
+  function greetStickerUrl(name) {
+    name = String(name || '').toLowerCase();
+    if (!/^hello-(0[1-9]|10)$/.test(name)) return '';
+    return rel('/plugins/nodebb-plugin-peipe-partners/swipe/greet/' + name + '.webm');
+  }
+
+  function greetStickerNode(name) {
+    var src = greetStickerUrl(name);
+    if (!src) return document.createTextNode('[peipe-greet:' + name + ']');
+    var wrap = document.createElement('span');
+    wrap.className = 'peipe-greet-sticker-wrap';
+    wrap.setAttribute('data-peipe-greet-rendered', name);
+    wrap.innerHTML = '<video class="peipe-greet-sticker" src="' + escapeHtml(src) + '" autoplay loop muted playsinline preload="metadata"></video>';
+    return wrap;
+  }
+
+  function renderGreetStickers(root) {
+    root = root || document.body;
+    if (!root || root.nodeType !== 1) return;
+    var deny = /^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION|VIDEO|CANVAS)$/;
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        if (!node || !node.nodeValue || node.nodeValue.indexOf('[peipe-greet:') === -1) return NodeFilter.FILTER_REJECT;
+        var p = node.parentNode;
+        while (p && p !== root.parentNode) {
+          if (p.nodeType === 1) {
+            if (deny.test(p.tagName || '')) return NodeFilter.FILTER_REJECT;
+            if (p.classList && (p.classList.contains('peipe-greet-sticker-wrap') || p.classList.contains('composer') || p.classList.contains('write') || p.isContentEditable)) return NodeFilter.FILTER_REJECT;
+          }
+          p = p.parentNode;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(function (node) {
+      var text = node.nodeValue || '';
+      var re = /\[peipe-greet:(hello-(?:0[1-9]|10))\]/ig;
+      if (!re.test(text)) return;
+      re.lastIndex = 0;
+      var frag = document.createDocumentFragment();
+      var last = 0;
+      var m;
+      while ((m = re.exec(text))) {
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        frag.appendChild(greetStickerNode(m[1].toLowerCase()));
+        last = m.index + m[0].length;
+      }
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode && node.parentNode.replaceChild(frag, node);
+    });
+  }
+
   function init() {
     state.translateSettings = loadTranslateSettings();
     document.body.classList.add('pps-v14-overlay');
@@ -623,8 +678,9 @@
     bindGlobal();
     bindDelegatedLongPress();
     requestDailyLocation();
+    renderGreetStickers(document.body);
     loadOverlayFeedOnce();
-    var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) enhance(node); }); }); });
+    var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) { enhance(node); renderGreetStickers(node); } }); }); });
     obs.observe(document.body, { childList: true, subtree: true });
   }
 
