@@ -1174,3 +1174,101 @@
   background: #22c55e !important;
   box-shadow: 0 0 5px rgba(34,197,94,.42) !important;
 }
+
+/* Peipe Swipe final text-film kill switch v3 - overlay copy */
+.pps-v14-overlay .pps-user-card,
+.pps-v14-overlay .pps-user-main,
+.pps-v14-overlay .pps-name-row,
+.pps-v14-overlay .pps-name-row > *,
+.pps-v14-overlay .pps-name,
+.pps-v14-overlay .pps-name *,
+.pps-v14-overlay .pps-lang-row,
+.pps-v14-overlay .pps-lang-row > *,
+.pps-v14-overlay .pps-lang-side,
+.pps-v14-overlay .pps-lang-side > *,
+.pps-v14-overlay .pps-lang-code,
+.pps-v14-overlay .pps-native-chip,
+.pps-v14-overlay .pps-learn-chip,
+.pps-v14-overlay .pps-lang-chip,
+.pps-v14-overlay .pps-chip,
+.pps-v14-overlay .pps-arrow {
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  outline: 0 !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-text-stroke: 0 !important;
+  text-stroke: 0 !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: currentColor !important;
+  mix-blend-mode: normal !important;
+  isolation: auto !important;
+}
+
+.pps-v14-overlay .pps-name-row::before,
+.pps-v14-overlay .pps-name-row::after,
+.pps-v14-overlay .pps-name::before,
+.pps-v14-overlay .pps-name::after,
+.pps-v14-overlay .pps-lang-row::before,
+.pps-v14-overlay .pps-lang-row::after,
+.pps-v14-overlay .pps-lang-side::before,
+.pps-v14-overlay .pps-lang-side::after,
+.pps-v14-overlay .pps-lang-code::before,
+.pps-v14-overlay .pps-lang-code::after,
+.pps-v14-overlay .pps-native-chip::before,
+.pps-v14-overlay .pps-native-chip::after,
+.pps-v14-overlay .pps-learn-chip::before,
+.pps-v14-overlay .pps-learn-chip::after,
+.pps-v14-overlay .pps-lang-chip::before,
+.pps-v14-overlay .pps-lang-chip::after,
+.pps-v14-overlay .pps-chip::before,
+.pps-v14-overlay .pps-chip::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+}
+
+.pps-v14-overlay .pps-name {
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  font-weight: 760 !important;
+  color: rgba(255,255,255,.98) !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,.38), 0 2px 6px rgba(0,0,0,.22) !important;
+}
+
+.pps-v14-overlay .pps-lang-row,
+.pps-v14-overlay .pps-lang-side,
+.pps-v14-overlay .pps-lang-code,
+.pps-v14-overlay .pps-native-chip,
+.pps-v14-overlay .pps-learn-chip,
+.pps-v14-overlay .pps-lang-chip,
+.pps-v14-overlay .pps-chip,
+.pps-v14-overlay .pps-arrow {
+  padding: 0 !important;
+  margin-top: 0 !important;
+  border-radius: 0 !important;
+  font-weight: 680 !important;
+  color: rgba(255,255,255,.93) !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,.34), 0 2px 5px rgba(0,0,0,.18) !important;
+}
+
+.pps-v14-overlay .pps-online-dot {
+  width: 8px !important;
+  height: 8px !important;
+  top: 5px !important;
+  right: 5px !important;
+  border: .5px solid rgba(255,255,255,.95) !important;
+  border-radius: 999px !important;
+  background: #22c55e !important;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.18), 0 0 7px rgba(34,197,94,.45) !important;
+  transform: none !important;
+}
