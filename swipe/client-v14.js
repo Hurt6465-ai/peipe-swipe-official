@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v21 overlay
+/* Peipe Partners Swipe v22 overlay
    - no floating comments
    - reviews require chat duration >= 24h (server enforced)
    - shared translator settings with topic detail: x-topic-translate-settings
@@ -8,10 +8,8 @@
 (function () {
   'use strict';
 
-  if (window.__peipeSwipeV16Overlay) return;
-  window.__peipeSwipeV16Overlay = true;
-  window.__peipeSwipeV15Overlay = true;
-  window.__peipeSwipeV14Overlay = true;
+  if (window.__peipeSwipeV22Overlay) return;
+  window.__peipeSwipeV22Overlay = true;
 
   var CONFIG = {
     apiBase: '/api/peipe-partners',
@@ -292,7 +290,7 @@
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'ppst-inline-translate';
-        btn.innerHTML = '<i class="fa-solid fa-language"></i>';
+        btn.innerHTML = '<span class="ppst-translate-mark">A↔</span>';
         btn.title = '翻译 / 长按设置';
         el.appendChild(text);
         el.appendChild(btn);
@@ -327,6 +325,11 @@
     if (navigator.permissions && navigator.permissions.query) {
       navigator.permissions.query({ name: 'geolocation' }).then(function (p) { if (p.state !== 'denied') go(); }).catch(go);
     } else go();
+  }
+
+  function isSwipePage() {
+    var path = location.pathname || '';
+    return /\/partners\/swipe(?:\/|$)/.test(path);
   }
 
   function currentFeedMode() {
@@ -595,7 +598,7 @@
     ['pointerdown','touchstart','mousedown'].forEach(function (name) {
       document.addEventListener(name, function (e) {
         var btn = e.target && e.target.closest && e.target.closest('.pps-greet-btn');
-        if (!btn) return;
+        if (!btn || !isSwipePage()) return;
         e.stopImmediatePropagation();
       }, { capture: true, passive: true });
     });
@@ -697,12 +700,14 @@
     document.addEventListener('click', function (e) {
       var btn;
       if ((btn = e.target.closest('.pps-greet-btn'))) {
+        if (!isSwipePage()) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         handleWukongGreet(btn, e);
         return;
       }
       if ((btn = e.target.closest('.pps-comment-btn,.ppst-open-review'))) {
+        if (!isSwipePage()) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
@@ -804,15 +809,27 @@
 
   function init() {
     state.translateSettings = loadTranslateSettings();
-    document.body.classList.add('pps-v14-overlay');
-    enhance(document);
+    document.body.classList.remove('pps-v14-overlay');
+    document.body.classList.toggle('ppst-swipe-clean', isSwipePage());
     bindGlobal();
     bindDelegatedLongPress();
     bindGreetBlockers();
-    requestDailyLocation();
     renderGreetStickers(document.body);
-    loadOverlayFeedOnce();
-    var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) { enhance(node); renderGreetStickers(node); } }); }); });
+    if (isSwipePage()) {
+      enhance(document);
+      requestDailyLocation();
+      loadOverlayFeedOnce();
+    }
+    var obs = new MutationObserver(function (mutations) {
+      mutations.forEach(function (m) {
+        Array.prototype.forEach.call(m.addedNodes || [], function (node) {
+          if (node && node.nodeType === 1) {
+            renderGreetStickers(node);
+            if (isSwipePage()) enhance(node);
+          }
+        });
+      });
+    });
     obs.observe(document.body, { childList: true, subtree: true });
   }
 
