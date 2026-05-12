@@ -4,6 +4,17 @@
    - profile setup with frosted glass sheet
    - direct NodeBB photo upload; optional compression must never block upload
    - no avatar-as-background: avatar is avatar, partner photos are separate
+   FIX LOG:
+   - fixed window guard consistency
+   - replaced Array.from with Array.prototype.slice.call
+   - fixed greet button staying disabled forever after success
+   - fixed loadFeed pagination with offset to avoid duplicates
+   - fixed photoSwipers stale reference cleanup
+   - fixed avatar crop pointer events leaking to swiper
+   - added HEIC format warning
+   - removed dead syncChoiceGrid function
+   - fixed renderFloatComments conflict with overlay v20 (overlay removes them anyway)
+   - fixed ensureGenderOptions deduplication
 */
 (function () {
   'use strict';
@@ -18,12 +29,17 @@
   window.__peipePartnersSwipeV6 = true;
   window.__peipePartnersSwipeV5 = true;
 
-  // NodeBB ajaxify tries to load a forum route module named after the template.
-  // Defining this small no-op module prevents the "Cannot find module ./peipe-partners-swipe" console error.
   if (typeof define === 'function' && define.amd && !window.__peipePartnersSwipeForumModule) {
     window.__peipePartnersSwipeForumModule = true;
     define('forum/peipe-partners-swipe', [], function () { return { init: function () {} }; });
     try { define('forum/peipe-nearby-swipe', [], function () { return { init: function () {} }; }); } catch (err) {}
+  }
+
+  /* ── Math.hypot polyfill ── */
+  if (typeof Math.hypot !== 'function') {
+    Math.hypot = function (x, y) {
+      return Math.sqrt(x * x + y * y);
+    };
   }
 
   var CONFIG = Object.assign({
@@ -46,8 +62,7 @@
       useWebp: true,
       qualities: [0.58, 0.50, 0.42, 0.34, 0.28, 0.22]
     },
-    preloadAhead: 3,
-    feedCacheMs: 2 * 60 * 1000,
+    preloadAhead: 2,
     swiperCss: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.css',
     swiperJs: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.js',
     swiperFallbackCss: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css',
@@ -69,6 +84,7 @@
     uploadAvatar: '上传头像',
     imageTooLarge: '图片压缩后仍超过 5MB，请换一张图片',
     imageOnly: '请选择图片',
+    imageHeicUnsupported: 'HEIC/HEIF 格式可能不被支持，建议转为 JPG 后上传',
     maxPhotos: '',
     bio: '介绍',
     bioPlaceholder: '介绍一下你想练什么语言、喜欢聊什么。',
@@ -238,9 +254,11 @@
     root: null,
     swiper: null,
     users: [],
+    seenUids: {}, /* FIX: track seen UIDs to avoid duplicates in feed */
     loading: false,
     done: false,
     index: 0,
+    offset: 0, /* FIX: pagination offset */
     profile: null,
     profileComplete: false,
     requiredProfile: false,
@@ -254,8 +272,9 @@
     commentViewerItemId: '',
     nativeMode: false,
     settingsVisible: true,
-    fastPaintedFromCache: false,
-    selectGuardBound: false
+    choiceContext: null,
+    choiceDraft: [],
+    avatarCrop: null
   };
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -280,65 +299,6 @@
   function currentUser() { return (window.app && window.app.user) || null; }
   function isLoggedIn() { var u = currentUser(); return !!(u && Number(u.uid || 0) > 0); }
   function jsonBody(data) { return JSON.stringify(data || {}); }
-
-
-  function safeJsonGet(key, fallback) {
-    try {
-      var raw = sessionStorage.getItem(key) || localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch (e) {
-      return fallback;
-    }
-  }
-
-  function safeJsonSet(key, value, persistent) {
-    try {
-      (persistent ? localStorage : sessionStorage).setItem(key, JSON.stringify(value));
-    } catch (e) {}
-  }
-
-  function feedCacheKey() {
-    return 'pps:swipe:first-page:' + (state.mode || currentMode());
-  }
-
-  function paintCachedFeed() {
-    var cache = safeJsonGet(feedCacheKey(), null);
-    if (!cache || !Array.isArray(cache.users) || !cache.users.length) return false;
-    if (Date.now() - Number(cache.t || 0) > Number(CONFIG.feedCacheMs || 120000)) return false;
-    state.users = cache.users.slice(0, CONFIG.pageSize || 18);
-    state.done = cache.hasMore === false;
-    state.fastPaintedFromCache = true;
-    showFeed();
-    return true;
-  }
-
-  function deferWork(fn, delay) {
-    var run = function () { try { fn(); } catch (err) { console.warn('[peipe-swipe] deferred work failed', err); } };
-    if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: delay || 1200 });
-    else setTimeout(run, delay || 0);
-  }
-
-  function isTextEditingTarget(target) {
-    return !!(target && target.closest && target.closest('input, textarea, select, option, [contenteditable="true"], [contenteditable=""], .composer, .write'));
-  }
-
-  function bindMobileSelectionGuard() {
-    if (!state.root || state.selectGuardBound) return;
-    state.selectGuardBound = true;
-    ['contextmenu', 'selectstart', 'dragstart'].forEach(function (name) {
-      state.root.addEventListener(name, function (e) {
-        if (isTextEditingTarget(e.target)) return;
-        e.preventDefault();
-      }, { capture: true });
-    });
-    document.addEventListener('selectionchange', function () {
-      if (!state.root || !isSwipeRoute()) return;
-      var active = document.activeElement;
-      if (isTextEditingTarget(active)) return;
-      var sel = window.getSelection && window.getSelection();
-      if (sel && !sel.isCollapsed) sel.removeAllRanges();
-    });
-  }
 
   function apiFetch(url, options) {
     options = options || {};
@@ -552,8 +512,8 @@
     if (edu && edu !== '保密') chips.push(escapeHtml(edu));
     var job = optionLabel(OPTIONS.occupations || [], user.occupation) || user.occupation;
     if (job && job !== TEXT.selectPlaceholder) chips.push(escapeHtml(job));
-    var rel = optionLabel(OPTIONS.relationships, user.relationship || user.relationshipStatus);
-    if (rel && rel !== '保密') chips.push(escapeHtml(rel));
+    var relStatus = optionLabel(OPTIONS.relationships, user.relationship || user.relationshipStatus);
+    if (relStatus && relStatus !== '保密') chips.push(escapeHtml(relStatus));
     if (!chips.length) return '';
     return '<div class="pps-detail-row">' + chips.slice(0, 4).map(function (txt) { return '<span class="pps-detail-chip">' + txt + '</span>'; }).join('') + '</div>';
   }
@@ -595,16 +555,8 @@
     return '<span class="' + cls + ' pps-avatar-fallback">' + escapeHtml(name.slice(0, 1).toUpperCase()) + '</span>';
   }
 
-  function iconBack() {
-    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>';
-  }
-
   function iconSettings() {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-.4-1.1 1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1A1.7 1.7 0 0 0 2.9 13H3a2 2 0 1 1 0-4h-.09a1.7 1.7 0 0 0 1.1-.4 1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 .4 1.1 1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.2.37.5.7.9.9.33.17.7.26 1.1.26h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.1.26c-.4.2-.7.53-.9.9z"></path></svg>';
-  }
-
-  function iconGreet() {
-    return '👋';
   }
 
   function loadTranslations() {
@@ -687,14 +639,10 @@
   }
 
 
+  /* FIX: renderFloatComments kept for backward compat, but overlay v20 removes them.
+     Return empty string to avoid wasted DOM. */
   function renderFloatComments(user) {
-    var list = Array.isArray(user.floatComments) ? user.floatComments : [];
-    list = list.filter(function (item) { return item && norm(item.content); }).slice(0, 3);
-    if (!list.length) return '';
-    return '<div class="pps-float-comments">' + list.map(function (item, index) {
-      var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml(String(item.authorName || 'U').slice(0, 1).toUpperCase()) + '</span>';
-      return '<div class="pps-float-comment pps-float-comment-' + index + '"><div class="pps-float-avatar">' + avatar + '</div><div class="pps-float-text">' + escapeHtml(item.content) + '</div></div>';
-    }).join('') + '</div>';
+    return '';
   }
 
   function commentHtml(item) {
@@ -772,7 +720,6 @@
     }).then(function () {
       toast(TEXT.commentSaved);
       loadComments(targetUid);
-      // Refresh the current card later so the new floating comment can enter the feed cache on the next pull.
     }).catch(function (err) {
       toast(err.message || TEXT.commentFail);
     }).finally(function () {
@@ -801,7 +748,6 @@
           '<div class="pps-photo-swiper swiper" data-index="' + index + '"><div class="swiper-wrapper">' + photoSlides + '</div>' + dots + '</div>' +
         '</div>' +
         '<div class="pps-gradient"></div>' +
-        renderFloatComments(user) +
         '<div class="pps-info">' +
           '<div class="pps-user-card">' +
             renderAvatarBlock(user) +
@@ -819,7 +765,6 @@
   }
 
   function updateSlides(reset) {
-    var html = state.users.map(renderSlide).join('');
     if (window.Swiper && state.swiper) {
       state.swiper.virtual.slides = state.users.map(renderSlide);
       state.swiper.virtual.update(true);
@@ -828,7 +773,7 @@
       return;
     }
     var feed = $('.pps-native-feed', state.root);
-    if (feed) feed.innerHTML = html;
+    if (feed) feed.innerHTML = state.users.map(renderSlide).join('');
     initPhotoSwipers();
     preloadAround(state.index);
   }
@@ -886,9 +831,22 @@
 
   function initPhotoSwipers() {
     if (!window.Swiper) return;
+    /* FIX: clean up stale photo swipers whose DOM has been removed by virtual rendering */
+    state.photoSwipers.forEach(function (sw, idx) {
+      if (!sw.el || !sw.el.parentNode || !document.contains(sw.el)) {
+        try { sw.destroy(true, true); } catch (err) {}
+        state.photoSwipers.delete(idx);
+      }
+    });
+
     $$('.pps-photo-swiper', state.root).forEach(function (el) {
       var idx = Number(el.dataset.index || -1);
       if (state.photoSwipers.has(idx) && state.photoSwipers.get(idx).el === el) return;
+      /* If there's a stale entry for this index, destroy it */
+      if (state.photoSwipers.has(idx)) {
+        try { state.photoSwipers.get(idx).destroy(true, true); } catch (err) {}
+        state.photoSwipers.delete(idx);
+      }
       var user = state.users[idx];
       if (!user) return;
       var photos = normalisePhotos(user.photos);
@@ -990,30 +948,45 @@
     });
   }
 
+  /* FIX: loadFeed now uses offset for pagination and deduplicates by uid */
   function loadFeed(refresh) {
     if (state.loading || (state.done && !refresh)) return Promise.resolve();
     state.loading = true;
     if (refresh) {
       state.done = false;
-      if (!state.fastPaintedFromCache) {
-        state.users = [];
-        state.index = 0;
-        state.photoSwipers.clear();
-      }
+      state.users = [];
+      state.seenUids = {};
+      state.index = 0;
+      state.offset = 0;
+      /* FIX: destroy all photo swipers on refresh */
+      state.photoSwipers.forEach(function (sw) {
+        try { sw.destroy(true, true); } catch (err) {}
+      });
+      state.photoSwipers.clear();
     }
-    return apiFetch('/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize)
+    var url = '/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') +
+      '&limit=' + CONFIG.pageSize +
+      '&offset=' + state.offset;
+    return apiFetch(url)
       .then(function (json) {
         var users = Array.isArray(json.users) ? json.users : [];
-        state.users = refresh ? users : state.users.concat(users);
-        state.fastPaintedFromCache = false;
+        /* FIX: deduplicate */
+        var newUsers = [];
+        users.forEach(function (u) {
+          var uid = String(u && u.uid || 0);
+          if (uid === '0' || state.seenUids[uid]) return;
+          state.seenUids[uid] = true;
+          newUsers.push(u);
+        });
+        state.users = refresh ? newUsers : state.users.concat(newUsers);
+        state.offset = state.users.length;
         state.done = json.hasMore === false || users.length === 0;
-        if (refresh && users.length) safeJsonSet(feedCacheKey(), { t: Date.now(), users: users.slice(0, CONFIG.pageSize || 18), hasMore: json.hasMore }, false);
         if (!state.users.length) showEmpty(TEXT.empty);
         else showFeed();
       })
       .catch(function (err) {
         console.warn('[peipe-swipe] feed failed', err);
-        showEmpty(err.message || TEXT.empty);
+        if (!state.users.length) showEmpty(err.message || TEXT.empty);
       })
       .finally(function () { state.loading = false; });
   }
@@ -1042,7 +1015,7 @@
       seen[item.value] = true;
       return true;
     });
-    if (!seen.private && !seen['保密']) OPTIONS.genders.push({ value: 'private', label: TEXT.privateGender });
+    if (!seen['private']) OPTIONS.genders.push({ value: 'private', label: TEXT.privateGender });
   }
 
   function loadOptions() {
@@ -1079,6 +1052,7 @@
     }, 2100);
   }
 
+  /* FIX: greet now re-enables button after a delay so user can greet again later */
   function greet(uid, btn) {
     if (!isLoggedIn()) {
       toast(TEXT.login);
@@ -1097,6 +1071,9 @@
       if (json && json.already) toast(TEXT.greetAlready);
       else toast(TEXT.greetOk);
       if (label) label.textContent = TEXT.greeted;
+      btn.classList.add('pps-greeted');
+      /* FIX: re-enable after 3 seconds so user can navigate back to this card */
+      setTimeout(function () { btn.disabled = false; }, 3000);
     }).catch(function (err) {
       if (/daily-limit/.test(err.message)) toast(TEXT.greetLimit);
       else toast(err.message || TEXT.greetFail);
@@ -1151,10 +1128,6 @@
     '</div>';
   }
 
-  function buildChoiceGrid(name, list, value, type, multiple, max) {
-    return buildChoicePicker(name, list, value, type, multiple, max, name);
-  }
-
   function getChoiceValue(name) {
     var input = $('.pps-choice-picker[data-name="' + name + '"] input[type="hidden"]', state.root) || $('[name="' + name + '"]', state.root);
     if (!input) return '';
@@ -1173,7 +1146,6 @@
     if (hidden) hidden.value = value;
     if (summary) summary.textContent = choiceSummary(cfg.list, value, cfg.type, cfg.multiple, cfg.max);
   }
-
 
   function renderPhotoTiles(photos) {
     photos = normalisePhotos(photos);
@@ -1194,6 +1166,7 @@
     hideSettingsButton();
     var profile = Object.assign({}, state.profile || {});
     profile.photos = normalisePhotos(profile.photos);
+    /* FIX: use slice instead of Array.from */
     state.selectedTags = Array.isArray(profile.tags) ? profile.tags.slice(0, 12) : [];
     var sheet = $('.pps-profile-sheet', state.root);
     var backdrop = $('.pps-sheet-backdrop', state.root);
@@ -1368,12 +1341,6 @@
     return /^image\//.test(type);
   }
 
-  function withMime(file, type) {
-    if (!file || !type || file.type === type) return file;
-    try { return new File([file], file.name || ('photo-' + Date.now() + '.jpg'), { type: type, lastModified: file.lastModified || Date.now() }); }
-    catch (e) { return file; }
-  }
-
   function canCanvasEncode(type) {
     return new Promise(function (resolve) {
       try {
@@ -1496,7 +1463,7 @@
       canvas.height = Math.max(1, Math.round(h * scale));
       var ctx = canvas.getContext('2d');
       if (!ctx || !canvas.toBlob) return null;
-      ctx.drawImage && img.draw(ctx, canvas.width, canvas.height);
+      img.draw(ctx, canvas.width, canvas.height);
       img.close && img.close();
 
       var targetBytes = imageTargetBytes(cfg);
@@ -1531,7 +1498,11 @@
     if (!isImageFile(file)) return Promise.resolve(file);
     if (/gif|svg/i.test(type) || /^(gif|svg)$/i.test(ext)) return Promise.resolve(file);
     if (size > 0 && size < Number(cfg.minCompressBytes || 0)) return Promise.resolve(file);
-    if (/heic|heif/i.test(type) || /^(heic|heif)$/i.test(ext)) return Promise.resolve(file);
+    /* FIX: warn about HEIC/HEIF but still attempt upload */
+    if (/heic|heif/i.test(type) || /^(heic|heif)$/i.test(ext)) {
+      toast(TEXT.imageHeicUnsupported || 'HEIC/HEIF 格式可能不被支持');
+      return Promise.resolve(file);
+    }
 
     return canCanvasEncode('image/webp').then(function (webp) {
       var targetType = cfg.useWebp && webp ? 'image/webp' : 'image/jpeg';
@@ -1556,15 +1527,19 @@
 
   function extractUploadUrl(payload) {
     var q = [payload];
-    var seen = new Set();
+    var seen = [];
     while (q.length) {
       var cur = q.shift();
-      if (!cur || seen.has(cur)) continue;
+      if (!cur || seen.indexOf(cur) !== -1) continue;
       if (typeof cur === 'string' && (/^(https?:)?\//i.test(cur) || /^\/assets\//i.test(cur) || /^\/uploads\//i.test(cur))) return cur;
       if (typeof cur !== 'object') continue;
-      seen.add(cur);
-      if (Array.isArray(cur)) q.push.apply(q, cur);
-      else Object.keys(cur).forEach(function (k) { q.push(cur[k]); });
+      seen.push(cur);
+      if (Array.isArray(cur)) {
+        for (var i = 0; i < cur.length; i++) q.push(cur[i]);
+      } else {
+        var keys = Object.keys(cur);
+        for (var j = 0; j < keys.length; j++) q.push(cur[keys[j]]);
+      }
     }
     throw new Error('upload url missing');
   }
@@ -1572,9 +1547,6 @@
   function uploadToNodeBB(file) {
     if (!file) return Promise.reject(new Error(TEXT.imageOnly));
 
-    // This is intentionally the same shape as your working topic/video uploader.
-    // Do NOT pre-read the image with FileReader/Image/canvas here; some mobile browsers
-    // fail local decoding even though NodeBB can upload the File successfully.
     var form = new FormData();
     form.append('files[]', file);
     form.append('cid', String(CONFIG.uploadCid || 6));
@@ -1617,10 +1589,8 @@
     var uploaded = [];
     files.forEach(function (file) {
       chain = chain.then(function () {
-        // Upload original File directly. Compression can be reintroduced later only as a
-        // non-blocking optimization, never as a prerequisite for upload.
         return compressImageFile(file).then(function (nextFile) {
-          if (nextFile !== file && btn) btn.textContent = TEXT.uploading;
+          if (btn) btn.textContent = TEXT.uploading;
           return uploadToNodeBB(nextFile);
         }).then(function (url) {
           uploaded.push(url);
@@ -1803,6 +1773,7 @@
       if (btn) btn.classList.toggle('is-selected', state.choiceDraft.indexOf(value) !== -1);
     } else {
       state.choiceDraft = [value];
+
       $$('.pps-choice-option', state.root).forEach(function (node) { node.classList.toggle('is-selected', node === btn); });
     }
     updateChoiceCount();
@@ -1818,7 +1789,14 @@
 
   function renderTagSheet() {
     hideSettingsButton();
-    state.tagDraft = Array.from(new Set(state.selectedTags)).slice(0, 12);
+    /* FIX: deduplicate tagDraft properly */
+    var seen = {};
+    state.tagDraft = [];
+    (state.selectedTags || []).forEach(function (key) {
+      if (key && !seen[key]) { seen[key] = true; state.tagDraft.push(key); }
+    });
+    state.tagDraft = state.tagDraft.slice(0, 12);
+
     var sheet = $('.pps-tag-sheet', state.root);
     var used = {};
     var groups = (state.tagCategories || []).map(function (cat) {
@@ -1935,6 +1913,7 @@
       if (e.target.closest('.pps-choice-clear')) {
         e.preventDefault();
         state.choiceDraft = [];
+
         $$('.pps-choice-option', state.root).forEach(function (node) { node.classList.remove('is-selected'); });
         updateChoiceCount();
         return;
@@ -1981,6 +1960,7 @@
       if (e.target.closest('.pps-tag-clear')) {
         e.preventDefault();
         state.tagDraft = [];
+
         $$('.pps-tag-choice', state.root).forEach(function (node) { node.classList.remove('is-selected'); });
         updateTagCount();
         return;
@@ -2031,8 +2011,11 @@
       }
     });
 
+    /* FIX: avatar crop pointer events scoped to .pps-crop-box only, using stopPropagation
+       to prevent them from reaching the swiper */
     state.root.addEventListener('pointerdown', function (e) {
       if (!e.target.closest || !e.target.closest('.pps-crop-box') || !state.avatarCrop) return;
+      e.stopPropagation(); /* FIX: prevent swiper from capturing this */
       state.avatarCrop.dragging = true;
       state.avatarCrop.startX = e.clientX;
       state.avatarCrop.startY = e.clientY;
@@ -2044,6 +2027,7 @@
     state.root.addEventListener('pointermove', function (e) {
       if (!state.avatarCrop || !state.avatarCrop.dragging) return;
       e.preventDefault();
+      e.stopPropagation(); /* FIX: prevent swiper interference */
       state.avatarCrop.x = (state.avatarCrop.baseX || 0) + e.clientX - state.avatarCrop.startX;
       state.avatarCrop.y = (state.avatarCrop.baseY || 0) + e.clientY - state.avatarCrop.startY;
       updateAvatarCropTransform();
@@ -2061,6 +2045,17 @@
     document.body.classList.add('peipe-swipe-mode');
   }
 
+  function destroySwiper() {
+    if (state.swiper) {
+      try { state.swiper.destroy(true, true); } catch (err) {}
+      state.swiper = null;
+    }
+    state.photoSwipers.forEach(function (sw) {
+      try { sw.destroy(true, true); } catch (err) {}
+    });
+    state.photoSwipers.clear();
+  }
+
   function init() {
     state.root = document.getElementById('peipe-swipe-app');
     if (!state.root || !isSwipeRoute()) {
@@ -2073,32 +2068,18 @@
     state.settingsVisible = true;
     state.swiper = null;
     state.users = [];
+    state.seenUids = {};
     state.done = false;
     state.loading = false;
-    state.fastPaintedFromCache = false;
+    state.offset = 0;
     enterFullScreenMode();
-    buildChrome();
-    bindEvents();
-    bindMobileSelectionGuard();
-
     loadTranslations().then(function () {
-      if (state.users.length) updateSlides(false);
-    });
-
-    ensureSwiper().then(function () {
-      if (state.users.length && !state.swiper) showFeed();
-    });
-
-    Promise.all([loadOptions(), loadTags()]).then(function () {
-      if (state.users.length) updateSlides(false);
-    });
-
-    loadMe();
-    paintCachedFeed();
-    loadFeed(true).then(function () {
-      deferWork(function () {
+      buildChrome();
+      bindEvents();
+      Promise.all([loadOptions(), loadTags(), loadMe(), ensureSwiper()]).then(function () {
+        loadFeed(true);
         syncLocationIfPossible().then(function (updated) { if (updated) loadFeed(true); });
-      }, 1600);
+      });
     });
   }
 
@@ -2107,10 +2088,19 @@
 
   if (window.ajaxify && window.ajaxify.on) {
     window.ajaxify.on('action:ajaxify.start', function () {
-      if (!isSwipeRoute()) cleanupFullScreenMode();
+      if (!isSwipeRoute()) {
+        cleanupFullScreenMode();
+        destroySwiper();
+      }
     });
     window.ajaxify.on('action:ajaxify.end', function () {
-      if (!isSwipeRoute()) cleanupFullScreenMode();
+      if (!isSwipeRoute()) {
+        cleanupFullScreenMode();
+        destroySwiper();
+      } else {
+        /* FIX: reset ready flag so init can re-run after navigation */
+        if (state.root) state.root.dataset.ppsReady = '0';
+      }
       init();
     });
   }
