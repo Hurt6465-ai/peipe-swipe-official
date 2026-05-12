@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v22 overlay
+/* Peipe Partners Swipe v20 overlay
    - no floating comments
    - reviews require chat duration >= 24h (server enforced)
    - shared translator settings with topic detail: x-topic-translate-settings
@@ -8,8 +8,10 @@
 (function () {
   'use strict';
 
-  if (window.__peipeSwipeV22Overlay) return;
-  window.__peipeSwipeV22Overlay = true;
+  if (window.__peipeSwipeV16Overlay) return;
+  window.__peipeSwipeV16Overlay = true;
+  window.__peipeSwipeV15Overlay = true;
+  window.__peipeSwipeV14Overlay = true;
 
   var CONFIG = {
     apiBase: '/api/peipe-partners',
@@ -209,41 +211,36 @@
   function bindLongPress(el, cb) {
     if (!el || el.dataset.ppstLongBound === '1') return;
     el.dataset.ppstLongBound = '1';
-    var sx = 0, sy = 0, fired = false, active = false;
+    var sx = 0, sy = 0, fired = false;
     function point(e) {
       var t = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0] || e;
       return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
     }
     function start(e) {
-      if (active && e.type === 'touchstart') return;
-      active = true;
+      if (e.type === 'touchstart' && window.PointerEvent) return;
       var p = point(e); sx = p.x; sy = p.y; fired = false;
       clearTimeout(state.longPressTimer);
       state.longPressTimer = setTimeout(function () {
         fired = true;
-        state.translateSuppressClickUntil = Date.now() + 1200;
+        state.translateSuppressClickUntil = Date.now() + 900;
         try { e.preventDefault && e.preventDefault(); } catch (err) {}
-        try { e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch (err2) {}
         cb(e);
-      }, 430);
+      }, 560);
     }
     function move(e) {
-      if (!active) return;
       var p = point(e);
-      if (Math.hypot(p.x - sx, p.y - sy) > 14) clearTimeout(state.longPressTimer);
+      if (Math.hypot(p.x - sx, p.y - sy) > 10) clearTimeout(state.longPressTimer);
     }
     function end(e) {
       clearTimeout(state.longPressTimer);
-      if (fired) {
-        try { e.preventDefault && e.preventDefault(); } catch (err) {}
-        try { e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch (err2) {}
-      }
-      setTimeout(function () { active = false; fired = false; }, 0);
+      if (fired) { try { e.preventDefault && e.preventDefault(); } catch (err) {} }
     }
-    ['pointerdown','touchstart','mousedown'].forEach(function (n) { el.addEventListener(n, start, { passive: false }); });
-    ['pointermove','touchmove','mousemove'].forEach(function (n) { el.addEventListener(n, move, { passive: true }); });
-    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel', 'mouseup', 'mouseleave'].forEach(function (n) { el.addEventListener(n, end, { passive: false }); });
-    el.addEventListener('contextmenu', function (e) { e.preventDefault(); e.stopImmediatePropagation(); cb(e); });
+    el.addEventListener('pointerdown', start, { passive: false });
+    el.addEventListener('touchstart', start, { passive: false });
+    el.addEventListener('pointermove', move, { passive: true });
+    el.addEventListener('touchmove', move, { passive: true });
+    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel'].forEach(function (n) { el.addEventListener(n, end, { passive: false }); });
+    el.addEventListener('contextmenu', function (e) { e.preventDefault(); cb(e); });
   }
   function getTextValue(el) {
     if (!el) return '';
@@ -290,7 +287,7 @@
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'ppst-inline-translate';
-        btn.innerHTML = '<span class="ppst-translate-mark">A↔</span>';
+        btn.innerHTML = '<i class="fa-solid fa-language"></i>';
         btn.title = '翻译 / 长按设置';
         el.appendChild(text);
         el.appendChild(btn);
@@ -325,11 +322,6 @@
     if (navigator.permissions && navigator.permissions.query) {
       navigator.permissions.query({ name: 'geolocation' }).then(function (p) { if (p.state !== 'denied') go(); }).catch(go);
     } else go();
-  }
-
-  function isSwipePage() {
-    var path = location.pathname || '';
-    return /\/partners\/swipe(?:\/|$)/.test(path);
   }
 
   function currentFeedMode() {
@@ -555,53 +547,42 @@
   function bindDelegatedLongPress() {
     if (state.delegatedLongPressBound) return;
     state.delegatedLongPressBound = true;
-    var startX = 0, startY = 0, target = null, fired = false, active = false;
+    var startX = 0, startY = 0, target = null, fired = false;
     function point(e) {
       var t = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0] || e;
       return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
     }
     function isTranslateButton(el) { return el && el.closest && el.closest('.ppst-inline-translate,.ppst-review-translate,.ppst-input-translate'); }
     function start(e) {
+      if (e.type === 'touchstart' && window.PointerEvent) return;
       target = isTranslateButton(e.target);
       if (!target) return;
-      if (active && e.type === 'touchstart') return;
-      active = true;
       var p = point(e); startX = p.x; startY = p.y; fired = false;
       clearTimeout(state.longPressTimer);
       state.longPressTimer = setTimeout(function () {
         fired = true;
-        state.translateSuppressClickUntil = Date.now() + 1200;
+        state.translateSuppressClickUntil = Date.now() + 900;
         try { e.preventDefault && e.preventDefault(); } catch (err) {}
-        try { e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch (err2) {}
         openTranslateSettings();
-      }, 430);
+      }, 520);
     }
     function move(e) {
       if (!target) return;
       var p = point(e);
-      if (Math.hypot(p.x - startX, p.y - startY) > 14) clearTimeout(state.longPressTimer);
+      if (Math.hypot(p.x - startX, p.y - startY) > 10) clearTimeout(state.longPressTimer);
     }
     function end(e) {
       if (!target) return;
       clearTimeout(state.longPressTimer);
       if (fired) { e.preventDefault && e.preventDefault(); e.stopImmediatePropagation && e.stopImmediatePropagation(); }
-      target = null;
-      setTimeout(function () { active = false; fired = false; }, 0);
+      target = null; fired = false;
     }
-    ['pointerdown','touchstart','mousedown'].forEach(function (name) { document.addEventListener(name, start, { passive: false, capture: true }); });
-    ['pointermove','touchmove','mousemove'].forEach(function (name) { document.addEventListener(name, move, { passive: true, capture: true }); });
-    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel', 'mouseup', 'mouseleave'].forEach(function (name) { document.addEventListener(name, end, { passive: false, capture: true }); });
-    document.addEventListener('contextmenu', function (e) { if (isTranslateButton(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); openTranslateSettings(); } }, true);
-  }
-
-  function bindGreetBlockers() {
-    ['pointerdown','touchstart','mousedown'].forEach(function (name) {
-      document.addEventListener(name, function (e) {
-        var btn = e.target && e.target.closest && e.target.closest('.pps-greet-btn');
-        if (!btn || !isSwipePage()) return;
-        e.stopImmediatePropagation();
-      }, { capture: true, passive: true });
-    });
+    document.addEventListener('pointerdown', start, { passive: false, capture: true });
+    document.addEventListener('touchstart', start, { passive: false, capture: true });
+    document.addEventListener('pointermove', move, { passive: true, capture: true });
+    document.addEventListener('touchmove', move, { passive: true, capture: true });
+    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel'].forEach(function (name) { document.addEventListener(name, end, { passive: false, capture: true }); });
+    document.addEventListener('contextmenu', function (e) { if (isTranslateButton(e.target)) { e.preventDefault(); openTranslateSettings(); } }, true);
   }
 
 
@@ -653,8 +634,32 @@
   function sendWukongText(toUid, text) {
     return ensureWukongReady().then(function () {
       if (!window.wk || !window.wk.WKSDK) throw new Error('悟空 SDK 不可用');
+      var clientMsgNo = 'pps_greet_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
       var channel = new window.wk.Channel(String(toUid), 1);
       var msgContent = new window.wk.MessageText(text);
+      msgContent.text = text;
+      msgContent.content = text;
+      var encode = typeof msgContent.encode === 'function' ? msgContent.encode.bind(msgContent) : null;
+      msgContent.encode = function () {
+        var obj = {};
+        try {
+          var raw = encode ? encode() : null;
+          if (raw instanceof Uint8Array && window.TextDecoder) raw = new TextDecoder('utf-8').decode(raw);
+          if (typeof raw === 'string') {
+            var clean = raw.trim();
+            if (clean && (clean.charAt(0) === '{' || clean.charAt(0) === '[')) obj = JSON.parse(clean);
+            else if (clean) obj = { text: clean, content: clean };
+          } else if (raw && typeof raw === 'object') {
+            obj = Object.assign({}, raw);
+          }
+        } catch (err) { obj = {}; }
+        obj.text = text;
+        obj.content = text;
+        obj.client_msg_no = clientMsgNo;
+        obj.clientMsgNo = clientMsgNo;
+        obj.type = 1;
+        return JSON.stringify(obj);
+      };
       return window.wk.WKSDK.shared().chatManager.send(msgContent, channel);
     });
   }
@@ -700,14 +705,12 @@
     document.addEventListener('click', function (e) {
       var btn;
       if ((btn = e.target.closest('.pps-greet-btn'))) {
-        if (!isSwipePage()) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         handleWukongGreet(btn, e);
         return;
       }
       if ((btn = e.target.closest('.pps-comment-btn,.ppst-open-review'))) {
-        if (!isSwipePage()) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
@@ -809,27 +812,14 @@
 
   function init() {
     state.translateSettings = loadTranslateSettings();
-    document.body.classList.remove('pps-v14-overlay');
-    document.body.classList.toggle('ppst-swipe-clean', isSwipePage());
+    document.body.classList.add('pps-v14-overlay');
+    enhance(document);
     bindGlobal();
     bindDelegatedLongPress();
-    bindGreetBlockers();
+    requestDailyLocation();
     renderGreetStickers(document.body);
-    if (isSwipePage()) {
-      enhance(document);
-      requestDailyLocation();
-      loadOverlayFeedOnce();
-    }
-    var obs = new MutationObserver(function (mutations) {
-      mutations.forEach(function (m) {
-        Array.prototype.forEach.call(m.addedNodes || [], function (node) {
-          if (node && node.nodeType === 1) {
-            renderGreetStickers(node);
-            if (isSwipePage()) enhance(node);
-          }
-        });
-      });
-    });
+    loadOverlayFeedOnce();
+    var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) { enhance(node); renderGreetStickers(node); } }); }); });
     obs.observe(document.body, { childList: true, subtree: true });
   }
 
