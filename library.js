@@ -276,3 +276,4 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
 };
 
 module.exports = plugin;
+
