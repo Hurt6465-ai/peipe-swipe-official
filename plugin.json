@@ -2,7 +2,7 @@
   "id": "nodebb-plugin-peipe-partners",
   "name": "Peipe Partners",
   "description": "Language partner, nearby people, and swipe discovery pages for Peipe.",
-  "url": "https://github.com/Hurt6465-ai/nodebb-plugin-peipe-partners",
+  "url": "https://github.com/Hurt6465-ai/peipe-swipe-official",
   "library": "./library.js",
   "hooks": [
     { "hook": "static:app.load", "method": "init" },
@@ -15,10 +15,12 @@
   "languages": "languages",
   "scripts": [
     "public/lib/peipe-partners.js",
-    "swipe/client.js"
+    "swipe/client.js",
+    "swipe/client-v14.js"
   ],
   "scss": [
     "scss/peipe-partners.scss",
-    "swipe/style.scss"
+    "swipe/style.scss",
+    "swipe/v14.scss"
   ]
 }
