@@ -46,6 +46,67 @@ async function saveLocation(uid, body) {
   return { ok: true, lat, lng, accuracy, updatedAt: now, expiresAt };
 }
 
+
+function toRad(value) {
+  return Number(value || 0) * Math.PI / 180;
+}
+
+function distanceKm(a, b) {
+  const lat1 = Number(a && a.lat);
+  const lng1 = Number(a && a.lng);
+  const lat2 = Number(b && b.lat);
+  const lng2 = Number(b && b.lng);
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return 0;
+  const r = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return r * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+function formatDistance(km) {
+  km = Number(km || 0);
+  if (!Number.isFinite(km) || km <= 0) return '';
+  if (km < 0.5) return '500米内';
+  if (km < 1) return `${Math.round(km * 1000)}米`;
+  return `${Math.round(km)}km`;
+}
+
+async function getViewerGeo(uid) {
+  uid = Number(uid || 0);
+  if (!uid) return null;
+  const row = await user.getUserFields(uid, ['lat', 'lng', 'peipe_partner_lat', 'peipe_partner_lng']).catch(() => null);
+  if (!row) return null;
+  const lat = Number(row.lat || row.peipe_partner_lat);
+  const lng = Number(row.lng || row.peipe_partner_lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+async function decorateFeedWithDistance(req, payload) {
+  const users = Array.isArray(payload && payload.users) ? payload.users : [];
+  if (!users.length) return payload;
+  const viewerGeo = await getViewerGeo(req.uid);
+  if (!viewerGeo) return payload;
+  const uids = users.map(item => Number(item && item.uid)).filter(Boolean);
+  const rows = await user.getUsersFields(uids, ['uid', 'lat', 'lng', 'peipe_partner_lat', 'peipe_partner_lng']).catch(() => []);
+  const geo = new Map();
+  rows.forEach((row) => {
+    const lat = Number(row && (row.lat || row.peipe_partner_lat));
+    const lng = Number(row && (row.lng || row.peipe_partner_lng));
+    if (Number.isFinite(lat) && Number.isFinite(lng)) geo.set(Number(row.uid), { lat, lng });
+  });
+  payload.users = users.map((item) => {
+    const targetGeo = geo.get(Number(item.uid));
+    const km = distanceKm(viewerGeo, targetGeo);
+    if (km > 0) {
+      item.distanceKm = km;
+      item.distanceText = formatDistance(km);
+    }
+    return item;
+  });
+  return payload;
+}
+
 plugin.init = async ({ router, middleware }) => {
   routeHelpers.setupPageRoute(router, '/partners', [], (req, res) => {
     res.render('peipe-partners', { uid: req.uid || 0 });
@@ -96,7 +157,7 @@ plugin.init = async ({ router, middleware }) => {
   }));
 
   router.get('/api/peipe-partners/swipe/feed', asyncRoute(async (req, res) => {
-    json(res, await swipe.feed(req));
+    json(res, await decorateFeedWithDistance(req, await swipe.feed(req)));
   }));
 
   router.get('/api/peipe-partners/swipe/tags', asyncRoute(async (req, res) => {
@@ -170,7 +231,7 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
   });
 
   routeHelpers.setupApiRoute(router, 'get', '/peipe-partners/swipe/feed', [], async (req, res) => {
-    helpers.formatApiResponse(200, res, await swipe.feed(req));
+    helpers.formatApiResponse(200, res, await decorateFeedWithDistance(req, await swipe.feed(req)));
   });
 
   routeHelpers.setupApiRoute(router, 'get', '/peipe-partners/swipe/tags', [], async (req, res) => {
