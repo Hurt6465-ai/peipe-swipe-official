@@ -1849,6 +1849,9 @@
   }
 
   function bindEvents() {
+    if (!state.root || state.root.dataset.ppsEventsBound === '1') return;
+    state.root.dataset.ppsEventsBound = '1';
+
     state.root.addEventListener('click', function (e) {
       var btn;
       if ((btn = e.target.closest('.pps-comment-btn'))) {
