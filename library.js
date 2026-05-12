@@ -4,6 +4,8 @@ const routeHelpers = require.main.require('./src/routes/helpers');
 const partner = require('./lib/partner');
 const swipe = require('./swipe');
 const partnerReviews = require('./swipe/comments');
+const user = require.main.require('./src/user');
+const db = require.main.require('./src/database');
 
 const plugin = {};
 
@@ -16,6 +18,32 @@ function asyncRoute(fn) {
 function json(res, payload) {
   res.set('Cache-Control', 'no-store, max-age=0');
   res.json(payload);
+}
+
+async function saveLocation(uid, body) {
+  if (partner && typeof partner.saveLocation === 'function') {
+    return partner.saveLocation(uid, body || {});
+  }
+  uid = Number(uid || 0);
+  const lat = Number(body && body.lat);
+  const lng = Number(body && body.lng);
+  const accuracy = Number(body && body.accuracy) || 0;
+  if (!uid || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return { ok: false, error: 'invalid-location' };
+  }
+  const now = Date.now();
+  const expiresAt = now + 7 * 24 * 60 * 60 * 1000;
+  await user.setUserFields(uid, {
+    lat,
+    lng,
+    peipe_partner_lat: lat,
+    peipe_partner_lng: lng,
+    peipe_partner_location_accuracy: accuracy,
+    peipe_partner_location_updated_at: now,
+    peipe_partner_location_expires_at: expiresAt,
+  });
+  await db.sortedSetAdd('peipePartners:location:updated', now, uid).catch(() => {});
+  return { ok: true, lat, lng, accuracy, updatedAt: now, expiresAt };
 }
 
 plugin.init = async ({ router, middleware }) => {
@@ -56,7 +84,7 @@ plugin.init = async ({ router, middleware }) => {
   }));
 
   router.put('/api/peipe-partners/location', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partner.saveLocation(req.uid, req.body || {}));
+    json(res, await saveLocation(req.uid, req.body || {}));
   }));
 
   router.post('/api/peipe-partners/me/chatted', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
@@ -130,7 +158,7 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
   });
 
   routeHelpers.setupApiRoute(router, 'put', '/peipe-partners/location', [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partner.saveLocation(req.uid, req.body || {}));
+    helpers.formatApiResponse(200, res, await saveLocation(req.uid, req.body || {}));
   });
 
   routeHelpers.setupApiRoute(router, 'post', '/peipe-partners/me/chatted', [middleware.ensureLoggedIn], async (req, res) => {
@@ -187,4 +215,3 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
 };
 
 module.exports = plugin;
-
