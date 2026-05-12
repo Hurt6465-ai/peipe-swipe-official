@@ -637,8 +637,12 @@
         setRatings(json.viewerComment.ratings || {});
       }
       var editor = $('.ppst-review-editor');
-      if (!isLoggedIn()) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">请先登录后评价</div>'); return; }
-      if (!can.eligible) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">聊天超过 24 小时后才可以评价</div>'); }
+      if (editor) {
+        $$('.ppst-review-lock', editor).forEach(function (node) { node.remove(); });
+        editor.classList.remove('disabled');
+      }
+      if (!isLoggedIn()) { if (editor) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">请先登录后评价</div>'); } return; }
+      if (!can.eligible && editor) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">聊天超过 24 小时后才可以评价</div>'); }
       /* FIX: removed duplicate bindLongPress calls — delegated handler already covers these buttons */
     }).catch(function (err) { $('.ppst-review-summary').textContent = err.message || '加载失败'; });
   }
@@ -710,10 +714,15 @@
 
   function loadScriptOnce(url, key) {
     if (window[key]) return Promise.resolve();
+    if (key === 'ppst-wukong-sdk' && window.wk && window.wk.WKSDK) return Promise.resolve();
     return new Promise(function (resolve, reject) {
       var existing = document.querySelector('script[data-ppst-key="' + key + '"]');
       if (existing) {
-        existing.addEventListener('load', resolve, { once: true });
+        if (existing.dataset.loaded === '1' || existing.readyState === 'complete') {
+          resolve();
+          return;
+        }
+        existing.addEventListener('load', function () { existing.dataset.loaded = '1'; resolve(); }, { once: true });
         existing.addEventListener('error', reject, { once: true });
         return;
       }
@@ -721,7 +730,7 @@
       s.src = url;
       s.async = true;
       s.dataset.ppstKey = key;
-      s.onload = resolve;
+      s.onload = function () { s.dataset.loaded = '1'; resolve(); };
       s.onerror = reject;
       document.head.appendChild(s);
     });
