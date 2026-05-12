@@ -160,30 +160,12 @@ async function prepareWukongChatRoute(req) {
 }
 
 async function sendPrivateGreeting(req) {
-  const fromUid = Number(req.uid || 0);
-  const toUid = Number(req.body && (req.body.uid || req.body.toUid || req.body.targetUid));
-  if (!fromUid) return { ok: false, error: 'login-required' };
-  if (!toUid || toUid === fromUid) return { ok: false, error: 'invalid-user' };
-
-  if (!messaging || typeof messaging.hasPrivateChat !== 'function') {
-    return partner.greet(fromUid, req.body || {});
-  }
-
-  await messaging.canMessageUser(fromUid, toUid);
-  let roomId = await messaging.hasPrivateChat(fromUid, toUid);
-  if (!roomId) {
-    roomId = await messaging.newRoom(fromUid, { uids: [String(toUid)] });
-  }
-
-  const content = randomWaveMessage();
-  const message = await messaging.sendMessage({ uid: fromUid, roomId, content });
-  if (message && typeof messaging.notifyUsersInRoom === 'function') {
-    await messaging.notifyUsersInRoom(fromUid, roomId, message).catch(() => {});
-  }
-  if (partner && typeof partner.markChatted === 'function') {
-    await partner.markChatted(fromUid, { uid: toUid, toUid }).catch(() => {});
-  }
-  return { ok: true, mode: 'chat', roomId, message, content };
+  // Do not send through NodeBB core messaging here. The swipe client sends the
+  // actual greeting via Wukong IM SDK so it appears in the replaced Wukong chat UI.
+  // This route is kept only as a backward-compatible route/mark helper.
+  const route = await prepareWukongChatRoute(req);
+  if (!route || route.ok === false) return route;
+  return Object.assign(route, { mode: 'wukong-client-required', content: randomWaveMessage() });
 }
 
 plugin.init = async ({ router, middleware }) => {
