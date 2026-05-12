@@ -1108,7 +1108,6 @@
     if (summary) summary.textContent = choiceSummary(cfg.list, value, cfg.type, cfg.multiple, cfg.max);
   }
 
-  function syncChoiceGrid() {}
 
   function renderPhotoTiles(photos) {
     photos = normalisePhotos(photos);
