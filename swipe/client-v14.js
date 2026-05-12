@@ -8,7 +8,8 @@
 (function () {
   'use strict';
 
-  if (window.__peipeSwipeV16Overlay) return;
+  if (window.__peipeSwipeV20Overlay) return;
+  window.__peipeSwipeV20Overlay = true;
   window.__peipeSwipeV16Overlay = true;
   window.__peipeSwipeV15Overlay = true;
   window.__peipeSwipeV14Overlay = true;
@@ -48,7 +49,6 @@
     langPickerRole: '',
     userMap: {},
     overlayFeedLoaded: false,
-    userList: [],
     userMapByName: {},
     delegatedLongPressBound: false,
     translateSuppressClickUntil: 0,
@@ -291,7 +291,6 @@
         btn.title = '翻译 / 长按设置';
         el.appendChild(text);
         el.appendChild(btn);
-        btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); translateInto(btn, text); });
         bindLongPress(btn, function () { openTranslateSettings(); });
       });
     });
@@ -329,7 +328,6 @@
     return /nearby/i.test(path) ? 'nearby' : 'recommend';
   }
   function rememberUsers(users) {
-    state.userList = Array.isArray(users) ? users.slice() : [];
     (users || []).forEach(function (u) {
       if (!u || !u.uid) return;
       state.userMap[String(u.uid)] = u;
