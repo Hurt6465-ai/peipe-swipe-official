@@ -1,4 +1,4 @@
-/* Peipe Partners Swipe v19 overlay
+/* Peipe Partners Swipe v20 overlay
    - no floating comments
    - reviews require chat duration >= 24h (server enforced)
    - shared translator settings with topic detail: x-topic-translate-settings
@@ -19,6 +19,10 @@
     geoMaxAge: 24 * 60 * 60 * 1000,
     translateSettingsKey: 'x-topic-translate-settings',
     translateCacheMs: 3 * 24 * 60 * 60 * 1000,
+    wkSdkUrl: 'https://cdn.jsdelivr.net/npm/wukongimjssdk@latest/lib/wukongimjssdk.umd.js',
+    wkTokenPath: '/bridge/token',
+    wkWsPath: '/wkws/',
+    greetOpenChatAfterSend: false,
     defaultPrompt: '你是专业论坛翻译助手。请把用户提供的内容从 {{sourceLang}} 翻译为 {{targetLang}}。保留原有语气、换行、链接、Markdown、代码块、用户名、表情和列表结构。只输出译文，不要解释。'
   };
 
@@ -46,7 +50,10 @@
     overlayFeedLoaded: false,
     userList: [],
     userMapByName: {},
-    delegatedLongPressBound: false
+    delegatedLongPressBound: false,
+    translateSuppressClickUntil: 0,
+    wkReadyPromise: null,
+    wkUid: ''
   };
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -210,10 +217,12 @@
       return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
     }
     function start(e) {
+      if (e.type === 'touchstart' && window.PointerEvent) return;
       var p = point(e); sx = p.x; sy = p.y; fired = false;
       clearTimeout(state.longPressTimer);
       state.longPressTimer = setTimeout(function () {
         fired = true;
+        state.translateSuppressClickUntil = Date.now() + 900;
         try { e.preventDefault && e.preventDefault(); } catch (err) {}
         cb(e);
       }, 560);
@@ -545,13 +554,15 @@
     }
     function isTranslateButton(el) { return el && el.closest && el.closest('.ppst-inline-translate,.ppst-review-translate,.ppst-input-translate'); }
     function start(e) {
+      if (e.type === 'touchstart' && window.PointerEvent) return;
       target = isTranslateButton(e.target);
       if (!target) return;
       var p = point(e); startX = p.x; startY = p.y; fired = false;
       clearTimeout(state.longPressTimer);
       state.longPressTimer = setTimeout(function () {
         fired = true;
-        e.preventDefault && e.preventDefault();
+        state.translateSuppressClickUntil = Date.now() + 900;
+        try { e.preventDefault && e.preventDefault(); } catch (err) {}
         openTranslateSettings();
       }, 520);
     }
@@ -574,9 +585,131 @@
     document.addEventListener('contextmenu', function (e) { if (isTranslateButton(e.target)) { e.preventDefault(); openTranslateSettings(); } }, true);
   }
 
+
+  function loadScriptOnce(url, key) {
+    if (window[key]) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      var existing = document.querySelector('script[data-ppst-key="' + key + '"]');
+      if (existing) {
+        existing.addEventListener('load', resolve, { once: true });
+        existing.addEventListener('error', reject, { once: true });
+        return;
+      }
+      var s = document.createElement('script');
+      s.src = url;
+      s.async = true;
+      s.dataset.ppstKey = key;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  function ensureWukongReady() {
+    if (state.wkReadyPromise) return state.wkReadyPromise;
+    state.wkReadyPromise = apiFetch(CONFIG.wkTokenPath).then(function (token) {
+      if (!token || !token.token || !token.uid) throw new Error('悟空 token 获取失败');
+      state.wkUid = String(token.uid);
+      return loadScriptOnce(CONFIG.wkSdkUrl, 'ppst-wukong-sdk').then(function () {
+        var wk = window.wk;
+        if (!wk || !wk.WKSDK) throw new Error('悟空 SDK 未加载');
+        wk.WKSDK.shared().config.uid = String(token.uid);
+        wk.WKSDK.shared().config.token = String(token.token);
+        wk.WKSDK.shared().config.addr = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + CONFIG.wkWsPath;
+        try { wk.WKSDK.shared().connectManager.connect(); } catch (err) {}
+        return token;
+      });
+    }).catch(function (err) {
+      state.wkReadyPromise = null;
+      throw err;
+    });
+    return state.wkReadyPromise;
+  }
+
+  function randomGreetingShortcode() {
+    var idx = Math.floor(Math.random() * 10) + 1;
+    return '[peipe-greet:hello-' + (idx < 10 ? '0' + idx : String(idx)) + ']';
+  }
+
+  function sendWukongText(toUid, text) {
+    return ensureWukongReady().then(function () {
+      if (!window.wk || !window.wk.WKSDK) throw new Error('悟空 SDK 不可用');
+      var clientMsgNo = 'pps_greet_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+      var channel = new window.wk.Channel(String(toUid), 1);
+      var msgContent = new window.wk.MessageText(text);
+      msgContent.text = text;
+      msgContent.content = text;
+      var encode = typeof msgContent.encode === 'function' ? msgContent.encode.bind(msgContent) : null;
+      msgContent.encode = function () {
+        var obj = {};
+        try {
+          var raw = encode ? encode() : null;
+          if (raw instanceof Uint8Array && window.TextDecoder) raw = new TextDecoder('utf-8').decode(raw);
+          if (typeof raw === 'string') {
+            var clean = raw.trim();
+            if (clean && (clean.charAt(0) === '{' || clean.charAt(0) === '[')) obj = JSON.parse(clean);
+            else if (clean) obj = { text: clean, content: clean };
+          } else if (raw && typeof raw === 'object') {
+            obj = Object.assign({}, raw);
+          }
+        } catch (err) { obj = {}; }
+        obj.text = text;
+        obj.content = text;
+        obj.client_msg_no = clientMsgNo;
+        obj.clientMsgNo = clientMsgNo;
+        obj.type = 1;
+        return JSON.stringify(obj);
+      };
+      return window.wk.WKSDK.shared().chatManager.send(msgContent, channel);
+    });
+  }
+
+  function markChatRoute(toUid) {
+    return apiFetch(CONFIG.apiBase + '/me/chat-route', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
+      body: JSON.stringify({ uid: toUid })
+    }).catch(function () { return {}; });
+  }
+
+  function handleWukongGreet(btn, e) {
+    if (!isLoggedIn()) { error('请先登录'); return; }
+    var uid = findUidFrom(btn);
+    if (!uid) { error('没有找到用户'); return; }
+    var now = Date.now();
+    if (btn.dataset.ppstSentAt && Number(btn.dataset.ppstSentAt || 0) + 5000 > now && btn.dataset.chatUrl) {
+      location.href = btn.dataset.chatUrl;
+      return;
+    }
+    if (btn.dataset.ppstSending === '1') return;
+    btn.dataset.ppstSending = '1';
+    btn.classList.add('ppst-greet-sending');
+    var text = randomGreetingShortcode();
+    sendWukongText(uid, text).then(function () {
+      btn.dataset.ppstSentAt = String(Date.now());
+      btn.classList.add('ppst-greet-sent');
+      toast('已发送，继续刷不会打断；再点一次打开聊天');
+      return markChatRoute(uid);
+    }).then(function (route) {
+      if (route && route.chatUrl) btn.dataset.chatUrl = rel(route.chatUrl);
+      if (CONFIG.greetOpenChatAfterSend && btn.dataset.chatUrl) location.href = btn.dataset.chatUrl;
+    }).catch(function (err) {
+      error((err && err.message) || '发送失败');
+    }).finally(function () {
+      btn.dataset.ppstSending = '0';
+      btn.classList.remove('ppst-greet-sending');
+    });
+  }
+
   function bindGlobal() {
     document.addEventListener('click', function (e) {
       var btn;
+      if ((btn = e.target.closest('.pps-greet-btn'))) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        handleWukongGreet(btn, e);
+        return;
+      }
       if ((btn = e.target.closest('.pps-comment-btn,.ppst-open-review'))) {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -612,7 +745,13 @@
         });
         closeTranslateSettings(); toast('翻译设置已保存'); return;
       }
-      if ((btn = e.target.closest('.ppst-inline-translate'))) { e.preventDefault(); translateInto(btn, btn.previousElementSibling); return; }
+      if ((btn = e.target.closest('.ppst-inline-translate'))) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (state.translateSuppressClickUntil && Date.now() < state.translateSuppressClickUntil) return;
+        translateInto(btn, btn.previousElementSibling);
+        return;
+      }
     }, true);
   }
 
