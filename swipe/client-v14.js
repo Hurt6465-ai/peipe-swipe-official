@@ -810,6 +810,7 @@
 
   function init() {
     state.translateSettings = loadTranslateSettings();
+    document.documentElement.classList.add('pps-v14-overlay');
     document.body.classList.add('pps-v14-overlay');
     enhance(document);
     bindGlobal();
