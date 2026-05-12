@@ -3,7 +3,7 @@
 const routeHelpers = require.main.require('./src/routes/helpers');
 const partner = require('./lib/partner');
 const swipe = require('./swipe');
-const partnerComments = require('./swipe/comments');
+const partnerReviews = require('./swipe/comments');
 
 const plugin = {};
 
@@ -19,12 +19,10 @@ function json(res, payload) {
 }
 
 plugin.init = async ({ router, middleware }) => {
-  // Old list page is kept, so the original partner page continues to work.
   routeHelpers.setupPageRoute(router, '/partners', [], (req, res) => {
     res.render('peipe-partners', { uid: req.uid || 0 });
   });
 
-  // Nearby defaults to full-screen swipe. Old list stays available at /nearby/list.
   routeHelpers.setupPageRoute(router, '/nearby', [], (req, res) => {
     res.render('peipe-partners-swipe', { uid: req.uid || 0, mode: 'nearby' });
   });
@@ -86,27 +84,31 @@ plugin.init = async ({ router, middleware }) => {
   }));
 
   router.get('/api/peipe-partners/comments/:uid', asyncRoute(async (req, res) => {
-    json(res, await partnerComments.listForTarget(req.params.uid, req.uid, req.query.limit));
+    json(res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
   }));
 
   router.get('/api/peipe-partners/profile/:uid/comments', asyncRoute(async (req, res) => {
-    json(res, await partnerComments.listForTarget(req.params.uid, req.uid, req.query.limit));
+    json(res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
+  }));
+
+  router.get('/api/peipe-partners/comments/:uid/eligibility', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+    json(res, await partnerReviews.eligibility(req.uid, req.params.uid));
   }));
 
   router.post('/api/peipe-partners/comments/:uid', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partnerComments.upsert(req));
+    json(res, await partnerReviews.upsert(req));
   }));
 
   router.post('/api/peipe-partners/profile/:uid/comments', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partnerComments.upsert(req));
+    json(res, await partnerReviews.upsert(req));
   }));
 
   router.put('/api/peipe-partners/comments/item/:id', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partnerComments.update(req));
+    json(res, await partnerReviews.update(req));
   }));
 
   router.delete('/api/peipe-partners/comments/item/:id', middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partnerComments.remove(req));
+    json(res, await partnerReviews.remove(req));
   }));
 };
 
@@ -156,28 +158,33 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
   });
 
   routeHelpers.setupApiRoute(router, 'get', '/peipe-partners/comments/:uid', [], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerComments.listForTarget(req.params.uid, req.uid, req.query.limit));
+    helpers.formatApiResponse(200, res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
   });
 
   routeHelpers.setupApiRoute(router, 'get', '/peipe-partners/profile/:uid/comments', [], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerComments.listForTarget(req.params.uid, req.uid, req.query.limit));
+    helpers.formatApiResponse(200, res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
+  });
+
+  routeHelpers.setupApiRoute(router, 'get', '/peipe-partners/comments/:uid/eligibility', [middleware.ensureLoggedIn], async (req, res) => {
+    helpers.formatApiResponse(200, res, await partnerReviews.eligibility(req.uid, req.params.uid));
   });
 
   routeHelpers.setupApiRoute(router, 'post', '/peipe-partners/comments/:uid', [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerComments.upsert(req));
+    helpers.formatApiResponse(200, res, await partnerReviews.upsert(req));
   });
 
   routeHelpers.setupApiRoute(router, 'post', '/peipe-partners/profile/:uid/comments', [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerComments.upsert(req));
+    helpers.formatApiResponse(200, res, await partnerReviews.upsert(req));
   });
 
   routeHelpers.setupApiRoute(router, 'put', '/peipe-partners/comments/item/:id', [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerComments.update(req));
+    helpers.formatApiResponse(200, res, await partnerReviews.update(req));
   });
 
   routeHelpers.setupApiRoute(router, 'delete', '/peipe-partners/comments/item/:id', [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerComments.remove(req));
+    helpers.formatApiResponse(200, res, await partnerReviews.remove(req));
   });
 };
 
 module.exports = plugin;
+
