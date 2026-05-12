@@ -523,3 +523,190 @@
   .pps-v14-overlay .pps-tag-list span,
   .pps-v14-overlay .pps-profile-tags span { font-size: 13px !important; }
 }
+
+/* v16 final card cleanup: only intro + distance, no gender/tags/meta/bubbles */
+.pps-v14-overlay .ppst-force-hide,
+.pps-v14-overlay .ppst-avatar-gender,
+.pps-v14-overlay .pps-gender-icon,
+.pps-v14-overlay .pps-gender,
+.pps-v14-overlay .pps-sex,
+.pps-v14-overlay .pps-meta-gender,
+.pps-v14-overlay .pps-age,
+.pps-v14-overlay .pps-height,
+.pps-v14-overlay .pps-weight,
+.pps-v14-overlay .pps-edu,
+.pps-v14-overlay .pps-education,
+.pps-v14-overlay .pps-job,
+.pps-v14-overlay .pps-career,
+.pps-v14-overlay .pps-relationship,
+.pps-v14-overlay .pps-status,
+.pps-v14-overlay .pps-detail-row,
+.pps-v14-overlay .pps-meta-row,
+.pps-v14-overlay .pps-tags,
+.pps-v14-overlay .pps-tag-list,
+.pps-v14-overlay .pps-profile-tags,
+.pps-v14-overlay .pps-tag,
+.pps-v14-overlay .pps-detail-chip,
+.pps-v14-overlay .pps-meta-chip,
+.pps-v14-overlay .ppst-distance-chip,
+.pps-v14-overlay .pps-distance,
+.pps-v14-overlay .pps-location-distance,
+.pps-v14-overlay .pps-location,
+.pps-v14-overlay .pps-meta-distance {
+  display: none !important;
+}
+
+.pps-v14-overlay .pps-info,
+.pps-v14-overlay .pps-info *,
+.pps-v14-overlay .pps-name,
+.pps-v14-overlay .pps-username,
+.pps-v14-overlay .pps-display-name,
+.pps-v14-overlay .pps-lang-row,
+.pps-v14-overlay .pps-lang-row *,
+.pps-v14-overlay .ppst-card-intro,
+.pps-v14-overlay .ppst-card-text,
+.pps-v14-overlay .ppst-distance-line,
+.pps-v14-overlay .ppst-distance-line * {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  outline: 0 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+.pps-v14-overlay .pps-info,
+.pps-v14-overlay .pps-info *:not(img):not(button):not(i),
+.pps-v14-overlay .ppst-card-text,
+.pps-v14-overlay .ppst-distance-line,
+.pps-v14-overlay .ppst-distance-line * {
+  text-shadow:
+    -0.45px -0.45px 0 rgba(0,0,0,.72),
+     0.45px -0.45px 0 rgba(0,0,0,.72),
+    -0.45px  0.45px 0 rgba(0,0,0,.72),
+     0.45px  0.45px 0 rgba(0,0,0,.72),
+     0 2px 8px rgba(0,0,0,.72) !important;
+}
+
+.pps-v14-overlay .ppst-card-intro {
+  display: block !important;
+  max-height: calc(2 * 1.62em + .25em) !important;
+  overflow: hidden !important;
+  line-height: 1.62 !important;
+  padding: 0 0 .16em 0 !important;
+  margin: 6px 0 0 0 !important;
+  color: #fff !important;
+  font-size: clamp(18px, 4.8vw, 24px) !important;
+  font-weight: 780 !important;
+  letter-spacing: -.015em !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+}
+
+.pps-v14-overlay .ppst-card-intro.is-expanded {
+  max-height: min(9.8em, 34vh) !important;
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pps-v14-overlay .ppst-card-text {
+  display: inline !important;
+  vertical-align: baseline !important;
+  line-height: inherit !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.pps-v14-overlay .ppst-inline-translate {
+  position: static !important;
+  display: inline-flex !important;
+  vertical-align: baseline !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: 0 !important;
+  padding: 0 0 0 6px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #fff !important;
+  font-size: .82em !important;
+  line-height: 1 !important;
+  transform: translateY(.08em) !important;
+  text-shadow:
+    -0.45px -0.45px 0 rgba(0,0,0,.8),
+     0.45px -0.45px 0 rgba(0,0,0,.8),
+    -0.45px  0.45px 0 rgba(0,0,0,.8),
+     0.45px  0.45px 0 rgba(0,0,0,.8),
+     0 2px 8px rgba(0,0,0,.78) !important;
+}
+
+.pps-v14-overlay .ppst-distance-line {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  margin: 4px 0 0 0 !important;
+  color: rgba(255,255,255,.98) !important;
+  font-size: clamp(14px, 3.8vw, 17px) !important;
+  line-height: 1.28 !important;
+  font-weight: 900 !important;
+  letter-spacing: -.01em !important;
+}
+
+.pps-v14-overlay .ppst-location-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: #fff !important;
+  font-size: 1em !important;
+}
+
+.pps-v14-overlay .pps-lang-row,
+.pps-v14-overlay .pps-lang-row *,
+.pps-v14-overlay .pps-arrow,
+.pps-v14-overlay .pps-lang-arrow {
+  color: #fff !important;
+  opacity: 1 !important;
+}
+
+.pps-v14-overlay .pps-side-actions {
+  gap: 12px !important;
+}
+
+.pps-v14-overlay .pps-comment-btn,
+.pps-v14-overlay .pps-greet-btn {
+  width: 72px !important;
+  height: 72px !important;
+  min-width: 72px !important;
+  min-height: 72px !important;
+  border-radius: 24px !important;
+  background: rgba(255,255,255,.14) !important;
+  border: 1px solid rgba(255,255,255,.22) !important;
+  box-shadow: 0 10px 26px rgba(0,0,0,.16) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.pps-v14-overlay .pps-comment-btn b {
+  display: block !important;
+  color: #fff !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  font-weight: 950 !important;
+}
+
+.pps-v14-overlay .ppst-action-icon,
+.pps-v14-overlay .pps-greet-wave {
+  font-size: 27px !important;
+  line-height: 1 !important;
+}
