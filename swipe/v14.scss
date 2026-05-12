@@ -937,3 +937,124 @@
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
+
+/* v20: Wukong greet + softer premium floating text */
+.pps-v14-overlay .pps-info,
+.pps-v14-overlay .pps-info *,
+.pps-v14-overlay .pps-user-card,
+.pps-v14-overlay .pps-user-card *,
+.pps-v14-overlay .pps-user-main,
+.pps-v14-overlay .pps-user-main *,
+.pps-v14-overlay .pps-name-row,
+.pps-v14-overlay .pps-name-row *,
+.pps-v14-overlay .pps-lang-row,
+.pps-v14-overlay .pps-lang-row *,
+.pps-v14-overlay .pps-bio,
+.pps-v14-overlay .pps-about,
+.pps-v14-overlay .pps-intro,
+.pps-v14-overlay .pps-description,
+.pps-v14-overlay .pps-profile-intro,
+.pps-v14-overlay .pps-text,
+.pps-v14-overlay .ppst-card-intro,
+.pps-v14-overlay .ppst-card-intro *,
+.pps-v14-overlay .ppst-distance-line,
+.pps-v14-overlay .ppst-distance-line * {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  outline: 0 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+  -webkit-text-stroke: 0 transparent !important;
+  text-shadow:
+    0 .7px 1.2px rgba(0,0,0,.66),
+    0 1.8px 5px rgba(0,0,0,.38),
+    0 0 1px rgba(0,0,0,.22) !important;
+}
+
+.pps-v14-overlay .pps-info::before,
+.pps-v14-overlay .pps-info::after,
+.pps-v14-overlay .pps-user-card::before,
+.pps-v14-overlay .pps-user-card::after,
+.pps-v14-overlay .pps-user-main::before,
+.pps-v14-overlay .pps-user-main::after,
+.pps-v14-overlay .pps-name-row::before,
+.pps-v14-overlay .pps-name-row::after,
+.pps-v14-overlay .pps-lang-row::before,
+.pps-v14-overlay .pps-lang-row::after,
+.pps-v14-overlay .ppst-card-intro::before,
+.pps-v14-overlay .ppst-card-intro::after,
+.pps-v14-overlay .ppst-distance-line::before,
+.pps-v14-overlay .ppst-distance-line::after {
+  content: none !important;
+  display: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
+
+.pps-v14-overlay .ppst-card-intro,
+.pps-v14-overlay .pps-bio,
+.pps-v14-overlay .pps-about,
+.pps-v14-overlay .pps-intro,
+.pps-v14-overlay .pps-description {
+  font-size: 13.5px !important;
+  line-height: 1.44 !important;
+  font-weight: 620 !important;
+  margin-top: 6px !important;
+  padding: 0 0 1px !important;
+}
+
+.pps-v14-overlay .ppst-inline-translate,
+.pps-v14-overlay .pps-translate-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 1.12em !important;
+  margin-left: 3px !important;
+  padding: 0 4px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  color: rgba(255,255,255,.98) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  -webkit-text-stroke: 0 transparent !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,.68), 0 2px 6px rgba(0,0,0,.38) !important;
+}
+
+.pps-v14-overlay .pps-avatar-flag,
+.pps-v14-overlay .pps-country-flag,
+.pps-v14-overlay .pps-flag {
+  transform: translateY(-3px) !important;
+  margin-bottom: 3px !important;
+  font-size: 15px !important;
+  line-height: 1 !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+.pps-v14-overlay .pps-greet-btn {
+  width: 52px !important;
+  min-width: 52px !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  border-radius: 20px !important;
+  background: rgba(255,255,255,.13) !important;
+  border: 1px solid rgba(255,255,255,.30) !important;
+  box-shadow: 0 8px 20px rgba(0,0,0,.12) !important;
+  -webkit-backdrop-filter: blur(9px) saturate(120%) !important;
+  backdrop-filter: blur(9px) saturate(120%) !important;
+}
+.pps-v14-overlay .pps-greet-btn.ppst-greet-sending { opacity: .68 !important; }
+.pps-v14-overlay .pps-greet-btn.ppst-greet-sent { border-color: rgba(255,255,255,.55) !important; }
+.pps-v14-overlay .pps-greet-wave,
+.pps-v14-overlay .ppst-action-icon {
+  font-size: 23px !important;
+  color: inherit !important;
+  -webkit-text-stroke: 0 transparent !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,.34) !important;
+}
