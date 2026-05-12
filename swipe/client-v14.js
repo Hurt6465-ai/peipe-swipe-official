@@ -298,7 +298,15 @@
         apiFetch(CONFIG.apiBase + '/location', {
           method: 'PUT',
           headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy || 0, source: 'swipe-v14' })
+          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy || 0, source: 'swipe-v17' })
+        }).then(function () {
+          if (!sessionStorage.getItem('pps-location-reloaded')) {
+            sessionStorage.setItem('pps-location-reloaded', '1');
+            setTimeout(function () {
+              if (window.ajaxify && typeof ajaxify.refresh === 'function') ajaxify.refresh();
+              else window.location.reload();
+            }, 500);
+          }
         }).catch(function () {});
       }, function () {}, { enableHighAccuracy: false, timeout: 9000, maximumAge: 24 * 60 * 60 * 1000 });
     }
@@ -335,6 +343,7 @@
     if (!Number.isFinite(km) || km <= 0) return '';
     if (km < 0.5) return '500米内';
     if (km < 1) return Math.round(km * 1000) + '米';
+    if (km > 1000) return '1000km外';
     return Math.round(km) + 'km';
   }
   function distanceHtml(txt) {
@@ -401,24 +410,7 @@
       var uid = findUidFrom(slide);
       if (uid) slide.dataset.uid = String(uid);
     });
-    $$('.pps-greet-btn', root).forEach(function (greet) {
-      var uid = Number(greet.dataset.uid || findUidFrom(greet));
-      if (uid) greet.dataset.uid = String(uid);
-      var host = greet.closest('.pps-side-actions') || greet.parentNode;
-      if (host && !host.querySelector('.pps-comment-btn,.ppst-open-review')) {
-        var review = document.createElement('button');
-        review.type = 'button';
-        review.className = 'pps-comment-btn ppst-open-review';
-        review.dataset.uid = uid ? String(uid) : '';
-        review.innerHTML = '<span class="ppst-action-icon">💬</span><b>看评价</b>';
-        host.insertBefore(review, greet);
-      }
-    });
-    $$('.pps-comment-btn,.ppst-open-review', root).forEach(function (btn) {
-      var uid = Number(btn.dataset.uid || findUidFrom(btn));
-      if (uid) btn.dataset.uid = String(uid);
-      btn.innerHTML = '<span class="ppst-action-icon">💬</span><b>看评价</b>';
-    });
+    $$('.pps-comment-btn,.ppst-open-review', root).forEach(function (btn) { btn.remove(); });
     $$('.pps-greet-btn', root).forEach(function (btn) {
       if (btn.dataset.ppstLabel === '1') return;
       btn.dataset.ppstLabel = '1';
@@ -586,11 +578,8 @@
     document.addEventListener('click', function (e) {
       var btn;
       if ((btn = e.target.closest('.pps-comment-btn,.ppst-open-review'))) {
-        e.preventDefault(); e.stopImmediatePropagation();
-        var uid = Number(btn.dataset.uid || findUidFrom(btn));
-        if (!uid) { enhance(document); uid = Number(btn.dataset.uid || findUidFrom(btn)); }
-        if (!uid) { error('没有找到用户ID，请刷新后再试'); return; }
-        openReview(uid, findNameFrom(btn));
+        e.preventDefault();
+        e.stopImmediatePropagation();
         return;
       }
       if (e.target.closest('.pps-tags,.pps-tag-list,.pps-profile-tags')) {
