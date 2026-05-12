@@ -881,3 +881,59 @@
 .pps-v14-overlay .ppst-avatar-gender {
   display: none !important;
 }
+
+/* v19: WEBM greet stickers + very thin text edge only */
+.peipe-greet-sticker-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 132px;
+  height: 132px;
+  vertical-align: middle;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.peipe-greet-sticker {
+  width: 132px;
+  height: 132px;
+  display: block;
+  object-fit: contain;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.pps-v14-overlay .pps-info,
+.pps-v14-overlay .pps-info *,
+.pps-v14-overlay .ppst-card-intro,
+.pps-v14-overlay .ppst-card-intro *,
+.pps-v14-overlay .ppst-distance-line,
+.pps-v14-overlay .ppst-distance-line *,
+.pps-v14-overlay .pps-name,
+.pps-v14-overlay .pps-lang-row,
+.pps-v14-overlay .pps-lang-row * {
+  -webkit-text-stroke: .16px rgba(0,0,0,.48) !important;
+  text-shadow:
+    0 .45px .8px rgba(0,0,0,.82),
+    0 1.5px 4px rgba(0,0,0,.42) !important;
+  filter: none !important;
+}
+
+.pps-v14-overlay .pps-user-card,
+.pps-v14-overlay .pps-user-main,
+.pps-v14-overlay .pps-name-row,
+.pps-v14-overlay .pps-lang-row,
+.pps-v14-overlay .pps-bio,
+.pps-v14-overlay .ppst-card-intro,
+.pps-v14-overlay .ppst-distance-line {
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  outline: 0 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
