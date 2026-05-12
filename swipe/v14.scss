@@ -1058,3 +1058,12 @@
   -webkit-text-stroke: 0 transparent !important;
   text-shadow: 0 1px 3px rgba(0,0,0,.34) !important;
 }
+.pps-gradient,
+.pps-photo-layer::after,
+.pps-info::before,
+.pps-user-card::before,
+.pps-lang-row::before,
+.ppst-card-intro::before,
+.ppst-distance-line::before {
+  display: none !important;
+}
