@@ -810,15 +810,22 @@
     });
   }
 
+  function deferOverlayWork(fn, delay) {
+    var run = function () { try { fn(); } catch (err) {} };
+    if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: delay || 1500 });
+    else setTimeout(run, delay || 0);
+  }
+
   function init() {
     state.translateSettings = loadTranslateSettings();
+    document.documentElement.classList.add('pps-v14-overlay');
     document.body.classList.add('pps-v14-overlay');
     enhance(document);
     bindGlobal();
     bindDelegatedLongPress();
-    requestDailyLocation();
     renderGreetStickers(document.body);
-    loadOverlayFeedOnce();
+    deferOverlayWork(loadOverlayFeedOnce, 500);
+    deferOverlayWork(requestDailyLocation, 1800);
     var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) { enhance(node); renderGreetStickers(node); } }); }); });
     obs.observe(document.body, { childList: true, subtree: true });
   }
