@@ -1,72 +1,262 @@
-/* Peipe Partners Swipe v20 overlay
-   - no floating comments
-   - reviews require chat duration >= 24h (server enforced)
-   - shared translator settings with topic detail: x-topic-translate-settings
-   - card intro / review input / review content translation
-   - location upload at most once per day
+/* Peipe Partners Swipe v12
+   - full-screen mobile page
+   - vertical swipe partners, horizontal swipe photos
+   - profile setup with frosted glass sheet
+   - direct NodeBB photo upload; optional compression must never block upload
+   - no avatar-as-background: avatar is avatar, partner photos are separate
 */
 (function () {
   'use strict';
 
-  if (window.__peipeSwipeV20Overlay) return;
-  window.__peipeSwipeV20Overlay = true;
-  window.__peipeSwipeV16Overlay = true;
-  window.__peipeSwipeV15Overlay = true;
-  window.__peipeSwipeV14Overlay = true;
+  if (window.__peipePartnersSwipeV12) return;
+  window.__peipePartnersSwipeV12 = true;
+  window.__peipePartnersSwipeV11 = true;
+  window.__peipePartnersSwipeV10 = true;
+  window.__peipePartnersSwipeV9 = true;
+  window.__peipePartnersSwipeV8 = true;
+  window.__peipePartnersSwipeV7 = true;
+  window.__peipePartnersSwipeV6 = true;
+  window.__peipePartnersSwipeV5 = true;
 
-
-  if (typeof Math.hypot !== 'function') {
-    Math.hypot = function (x, y) {
-      return Math.sqrt(x * x + y * y);
-    };
+  // NodeBB ajaxify tries to load a forum route module named after the template.
+  // Defining this small no-op module prevents the "Cannot find module ./peipe-partners-swipe" console error.
+  if (typeof define === 'function' && define.amd && !window.__peipePartnersSwipeForumModule) {
+    window.__peipePartnersSwipeForumModule = true;
+    define('forum/peipe-partners-swipe', [], function () { return { init: function () {} }; });
+    try { define('forum/peipe-nearby-swipe', [], function () { return { init: function () {} }; }); } catch (err) {}
   }
 
-  var CONFIG = {
-    apiBase: '/api/peipe-swipe',
-    geoKey: 'pps:geo:last-post-at',
-    geoMaxAge: 24 * 60 * 60 * 1000,
-    translateSettingsKey: 'x-topic-translate-settings',
-    translateCacheMs: 3 * 24 * 60 * 60 * 1000,
-    wkSdkUrl: 'https://cdn.jsdelivr.net/npm/wukongimjssdk@latest/lib/wukongimjssdk.umd.js',
-    wkTokenPath: '/bridge/token',
-    wkWsPath: '/wkws/',
-    greetOpenChatAfterSend: false,
-    defaultPrompt: '你是专业论坛翻译助手。请把用户提供的内容从 {{sourceLang}} 翻译为 {{targetLang}}。保留原有语气、换行、链接、Markdown、代码块、用户名、表情和列表结构。只输出译文，不要解释。'
+  var CONFIG = Object.assign({
+    pageSize: 18,
+    maxPhotos: 5,
+    uploadCid: 6,
+    imageConfig: {
+      maxSide: 1440,
+      maxSizeMB: 0.12,
+      quality: 0.60,
+      minCompressBytes: 120 * 1024,
+      useWebp: true,
+      qualities: [0.60, 0.52, 0.45, 0.38, 0.32, 0.26, 0.20]
+    },
+    avatarImageConfig: {
+      maxSide: 720,
+      maxSizeMB: 0.10,
+      quality: 0.58,
+      minCompressBytes: 80 * 1024,
+      useWebp: true,
+      qualities: [0.58, 0.50, 0.42, 0.34, 0.28, 0.22]
+    },
+    preloadAhead: 2,
+    swiperCss: '/plugins/nodebb-plugin-peipe-swipe-official/swipe/vendor/swiper-bundle.min.css',
+    swiperJs: '/plugins/nodebb-plugin-peipe-swipe-official/swipe/vendor/swiper-bundle.min.js',
+    swiperFallbackCss: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css',
+    swiperFallbackJs: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js'
+  }, window.PEIPE_SWIPE_CONFIG || {});
+
+  var TEXT = {
+    loading: '语伴加载中...',
+    empty: '暂时没有可推荐的语伴',
+    login: '请先登录',
+    profileTitle: '完善语伴资料',
+    profileSubtitle: '第一次打开语伴前，需要先填写这些资料。',
+    editProfileTitle: '编辑语伴资料',
+    displayName: '用户名 / 显示名',
+    photos: '语伴照片',
+    uploadPhotos: '上传手机图片',
+    uploading: '上传中...',
+    compressing: '压缩中...',
+    uploadAvatar: '上传头像',
+    imageTooLarge: '图片压缩后仍超过 5MB，请换一张图片',
+    imageOnly: '请选择图片',
+    maxPhotos: '',
+    bio: '介绍',
+    bioPlaceholder: '介绍一下你想练什么语言、喜欢聊什么。',
+    country: '国籍 / 地区',
+    nativeLanguage: '母语 / 我会说',
+    learningLanguage: '想学语言',
+    gender: '性别',
+    birthday: '出生日期',
+    height: '身高',
+    weight: '体重',
+    education: '学历',
+    occupation: '职业',
+    relationship: '感情状况',
+    location: '距离',
+    heightPlaceholder: '170',
+    weightPlaceholder: '60',
+    occupationPlaceholder: '请选择职业',
+    locationPlaceholder: '',
+    cropAvatar: '裁切头像',
+    cropTip: '拖动图片调整位置，滑动缩放。建议裁到头像或半身。',
+    cropUse: '上传头像',
+    cropCancel: '取消',
+    optional: '选填',
+    tags: '标签',
+    chooseTags: '选择标签',
+    save: '保存资料',
+    leave: '离开',
+    saving: '保存中...',
+    saveOk: '资料已保存',
+    saveFail: '保存失败',
+    required: '请先补全必填资料',
+    noBio: '这个人还没有写简介。',
+    noPhoto: '未上传语伴照片',
+    greet: '👋 Hi',
+    greeted: '已打招呼',
+    greeting: '发送中...',
+    greetOk: '已打招呼',
+    greetAlready: '你已经打过招呼了',
+    greetLimit: '今天打招呼次数已用完',
+    greetFail: '打招呼失败',
+    comments: '评论',
+    commentAction: '评价',
+    commentTitle: '语伴印象',
+    commentPlaceholder: '写一句真实印象，最多80字',
+    commentSubmit: '发布',
+    commentSaving: '发布中...',
+    commentEmpty: '还没有语伴印象',
+    commentLogin: '请先登录后评论',
+    commentTooShort: '至少写2个字',
+    commentSaved: '评论已保存',
+    commentFail: '评论失败',
+    tagTitle: '选择标签',
+    tagDone: '保存',
+    tagClear: '清空',
+    selectedCount: '已选',
+    male: '男',
+    female: '女',
+    other: '其他',
+    privateGender: '保密',
+    selectPlaceholder: '请选择',
+    missingPrefix: '请先补全：',
+    settings: '资料',
+    back: '返回',
+    chooseOption: '请选择',
+    doneOption: '保存',
+    tagCategoryPurpose: '练习目的',
+    tagCategoryPersonality: '性格',
+    tagCategoryInterests: '兴趣',
+    tagCategoryTime: '时间',
+    tagCategoryLevel: '水平',
+    tagDailyChat: '日常聊天',
+    tagVoicePractice: '语音练习',
+    tagTextChat: '文字聊天',
+    tagPronunciation: '纠音',
+    tagGrammar: '语法',
+    tagExam: '考试',
+    tagBusiness: '商务',
+    tagTravel: '旅行',
+    tagPatient: '有耐心',
+    tagFriendly: '友好',
+    tagOutgoing: '外向',
+    tagQuiet: '安静',
+    tagHumorous: '幽默',
+    tagSerious: '认真',
+    tagMovies: '电影',
+    tagMusic: '音乐',
+    tagGames: '游戏',
+    tagSports: '运动',
+    tagFood: '美食',
+    tagBooks: '阅读',
+    tagAnime: '动漫',
+    tagTechnology: '科技',
+    tagPhotography: '摄影',
+    tagPets: '宠物',
+    tagMorning: '早上',
+    tagAfternoon: '下午',
+    tagNight: '晚上',
+    tagWeekend: '周末',
+    tagDaily: '每天',
+    tagBeginner: '初级',
+    tagIntermediate: '中级',
+    tagAdvanced: '高级',
+    tagNativeHelper: '母语帮助'
   };
 
-  var LANGUAGE_META = {
-    auto: { flag: '🌐', label: '自动检测' }, zh: { flag: '🇨🇳', label: '中文' }, 'zh-cn': { flag: '🇨🇳', label: '中文' }, 'zh-tw': { flag: '🇹🇼', label: '繁中' },
-    en: { flag: '🇺🇸', label: 'English' }, my: { flag: '🇲🇲', label: 'မြန်မာ' }, mm: { flag: '🇲🇲', label: 'မြန်မာ' }, th: { flag: '🇹🇭', label: 'ไทย' }, vi: { flag: '🇻🇳', label: 'Tiếng Việt' }, vn: { flag: '🇻🇳', label: 'Tiếng Việt' }, ja: { flag: '🇯🇵', label: '日本語' }, ko: { flag: '🇰🇷', label: '한국어' }, ms: { flag: '🇲🇾', label: 'Bahasa Melayu' }, id: { flag: '🇮🇩', label: 'Bahasa Indonesia' }, fr: { flag: '🇫🇷', label: 'Français' }, de: { flag: '🇩🇪', label: 'Deutsch' }, es: { flag: '🇪🇸', label: 'Español' }, ru: { flag: '🇷🇺', label: 'Русский' }
+  var OPTIONS = {
+    countries: [
+      { value: 'CN', label: '中国' },
+      { value: 'MM', label: '缅甸' },
+      { value: 'VN', label: '越南' },
+      { value: 'TH', label: '泰国' },
+      { value: 'US', label: '美国' },
+      { value: 'GB', label: '英国' },
+      { value: 'JP', label: '日本' },
+      { value: 'KR', label: '韩国' }
+    ],
+    languages: [
+      { value: 'CN', label: '中文' },
+      { value: 'EN', label: 'English' },
+      { value: 'MM', label: 'မြန်မာ' },
+      { value: 'VI', label: 'Tiếng Việt' },
+      { value: 'TH', label: 'ภาษาไทย' },
+      { value: 'JP', label: '日本語' },
+      { value: 'KR', label: '한국어' }
+    ],
+    genders: [
+      { value: 'male', label: TEXT.male },
+      { value: 'female', label: TEXT.female },
+      { value: 'private', label: TEXT.privateGender }
+    ],
+    relationships: [
+      { value: '', label: TEXT.selectPlaceholder },
+      { value: 'private', label: '保密' },
+      { value: 'single', label: '单身' },
+      { value: 'dating', label: '恋爱中' },
+      { value: 'married', label: '已婚' },
+      { value: 'divorced', label: '离异' }
+    ],
+    educations: [
+      { value: '', label: TEXT.selectPlaceholder },
+      { value: 'private', label: '保密' },
+      { value: 'middle_school', label: '初中' },
+      { value: 'high_school', label: '高中' },
+      { value: 'college', label: '大专' },
+      { value: 'bachelor', label: '本科' },
+      { value: 'master', label: '硕士' },
+      { value: 'doctor', label: '博士' }
+    ],
+    occupations: [
+      { value: '', label: TEXT.selectPlaceholder },
+      { value: 'student', label: '在校生' },
+      { value: 'worker', label: '普通职工' },
+      { value: 'waiter', label: '服务员' },
+      { value: 'teacher', label: '老师' },
+      { value: 'police', label: '警察' },
+      { value: 'driver', label: '司机' },
+      { value: 'sales', label: '销售' },
+      { value: 'developer', label: '程序员' },
+      { value: 'designer', label: '设计师' },
+      { value: 'business_owner', label: '个体/老板' },
+      { value: 'unemployed', label: '无业' },
+      { value: 'other', label: '其他' }
+    ]
   };
-  var SOURCE_LANGUAGE_OPTIONS = ['auto', 'zh', 'en', 'my', 'th', 'vi', 'ja', 'ko'];
-  var TARGET_LANGUAGE_OPTIONS = ['en', 'zh', 'my', 'th', 'vi', 'ja', 'ko', 'ms', 'id', 'fr', 'de', 'es', 'ru'];
-  var METRICS = [
-    { key: 'language', label: '语言帮助' },
-    { key: 'reply', label: '回复速度' },
-    { key: 'friendly', label: '友善程度' },
-    { key: 'patient', label: '耐心程度' }
-  ];
 
   var state = {
-    targetUid: 0,
-    targetName: '',
-    viewerReviewId: '',
-    translateSettings: null,
-    longPressTimer: 0,
-    langPickerRole: '',
-    userMap: {},
-    overlayFeedLoaded: false,
-    userList: [],
-    userMapByName: {},
-    delegatedLongPressBound: false,
-    translateSuppressClickUntil: 0,
-    wkReadyPromise: null,
-    wkUid: ''
+    root: null,
+    swiper: null,
+    users: [],
+    loading: false,
+    done: false,
+    index: 0,
+    profile: null,
+    profileComplete: false,
+    requiredProfile: false,
+    tagCategories: [],
+    selectedTags: [],
+    uploadBusy: false,
+    photoSwipers: new Map(),
+    tagDraft: [],
+    toastTimer: 0,
+    commentTargetUid: 0,
+    commentViewerItemId: '',
+    nativeMode: false,
+    settingsVisible: true
   };
 
   function $(sel, root) { return (root || document).querySelector(sel); }
   function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
-  function norm(v) { return String(v || '').replace(/\s+/g, ' ').trim(); }
   function rel(path) {
     var base = (window.config && window.config.relative_path) || '';
     if (!path) return base || '';
@@ -74,773 +264,1545 @@
     if (base && path.indexOf(base + '/') === 0) return path;
     return base + path;
   }
-  function csrfToken() { return (window.config && (window.config.csrf_token || window.config.csrfToken)) || (($('meta[name="csrf-token"]') || {}).content) || ''; }
-  function escapeHtml(s) { return String(s || '').replace(/[&<>'"]/g, function (ch) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[ch]; }); }
-  function isLoggedIn() { var u = (window.app && window.app.user) || {}; return Number(u.uid || 0) > 0; }
-  function toast(msg) { if (window.app && app.alert) app.alert({ type: 'info', message: msg }); else if (window.app && app.alertSuccess) app.alertSuccess(msg); else window.alert(msg); }
-  function error(msg) { if (window.app && app.alertError) app.alertError(msg); else window.alert(msg); }
-  function safeJsonGet(key, fallback) { try { var raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
-  function safeJsonSet(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {} }
+  function csrfToken() {
+    return (window.config && (window.config.csrf_token || window.config.csrfToken)) ||
+      ($('meta[name="csrf-token"]') && $('meta[name="csrf-token"]').getAttribute('content')) || '';
+  }
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>'"]/g, function (ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[ch];
+    });
+  }
+  function norm(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+  function currentUser() { return (window.app && window.app.user) || null; }
+  function isLoggedIn() { var u = currentUser(); return !!(u && Number(u.uid || 0) > 0); }
+  function jsonBody(data) { return JSON.stringify(data || {}); }
+
   function apiFetch(url, options) {
     options = options || {};
     options.credentials = options.credentials || 'same-origin';
-    options.headers = Object.assign({ accept: 'application/json', 'x-requested-with': 'XMLHttpRequest' }, options.headers || {});
+    options.headers = Object.assign({
+      accept: 'application/json',
+      'x-requested-with': 'XMLHttpRequest'
+    }, options.headers || {});
     return fetch(rel(url), options).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (json) {
-        var payload = json && json.response ? json.response : json;
-        if (!res.ok || payload && payload.ok === false) {
-          throw new Error((payload && (payload.error || payload.message || payload.reason)) || '请求失败');
+        if (!res.ok) {
+          var msg = json.error || json.message || (json.status && json.status.message) || ('HTTP ' + res.status);
+          throw new Error(msg);
         }
-        return payload || {};
+        return json.response || json;
       });
     });
   }
 
-  function normalizeLangCode(code, fallback) {
-    var raw = norm(code).toLowerCase().replace(/_/g, '-');
-    if (!raw) return fallback || 'auto';
-    var short = raw.split('-')[0];
-    if (LANGUAGE_META[raw]) return raw;
-    if (LANGUAGE_META[short]) return short;
-    return fallback || raw;
-  }
-  function getDefaultTargetLang() { return (navigator.language || 'en').split('-')[0] || 'en'; }
-  function getLangMeta(code) { var n = normalizeLangCode(code, 'auto'); return LANGUAGE_META[n] || LANGUAGE_META[n.split('-')[0]] || { flag: '🏳️', label: n || '未知语言' }; }
-  function loadTranslateSettings() {
-    var saved = safeJsonGet(CONFIG.translateSettingsKey, {}) || {};
-    var targetLang = normalizeLangCode(saved.targetLang, getDefaultTargetLang());
-    if (TARGET_LANGUAGE_OPTIONS.indexOf(targetLang) === -1) targetLang = 'en';
-    return {
-      sourceLang: normalizeLangCode(saved.sourceLang, 'auto'),
-      targetLang: targetLang,
-      provider: saved.provider === 'ai' ? 'ai' : 'google',
-      aiEndpoint: saved.aiEndpoint || '',
-      aiModel: saved.aiModel || '',
-      aiApiKey: saved.aiApiKey || '',
-      aiPrompt: saved.aiPrompt || CONFIG.defaultPrompt,
-      temperature: Number.isFinite(Number(saved.temperature)) ? Number(saved.temperature) : 0.3
-    };
-  }
-  function saveTranslateSettings(settings) { state.translateSettings = settings; safeJsonSet(CONFIG.translateSettingsKey, settings); }
-  function normalizeAiEndpoint(url) { url = norm(url); if (!url) return ''; if (/\/(chat\/completions|responses)$/i.test(url)) return url; return url.replace(/\/+$/, '') + '/chat/completions'; }
-  function buildAiPrompt(settings) { return String(settings.aiPrompt || CONFIG.defaultPrompt).replace(/{{\s*sourceLang\s*}}/gi, settings.sourceLang || 'auto').replace(/{{\s*targetLang\s*}}/gi, settings.targetLang || getDefaultTargetLang()); }
-  function extractAiText(data) {
-    if (data && Array.isArray(data.choices) && data.choices[0] && data.choices[0].message) {
-      var content = data.choices[0].message.content;
-      if (typeof content === 'string') return norm(content);
-      if (Array.isArray(content)) return norm(content.map(function (item) { return item && (item.text || item.output_text || '') || ''; }).join(''));
-    }
-    if (data && typeof data.output_text === 'string') return norm(data.output_text);
-    return '';
-  }
-  function translateCacheKey(text) {
-    var s = state.translateSettings || loadTranslateSettings();
-    var provider = s.provider === 'ai' ? 'ai:' + (s.aiModel || 'model') : 'google';
-    return 'x-topic-v12-translate:' + provider + ':' + s.sourceLang + ':' + s.targetLang + ':' + encodeURIComponent(norm(text)).slice(0, 220);
-  }
-  function translateViaGoogle(text, settings) {
-    var sl = settings.sourceLang && settings.sourceLang !== 'auto' ? settings.sourceLang : 'auto';
-    var url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=' + encodeURIComponent(sl) + '&tl=' + encodeURIComponent(settings.targetLang || 'en') + '&dt=t&q=' + encodeURIComponent(text);
-    return fetch(url, { cache: 'force-cache' }).then(function (res) { if (!res.ok) throw new Error('google translate failed'); return res.json(); }).then(function (data) {
-      var parts = Array.isArray(data && data[0]) ? data[0] : [];
-      return parts.map(function (item) { return item && item[0] ? item[0] : ''; }).join('');
-    });
-  }
-  function translateViaAI(text, settings) {
-    if (!settings.aiEndpoint || !settings.aiModel || !settings.aiApiKey) return Promise.reject(new Error('AI translate not configured'));
-    return fetch(normalizeAiEndpoint(settings.aiEndpoint), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + settings.aiApiKey },
-      body: JSON.stringify({ model: settings.aiModel, temperature: settings.temperature, messages: [{ role: 'system', content: buildAiPrompt(settings) }, { role: 'user', content: text }] })
-    }).then(function (res) { return res.json().catch(function () { return {}; }).then(function (json) { if (!res.ok) throw new Error(json.error && json.error.message || 'translate failed'); return json; }); }).then(function (json) {
-      var out = extractAiText(json);
-      if (!out) throw new Error('empty translation');
-      return out;
-    });
-  }
-  function translateText(text) {
-    var clean = norm(text);
-    if (!clean) return Promise.resolve('');
-    var key = translateCacheKey(clean);
-    var cached = safeJsonGet(key, null);
-    if (cached && cached.expiresAt > Date.now() && typeof cached.text === 'string') return Promise.resolve(cached.text);
-    var settings = state.translateSettings || loadTranslateSettings();
-    var p = settings.provider === 'ai' ? translateViaAI(clean, settings) : translateViaGoogle(clean, settings);
-    return p.then(function (out) { out = norm(out); if (out) safeJsonSet(key, { text: out, expiresAt: Date.now() + CONFIG.translateCacheMs }); return out; });
-  }
-
-  function langOptions(list, current) {
-    return list.map(function (code) {
-      var m = getLangMeta(code);
-      return '<button type="button" class="ppst-lang-option' + (code === current ? ' active' : '') + '" data-code="' + code + '"><span>' + m.flag + '</span><b>' + escapeHtml(m.label) + '</b></button>';
-    }).join('');
-  }
-  function renderTranslateSettings() {
-    var s = state.translateSettings || loadTranslateSettings();
-    var src = getLangMeta(s.sourceLang), tgt = getLangMeta(s.targetLang);
-    return '<div class="ppst-mask ppst-settings-mask"></div><section class="ppst-settings" role="dialog">' +
-      '<div class="ppst-head"><strong>AI翻译设置</strong><button type="button" class="ppst-settings-close">×</button></div>' +
-      '<input type="hidden" class="ppst-source-lang" value="' + escapeHtml(s.sourceLang) + '"><input type="hidden" class="ppst-target-lang" value="' + escapeHtml(s.targetLang) + '">' +
-      '<div class="ppst-preview-row"><button type="button" class="ppst-lang-trigger" data-role="source"><span>' + src.flag + '</span><b>' + escapeHtml(src.label) + '</b></button><i>⇄</i><button type="button" class="ppst-lang-trigger" data-role="target"><span>' + tgt.flag + '</span><b>' + escapeHtml(tgt.label) + '</b></button></div>' +
-      '<input type="hidden" class="ppst-provider" value="' + escapeHtml(s.provider) + '"><div class="ppst-provider-tabs"><button type="button" data-provider="google" class="' + (s.provider === 'google' ? 'active' : '') + '">谷歌翻译</button><button type="button" data-provider="ai" class="' + (s.provider === 'ai' ? 'active' : '') + '">AI翻译</button></div>' +
-      '<div class="ppst-ai ' + (s.provider === 'ai' ? 'show' : '') + '"><label>AI 接口<input class="ppst-ai-endpoint" value="' + escapeHtml(s.aiEndpoint) + '" placeholder="https://your-api.example.com/v1"></label><label>模型<input class="ppst-ai-model" value="' + escapeHtml(s.aiModel) + '" placeholder="gpt-4.1-mini / qwen / deepseek"></label><label>密钥<input class="ppst-ai-key" type="password" value="' + escapeHtml(s.aiApiKey) + '" placeholder="API Key"></label><label>提示词<textarea class="ppst-ai-prompt" rows="4">' + escapeHtml(s.aiPrompt) + '</textarea></label></div>' +
-      '<div class="ppst-actions"><button type="button" class="ppst-settings-cancel">取消</button><button type="button" class="ppst-settings-save">保存</button></div>' +
-      '</section><section class="ppst-lang-picker"><div class="ppst-head"><strong>选择语言</strong><button type="button" class="ppst-lang-close">×</button></div><div class="ppst-lang-list"></div></section><div class="ppst-mask ppst-lang-mask"></div>';
-  }
-  function ensureTranslateSettingsDom() {
-    if ($('.ppst-settings')) return;
-    document.body.insertAdjacentHTML('beforeend', renderTranslateSettings());
-  }
-  function updateSettingsPreview() {
-    var box = $('.ppst-settings'); if (!box) return;
-    var stored = state.translateSettings || loadTranslateSettings();
-    var sourceInput = $('.ppst-source-lang', box);
-    var targetInput = $('.ppst-target-lang', box);
-    var providerInput = $('.ppst-provider', box);
-    var sourceLang = normalizeLangCode(sourceInput && sourceInput.value || stored.sourceLang, 'auto');
-    var targetLang = normalizeLangCode(targetInput && targetInput.value || stored.targetLang, getDefaultTargetLang());
-    if (sourceInput) sourceInput.value = sourceLang;
-    if (targetInput) targetInput.value = targetLang;
-    if (providerInput && !providerInput.value) providerInput.value = stored.provider || 'google';
-    var src = getLangMeta(sourceLang), tgt = getLangMeta(targetLang);
-    var triggers = $$('.ppst-lang-trigger', box);
-    if (triggers[0]) triggers[0].innerHTML = '<span>' + src.flag + '</span><b>' + escapeHtml(src.label) + '</b>';
-    if (triggers[1]) triggers[1].innerHTML = '<span>' + tgt.flag + '</span><b>' + escapeHtml(tgt.label) + '</b>';
-  }
-  function openTranslateSettings() { ensureTranslateSettingsDom(); updateSettingsPreview(); $('.ppst-settings').classList.add('show'); $('.ppst-settings-mask').classList.add('show'); }
-  function closeTranslateSettings() { var a = $('.ppst-settings'), b = $('.ppst-settings-mask'); if (a) a.classList.remove('show'); if (b) b.classList.remove('show'); }
-  function openLangPicker(role) {
-    state.langPickerRole = role;
-    var current = role === 'source' ? $('.ppst-source-lang').value : $('.ppst-target-lang').value;
-    $('.ppst-lang-list').innerHTML = langOptions(role === 'source' ? SOURCE_LANGUAGE_OPTIONS : TARGET_LANGUAGE_OPTIONS, current);
-    $('.ppst-lang-picker').classList.add('show'); $('.ppst-lang-mask').classList.add('show');
-  }
-  function closeLangPicker() { var a = $('.ppst-lang-picker'), b = $('.ppst-lang-mask'); if (a) a.classList.remove('show'); if (b) b.classList.remove('show'); state.langPickerRole = ''; }
-  function bindLongPress(el, cb) {
-    if (!el || el.dataset.ppstLongBound === '1') return;
-    el.dataset.ppstLongBound = '1';
-    var sx = 0, sy = 0, fired = false;
-    function point(e) {
-      var t = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0] || e;
-      return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
-    }
-    function start(e) {
-      if (e.type === 'touchstart' && window.PointerEvent) return;
-      var p = point(e); sx = p.x; sy = p.y; fired = false;
-      clearTimeout(state.longPressTimer);
-      state.longPressTimer = setTimeout(function () {
-        fired = true;
-        state.translateSuppressClickUntil = Date.now() + 900;
-        try { e.preventDefault && e.preventDefault(); } catch (err) {}
-        cb(e);
-      }, 560);
-    }
-    function move(e) {
-      var p = point(e);
-      if (Math.hypot(p.x - sx, p.y - sy) > 10) clearTimeout(state.longPressTimer);
-    }
-    function end(e) {
-      clearTimeout(state.longPressTimer);
-      if (fired) { try { e.preventDefault && e.preventDefault(); } catch (err) {} }
-    }
-    el.addEventListener('pointerdown', start, { passive: false });
-    el.addEventListener('touchstart', start, { passive: false });
-    el.addEventListener('pointermove', move, { passive: true });
-    el.addEventListener('touchmove', move, { passive: true });
-    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel'].forEach(function (n) { el.addEventListener(n, end, { passive: false }); });
-    el.addEventListener('contextmenu', function (e) { e.preventDefault(); cb(e); });
-  }
-  function getTextValue(el) {
-    if (!el) return '';
-    if (el.tagName && /^(TEXTAREA|INPUT)$/i.test(el.tagName)) return el.value || '';
-    var text = el.classList && el.classList.contains('ppst-card-text') ? el.textContent : ((el.dataset && el.dataset.originalText) || el.textContent);
-    return text || '';
-  }
-  function setTextValue(el, value) {
-    if (!el) return;
-    if (el.tagName && /^(TEXTAREA|INPUT)$/i.test(el.tagName)) el.value = value;
-    else el.textContent = value;
-  }
-  function translateInto(targetEl, textEl) {
-    if (!textEl) return;
-    var original = norm(textEl.dataset.originalText || getTextValue(textEl));
-    if (!original) return;
-    if (textEl.dataset.translated === '1') {
-      setTextValue(textEl, textEl.dataset.originalText || original);
-      textEl.dataset.translated = '0';
-      return;
-    }
-    targetEl.classList.add('loading');
-    translateText(original).then(function (out) {
-      if (!textEl.dataset.originalText) textEl.dataset.originalText = original;
-      if (out) { setTextValue(textEl, out); textEl.dataset.translated = '1'; }
-    }).catch(function () { error('翻译失败'); }).finally(function () { targetEl.classList.remove('loading'); });
-  }
-
-  function maybeAddCardTranslate(root) {
-    var selectors = ['.pps-about', '.pps-bio', '.pps-intro', '.pps-description', '.pps-profile-intro', '.pps-text', '.pps-card-intro'];
-    selectors.forEach(function (sel) {
-      $$(sel, root).forEach(function (el) {
-        if (el.dataset.ppstTranslate === '1') return;
-        var original = norm(el.dataset.originalText || el.textContent);
-        if (!original || original.length < 2) return;
-        el.dataset.ppstTranslate = '1';
-        el.dataset.originalText = original;
-        el.classList.add('ppst-card-intro');
-        el.innerHTML = '';
-        var text = document.createElement('span');
-        text.className = 'ppst-card-text';
-        text.dataset.originalText = original;
-        text.textContent = original;
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'ppst-inline-translate';
-        btn.innerHTML = '<i class="fa-solid fa-language"></i>';
-        btn.title = '翻译 / 长按设置';
-        el.appendChild(text);
-        el.appendChild(btn);
-        // Click and long-press are handled by delegated global handlers.
-        // Keeping a direct click handler here causes a double translate/toggle on mobile.
-      });
-    });
-  }
-
-  function requestDailyLocation() {
-    if (!navigator.geolocation) return;
-    var last = Number(localStorage.getItem(CONFIG.geoKey) || 0);
-    if (Date.now() - last < CONFIG.geoMaxAge) return;
-    function go() {
-      navigator.geolocation.getCurrentPosition(function (pos) {
-        localStorage.setItem(CONFIG.geoKey, String(Date.now()));
-        apiFetch(CONFIG.apiBase + '/location', {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy || 0, source: 'swipe-v17' })
-        }).then(function () {
-          if (!sessionStorage.getItem('pps-location-reloaded')) {
-            sessionStorage.setItem('pps-location-reloaded', '1');
-            setTimeout(function () {
-              if (window.ajaxify && typeof ajaxify.refresh === 'function') ajaxify.refresh();
-              else window.location.reload();
-            }, 500);
-          }
-        }).catch(function () {});
-      }, function () {}, { enableHighAccuracy: false, timeout: 9000, maximumAge: 24 * 60 * 60 * 1000 });
-    }
-    if (navigator.permissions && navigator.permissions.query) {
-      navigator.permissions.query({ name: 'geolocation' }).then(function (p) { if (p.state !== 'denied') go(); }).catch(go);
-    } else go();
-  }
-
-  function currentFeedMode() {
-    var path = location.pathname || '';
-    return /nearby/i.test(path) ? 'nearby' : 'recommend';
-  }
-  function rememberUsers(users) {
-    state.userList = Array.isArray(users) ? users.slice() : [];
-    (users || []).forEach(function (u) {
-      if (!u || !u.uid) return;
-      state.userMap[String(u.uid)] = u;
-      [u.username, u.displayName, u.name, u.userslug].forEach(function (name) {
-        name = norm(name).toLowerCase();
-        if (name) state.userMapByName[name] = u;
-      });
-    });
-  }
-  function loadOverlayFeedOnce() {
-    if (state.overlayFeedLoaded) return;
-    state.overlayFeedLoaded = true;
-    apiFetch(CONFIG.apiBase + '/swipe/feed?mode=' + encodeURIComponent(currentFeedMode()) + '&limit=36').then(function (json) {
-      rememberUsers(json.users || []);
-      patchDistance(document);
-    }).catch(function () {});
-  }
-  function formatDistance(km) {
-    km = Number(km || 0);
-    if (!Number.isFinite(km) || km <= 0) return '';
-    if (km < 0.5) return '500米内';
-    if (km < 1) return Math.round(km * 1000) + '米';
-    if (km > 1000) return '1000km外';
-    return Math.round(km) + 'km';
-  }
-  function distanceHtml(txt) {
-    return '<span class="ppst-location-icon"><i class="fa-solid fa-location-dot"></i></span><span>' + escapeHtml(txt) + '</span>';
-  }
-  function slideFrom(el) {
-    var cur = el;
-    while (cur && cur !== document.body) {
-      if (cur.classList && (cur.classList.contains('swiper-slide') || cur.classList.contains('pps-slide') || cur.classList.contains('pps-card') || cur.classList.contains('pps-slide-item'))) return cur;
-      cur = cur.parentNode;
-    }
-    return null;
-  }
-
-  function uidFromName(slide) {
-    if (!slide) return 0;
-    var nameEl = $('.pps-username,.pps-name,.pps-display-name,.username', slide);
-    var name = norm(nameEl && nameEl.textContent).toLowerCase();
-    if (!name) return 0;
-    var u = state.userMapByName[name];
-    return u ? Number(u.uid || 0) : 0;
-  }
-
-  function uidFromSlideOrder(slide) {
-    if (!slide || !slide.dataset) return 0;
-    var idx = Number(slide.dataset.index);
-    if (!Number.isFinite(idx)) return 0;
-    var u = state.userList[idx];
-    return u ? Number(u.uid || 0) : 0;
-  }
-
-  function findUserDataFrom(el) {
-    var uid = findUidFrom(el);
-    return uid ? state.userMap[String(uid)] || null : null;
-  }
-  function ensureDistanceChip(slide, txt) {
-    if (!slide || !txt) return;
-    var old = slide.querySelector('.ppst-distance-chip,.ppst-distance-line');
-    if (old) old.remove();
-    var intro = $('.ppst-card-intro,.pps-about,.pps-bio,.pps-intro,.pps-description,.pps-profile-intro,.pps-text,.pps-card-intro', slide);
-    var host = intro && intro.parentNode || $('.pps-info', slide) || slide;
-    var line = document.createElement('div');
-    line.className = 'ppst-distance-line';
-    line.innerHTML = distanceHtml(txt);
-    if (intro && intro.nextSibling) host.insertBefore(line, intro.nextSibling);
-    else host.appendChild(line);
-  }
-  function patchDistance(root) {
-    // Remove every old location/distance bubble first. We only keep one clean line under the intro.
-    $$('.ppst-distance-chip,.ppst-distance-line,.pps-distance,.pps-location-distance,.pps-location,.pps-meta-distance', root).forEach(function (el) {
-      var slide = el.closest && el.closest('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item');
-      if (slide) el.remove();
-    });
-    $$('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item', root).forEach(function (slide) {
-      var u = findUserDataFrom(slide);
-      var txt = u && (u.distanceText || formatDistance(u.distanceKm));
-      if (txt) ensureDistanceChip(slide, txt);
-    });
-  }
-
-  function removeMetaFields(root) {
-    // Current visual rule: card only shows intro + distance. Hide education/job/status/tags/height/weight/age/gender and all old chip rows.
-    $$('.pps-age,.pps-height,.pps-weight,.pps-edu,.pps-education,.pps-job,.pps-career,.pps-relationship,.pps-status,' +
-      '.pps-detail-row,.pps-meta-row,.pps-tags,.pps-tag-list,.pps-profile-tags,.pps-tag,.pps-meta-chip,.pps-detail-chip,' +
-      '.pps-user-meta .pps-age,.pps-user-meta .pps-gender-icon,.pps-user-meta .pps-gender,.pps-name-row .pps-gender-icon,.pps-name-row .pps-gender', root).forEach(function (el) {
-      if (el.classList && (el.classList.contains('ppst-distance-line') || el.classList.contains('ppst-card-intro'))) return;
-      el.classList.add('ppst-force-hide');
-    });
-    // Also remove chip-like spans containing unwanted text from older templates.
-    $$('.pps-info span,.pps-user-meta span', root).forEach(function (el) {
-      if (el.closest('.ppst-card-intro,.ppst-distance-line')) return;
-      var txt = norm(el.textContent).toLowerCase();
-      if (!txt) return;
-      if (/^\d+(\.\d+)?\s*(cm|kg|厘米|公斤|千克|岁)$/.test(txt) || /^(高中|大学|本科|硕士|博士|单身|已婚|离异|学生|在校生|无业|老师|教师|警察|服务员|普通职工|摄影|科技|游戏|外向|有耐心|旅行|日常聊天)$/.test(txt)) {
-        el.classList.add('ppst-force-hide');
-      }
-    });
-  }
-
-  function moveGenderToAvatar(root) {
-    // Sex/gender is hidden completely on cards. Do not clone it onto the flag/avatar.
-    $$('.pps-gender-icon,.pps-gender,.pps-sex,.pps-meta-gender,.ppst-avatar-gender', root).forEach(function (el) {
-      el.classList.add('ppst-force-hide');
-    });
-  }
-
-  function patchButtons(root) {
-    $$('.pps-float-comments', root).forEach(function (el) { el.remove(); });
-    $$('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item', root).forEach(function (slide) {
-      var uid = findUidFrom(slide);
-      if (uid) slide.dataset.uid = String(uid);
-    });
-    $$('.pps-comment-btn,.ppst-open-review', root).forEach(function (btn) { btn.remove(); });
-    $$('.pps-greet-btn', root).forEach(function (btn) {
-      if (btn.dataset.ppstLabel === '1') return;
-      btn.dataset.ppstLabel = '1';
-      btn.innerHTML = '<span class="ppst-action-icon">👋</span>';
-    });
-  }
-
-  function findUidFrom(el) {
-    var cur = el;
-    while (cur && cur !== document.body) {
-      var uid = cur.dataset && (cur.dataset.uid || cur.dataset.targetUid || cur.dataset.userUid || cur.dataset.authorUid || cur.dataset.uidRaw);
-      if (uid) return Number(uid || 0);
-      var child = cur.querySelector && cur.querySelector('[data-uid],[data-target-uid],[data-user-uid],.pps-greet-btn,.pps-comment-btn');
-      if (child && child.dataset) {
-        uid = child.dataset.uid || child.dataset.targetUid || child.dataset.userUid;
-        if (uid) return Number(uid || 0);
-      }
-      cur = cur.parentNode;
-    }
-    var slide = slideFrom(el);
-    return uidFromName(slide) || uidFromSlideOrder(slide) || 0;
-  }
-
-  function findNameFrom(el) {
-    var slide = slideFrom(el) || document;
-    var nameEl = $('.pps-username,.pps-name,.pps-display-name,.username', slide);
-    var name = norm(nameEl && nameEl.textContent);
-    if (name) return name;
-    var uid = findUidFrom(el);
-    var u = uid && state.userMap[String(uid)];
-    return norm(u && (u.displayName || u.username || u.userslug)) || 'TA';
-  }
-  function starRow(key, label, value) {
-    value = Number(value || 0);
-    var stars = '';
-    for (var i = 1; i <= 5; i += 1) stars += '<button type="button" class="ppst-star ' + (i <= value ? 'active' : '') + '" data-key="' + key + '" data-value="' + i + '">★</button>';
-    return '<div class="ppst-rating-row" data-key="' + key + '"><span>' + escapeHtml(label) + '</span><div class="ppst-stars">' + stars + '</div></div>';
-  }
-  function progressRow(label, avg) {
-    avg = Number(avg || 0);
-    var pct = Math.max(0, Math.min(100, avg / 5 * 100));
-    return '<div class="ppst-progress-row"><div><span>' + escapeHtml(label) + '</span><b>' + (avg ? avg.toFixed(1) : '0.0') + '</b></div><i><em style="width:' + pct + '%"></em></i></div>';
-  }
-  function renderReviewItem(item) {
-    item = item || {};
-    var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml((item.authorName || '匿').slice(0, 1)) + '</span>';
-    return '<div class="ppst-review-item" data-id="' + escapeHtml(item.id || '') + '">' +
-      '<div class="ppst-review-avatar">' + avatar + '</div><div class="ppst-review-main"><div class="ppst-review-top"><b>' + escapeHtml(item.authorName || '匿名用户') + '</b><span>🌟' + Number(item.overall || 0).toFixed(1) + '</span></div>' +
-      '<div class="ppst-review-content">' + escapeHtml(item.content || '') + '</div><button type="button" class="ppst-review-translate"><i class="fa-solid fa-language"></i></button></div></div>';
-  }
-  function renderReviewSheet(loading) {
-    var sheet = $('.ppst-review-sheet');
-    if (!sheet) {
-      document.body.insertAdjacentHTML('beforeend', '<div class="ppst-mask ppst-review-mask"></div><section class="ppst-review-sheet" role="dialog"></section>');
-      sheet = $('.ppst-review-sheet');
-    }
-    sheet.innerHTML = '<div class="ppst-review-head"><div><strong>语伴评价</strong><span>' + escapeHtml(state.targetName || '') + '</span></div><button type="button" class="ppst-review-close">×</button></div>' +
-      '<div class="ppst-review-summary">' + (loading ? '加载中...' : '') + '</div>' +
-      '<div class="ppst-review-list"></div>' +
-      '<div class="ppst-review-editor"><div class="ppst-rating-box">' + METRICS.map(function (m) { return starRow(m.key, m.label, 0); }).join('') + '</div>' +
-      '<label class="ppst-anon"><input type="checkbox" class="ppst-anonymous"> 匿名发布</label>' +
-      '<div class="ppst-input-wrap"><textarea class="ppst-review-input" maxlength="240" placeholder="写一下真实感受，最多240字"></textarea><button type="button" class="ppst-input-translate"><i class="fa-solid fa-language"></i></button></div>' +
-      '<div class="ppst-review-actions"><button type="button" class="ppst-review-submit">发布评价</button></div></div>';
-  }
-  function setRating(key, value) {
-    $$('.ppst-star[data-key="' + key + '"]').forEach(function (btn) { btn.classList.toggle('active', Number(btn.dataset.value) <= Number(value)); });
-  }
-  function getRatings() {
-    var out = {};
-    METRICS.forEach(function (m) { out[m.key] = $$('.ppst-star.active[data-key="' + m.key + '"]').length; });
-    return out;
-  }
-  function setRatings(ratings) { ratings = ratings || {}; METRICS.forEach(function (m) { setRating(m.key, Number(ratings[m.key] || 0)); }); }
-  function openReview(uid, name) {
-    if (!uid) return;
-    state.targetUid = uid; state.targetName = name || 'TA'; state.viewerReviewId = '';
-    renderReviewSheet(true);
-    $('.ppst-review-mask').classList.add('show'); $('.ppst-review-sheet').classList.add('show');
-    loadReviews(uid);
-  }
-  function closeReview() { var a = $('.ppst-review-mask'), b = $('.ppst-review-sheet'); if (a) a.classList.remove('show'); if (b) b.classList.remove('show'); state.targetUid = 0; }
-  function loadReviews(uid) {
-    apiFetch(CONFIG.apiBase + '/comments/' + encodeURIComponent(uid) + '?limit=40').then(function (json) {
-      var reviews = json.reviews || json.comments || [];
-      var summary = json.summary || { count: reviews.length, overall: 0, metrics: {} };
-      var can = json.canReview || {};
-      var summaryBox = $('.ppst-review-summary');
-      var title = escapeHtml(state.targetName || 'TA') + ' 🌟' + Number(summary.overall || 0).toFixed(1) + '（' + Number(summary.count || 0) + ' 条）';
-      summaryBox.innerHTML = '<div class="ppst-summary-title">' + title + '</div>' + METRICS.map(function (m) { var row = summary.metrics && summary.metrics[m.key] || {}; return progressRow(m.label, row.avg || 0); }).join('');
-      $('.ppst-review-list').innerHTML = reviews.length ? reviews.map(renderReviewItem).join('') : '<div class="ppst-empty-review">还没有评价</div>';
-      if (json.viewerComment) {
-        state.viewerReviewId = json.viewerComment.id || '';
-        $('.ppst-review-input').value = json.viewerComment.content || '';
-        $('.ppst-anonymous').checked = !!json.viewerComment.anonymous;
-        setRatings(json.viewerComment.ratings || {});
-      }
-      var editor = $('.ppst-review-editor');
-      if (!isLoggedIn()) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">请先登录后评价</div>'); return; }
-      if (!can.eligible) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">聊天超过 24 小时后才可以评价</div>'); }
-    }).catch(function (err) { $('.ppst-review-summary').textContent = err.message || '加载失败'; });
-  }
-  function submitReview() {
-    var input = $('.ppst-review-input');
-    var content = norm(input && input.value);
-    var ratings = getRatings();
-    if (!content || content.length < 2) return error('至少写 2 个字');
-    var hasRating = Object.keys(ratings).some(function (k) { return Number(ratings[k]) > 0; });
-    if (!hasRating) return error('请至少选择一个评分');
-    var btn = $('.ppst-review-submit'); btn.disabled = true; btn.textContent = '发布中...';
-    apiFetch(CONFIG.apiBase + '/comments/' + encodeURIComponent(state.targetUid), {
-      method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-      body: JSON.stringify({ content: content, ratings: ratings, anonymous: !!($('.ppst-anonymous') && $('.ppst-anonymous').checked) })
-    }).then(function () { toast('评价已保存'); loadReviews(state.targetUid); }).catch(function (err) { error(err.message === 'chat-under-24h' ? '聊天超过 24 小时后才可以评价' : (err.message || '评价失败')); }).finally(function () { btn.disabled = false; btn.textContent = '发布评价'; });
-  }
-
-  function enhance(root) {
-    root = root || document;
-    patchButtons(root);
-    removeMetaFields(root);
-    moveGenderToAvatar(root);
-    patchDistance(root);
-    maybeAddCardTranslate(root);
-  }
-  function bindDelegatedLongPress() {
-    if (state.delegatedLongPressBound) return;
-    state.delegatedLongPressBound = true;
-    var startX = 0, startY = 0, target = null, fired = false;
-    function point(e) {
-      var t = e.touches && e.touches[0] || e.changedTouches && e.changedTouches[0] || e;
-      return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
-    }
-    function isTranslateButton(el) { return el && el.closest && el.closest('.ppst-inline-translate,.ppst-review-translate,.ppst-input-translate'); }
-    function start(e) {
-      if (e.type === 'touchstart' && window.PointerEvent) return;
-      target = isTranslateButton(e.target);
-      if (!target) return;
-      var p = point(e); startX = p.x; startY = p.y; fired = false;
-      clearTimeout(state.longPressTimer);
-      state.longPressTimer = setTimeout(function () {
-        fired = true;
-        state.translateSuppressClickUntil = Date.now() + 900;
-        try { e.preventDefault && e.preventDefault(); } catch (err) {}
-        openTranslateSettings();
-      }, 520);
-    }
-    function move(e) {
-      if (!target) return;
-      var p = point(e);
-      if (Math.hypot(p.x - startX, p.y - startY) > 10) clearTimeout(state.longPressTimer);
-    }
-    function end(e) {
-      if (!target) return;
-      clearTimeout(state.longPressTimer);
-      if (fired) { e.preventDefault && e.preventDefault(); e.stopImmediatePropagation && e.stopImmediatePropagation(); }
-      target = null; fired = false;
-    }
-    document.addEventListener('pointerdown', start, { passive: false, capture: true });
-    document.addEventListener('touchstart', start, { passive: false, capture: true });
-    document.addEventListener('pointermove', move, { passive: true, capture: true });
-    document.addEventListener('touchmove', move, { passive: true, capture: true });
-    ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel'].forEach(function (name) { document.addEventListener(name, end, { passive: false, capture: true }); });
-    document.addEventListener('contextmenu', function (e) { if (isTranslateButton(e.target)) { e.preventDefault(); openTranslateSettings(); } }, true);
-  }
-
-
-  function loadScriptOnce(url, key) {
-    if (window[key]) return Promise.resolve();
+  function loadAsset(tag, url, attr) {
     return new Promise(function (resolve, reject) {
-      var existing = document.querySelector('script[data-ppst-key="' + key + '"]');
+      var selector = tag + '[' + attr + ']';
+      var existing = document.querySelector(selector);
       if (existing) {
+        if (tag === 'link' || existing.dataset.loaded === '1') return resolve();
         existing.addEventListener('load', resolve, { once: true });
         existing.addEventListener('error', reject, { once: true });
         return;
       }
-      var s = document.createElement('script');
-      s.src = url;
-      s.async = true;
-      s.dataset.ppstKey = key;
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
+      var el = document.createElement(tag);
+      el.setAttribute(attr, '1');
+      if (tag === 'link') {
+        el.rel = 'stylesheet';
+        el.href = rel(url);
+      } else {
+        el.src = rel(url);
+        el.async = true;
+      }
+      el.onload = function () { el.dataset.loaded = '1'; resolve(); };
+      el.onerror = reject;
+      document.head.appendChild(el);
+      if (tag === 'link') resolve();
     });
   }
 
-  function ensureWukongReady() {
-    if (state.wkReadyPromise) return state.wkReadyPromise;
-    state.wkReadyPromise = apiFetch(CONFIG.wkTokenPath).then(function (token) {
-      if (!token || !token.token || !token.uid) throw new Error('悟空 token 获取失败');
-      state.wkUid = String(token.uid);
-      return loadScriptOnce(CONFIG.wkSdkUrl, 'ppst-wukong-sdk').then(function () {
-        var wk = window.wk;
-        if (!wk || !wk.WKSDK) throw new Error('悟空 SDK 未加载');
-        wk.WKSDK.shared().config.uid = String(token.uid);
-        wk.WKSDK.shared().config.token = String(token.token);
-        wk.WKSDK.shared().config.addr = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + CONFIG.wkWsPath;
-        try { wk.WKSDK.shared().connectManager.connect(); } catch (err) {}
-        return token;
+  function ensureSwiper() {
+    if (window.Swiper) return Promise.resolve(true);
+    return loadAsset('link', CONFIG.swiperCss, 'data-pps-swiper-css')
+      .then(function () { return loadAsset('script', CONFIG.swiperJs, 'data-pps-swiper-js'); })
+      .then(function () { return !!window.Swiper; })
+      .catch(function () {
+        if (window.Swiper) return true;
+        return loadAsset('link', CONFIG.swiperFallbackCss, 'data-pps-swiper-css-fallback')
+          .then(function () { return loadAsset('script', CONFIG.swiperFallbackJs, 'data-pps-swiper-js-fallback'); })
+          .then(function () { return !!window.Swiper; })
+          .catch(function () { return false; });
       });
-    }).catch(function (err) {
-      state.wkReadyPromise = null;
-      throw err;
+  }
+
+  var COUNTRY_FLAG_MAP = { CN: 'CN', MM: 'MM', VN: 'VN', VI: 'VN', TH: 'TH', US: 'US', GB: 'GB', UK: 'GB', JP: 'JP', JA: 'JP', KR: 'KR', KO: 'KR', EN: 'GB' };
+  var LANGUAGE_FLAG_MAP = { CN: 'CN', ZH: 'CN', EN: 'GB', MM: 'MM', MY: 'MM', VI: 'VN', VN: 'VN', TH: 'TH', JP: 'JP', JA: 'JP', KR: 'KR', KO: 'KR' };
+
+  function flagEmojiFromCountry(code) {
+    var c = String(code || '').toUpperCase();
+    if (!/^[A-Z]{2}$/.test(c)) return '';
+    return c.replace(/./g, function (char) { return String.fromCodePoint(127397 + char.charCodeAt(0)); });
+  }
+
+  function normalCode(code) {
+    return String(code || '')
+      .replace(/^\s*\[\s*["']?/, '')
+      .replace(/["']?\s*\]\s*$/, '')
+      .trim()
+      .toUpperCase();
+  }
+
+  function countryFlag(code) {
+    var raw = normalCode(code);
+    var c = COUNTRY_FLAG_MAP[raw] || raw;
+    return flagEmojiFromCountry(c);
+  }
+
+  function languageFlag(code) {
+    var raw = normalCode(code);
+    var c = LANGUAGE_FLAG_MAP[raw] || COUNTRY_FLAG_MAP[raw] || raw;
+    return flagEmojiFromCountry(c);
+  }
+
+  function findOption(list, value) {
+    value = normalCode(value);
+    var found = null;
+    (list || []).some(function (item) {
+      if (normalCode(item.value) === value || normalCode(item.code) === value || normalCode(item.label) === value) {
+        found = item;
+        return true;
+      }
+      return false;
     });
-    return state.wkReadyPromise;
+    return found;
   }
 
-  function randomGreetingShortcode() {
-    var idx = Math.floor(Math.random() * 10) + 1;
-    return '[peipe-greet:hello-' + (idx < 10 ? '0' + idx : String(idx)) + ']';
+  function parseMaybeArray(value) {
+    if (Array.isArray(value)) return value;
+    if (value == null || value === '') return [];
+    var text = String(value).trim();
+    if (!text) return [];
+    try {
+      var parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === 'object') return Object.keys(parsed).map(function (key) { return parsed[key]; });
+      return [parsed];
+    } catch (e) {
+      return text.split(/[\n,，|/]+/g);
+    }
   }
 
-  function sendWukongText(toUid, text) {
-    return ensureWukongReady().then(function () {
-      if (!window.wk || !window.wk.WKSDK) throw new Error('悟空 SDK 不可用');
-      var clientMsgNo = 'pps_greet_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
-      var channel = new window.wk.Channel(String(toUid), 1);
-      var msgContent = new window.wk.MessageText(text);
-      msgContent.text = text;
-      msgContent.content = text;
-      var encode = typeof msgContent.encode === 'function' ? msgContent.encode.bind(msgContent) : null;
-      msgContent.encode = function () {
-        var obj = {};
-        try {
-          var raw = encode ? encode() : null;
-          if (raw instanceof Uint8Array && window.TextDecoder) raw = new TextDecoder('utf-8').decode(raw);
-          if (typeof raw === 'string') {
-            var clean = raw.trim();
-            if (clean && (clean.charAt(0) === '{' || clean.charAt(0) === '[')) obj = JSON.parse(clean);
-            else if (clean) obj = { text: clean, content: clean };
-          } else if (raw && typeof raw === 'object') {
-            obj = Object.assign({}, raw);
+  function normaliseCodeList(value, max) {
+    var seen = {};
+    var list = [];
+    parseMaybeArray(value).forEach(function (item) {
+      var code = normalCode(item);
+      if (!code || seen[code]) return;
+      seen[code] = true;
+      list.push(code);
+    });
+    return list.slice(0, max || 5);
+  }
+
+  function languageLabel(value) {
+    var opt = findOption(OPTIONS.languages, value);
+    var code = normalCode(value);
+    return (opt && (opt.label || opt.value)) || code || '-';
+  }
+
+  function languageCodeText(value) {
+    var code = normalCode(value);
+    if (!code) return '-';
+    if (code === 'VI') return 'VN';
+    if (code === 'JP') return 'JP';
+    return code;
+  }
+
+  function optionText(item, type) {
+    var value = item && item.value;
+    var label = item && (item.label || item.value);
+    var flag = type === 'language' ? languageFlag(value || label) : (type === 'country' ? countryFlag(value || label) : '');
+    return (flag ? flag + ' ' : '') + (label || value || '');
+  }
+
+  function genderClass(value) {
+    value = String(value || '').toLowerCase();
+    if (value === 'male' || value === 'm' || value === '男') return 'male';
+    if (value === 'female' || value === 'f' || value === '女') return 'female';
+    if (value === 'private' || value === 'secret' || value === '保密') return 'private';
+    return '';
+  }
+
+  function genderIcon(value) {
+    var cls = genderClass(value);
+    if (cls === 'male') return '♂';
+    if (cls === 'female') return '♀';
+    if (cls === 'private') return '•';
+    return '';
+  }
+
+  function genderMeta(user) {
+    var gender = user.gender || user.genderCode;
+    var cls = genderClass(gender);
+    var icon = genderIcon(gender);
+    var age = Number(user.age || 0);
+    var html = '';
+    if (icon) html += '<span class="pps-gender-icon pps-gender-' + escapeHtml(cls || 'private') + '" aria-label="' + escapeHtml(TEXT.gender) + '">' + escapeHtml(icon) + '</span>';
+    if (age) html += '<span class="pps-age">' + age + '岁</span>';
+    return html;
+  }
+
+  function renderAvatarBlock(user) {
+    var flag = user.flagEmoji || countryFlag(user.countryCode || user.language_flag);
+    var online = user.isOnline || String(user.status || '').toLowerCase() === 'online';
+    return '<div class="pps-avatar-wrap">' +
+      avatarHtml(user, 'pps-avatar') +
+      (flag ? '<span class="pps-avatar-flag">' + escapeHtml(flag) + '</span>' : '') +
+      (online ? '<span class="pps-online-dot" aria-label="online"></span>' : '') +
+    '</div>';
+  }
+
+  function renderLanguageChip(value, className) {
+    var code = languageCodeText(value);
+    if (!code || code === '-') return '';
+    return '<span class="pps-lang-code ' + (className || '') + '" title="' + escapeHtml(languageLabel(value)) + '">' + escapeHtml(code) + '</span>';
+  }
+
+  function renderLanguageList(values, className, max) {
+    values = normaliseCodeList(values, max || 5);
+    if (!values.length) return '';
+    return values.slice(0, max || 5).map(function (code) { return renderLanguageChip(code, className); }).filter(Boolean).join('<span class="pps-lang-space"> </span>');
+  }
+
+  function optionLabel(list, value) {
+    var opt = findOption(list, value);
+    return (opt && (opt.label || opt.value)) || '';
+  }
+
+  function renderProfileDetails(user) {
+    var chips = [];
+    var loc = norm(user.locationText || user.location || user.city || '');
+    if (loc) chips.push('<span class=\"pps-location-icon\">📍</span>' + escapeHtml(loc));
+    if (user.heightCm) chips.push(escapeHtml(user.heightCm + 'cm'));
+    if (user.weightKg) chips.push(escapeHtml(user.weightKg + 'kg'));
+    var edu = optionLabel(OPTIONS.educations, user.education);
+    if (edu && edu !== '保密') chips.push(escapeHtml(edu));
+    var job = optionLabel(OPTIONS.occupations || [], user.occupation) || user.occupation;
+    if (job && job !== TEXT.selectPlaceholder) chips.push(escapeHtml(job));
+    var rel = optionLabel(OPTIONS.relationships, user.relationship || user.relationshipStatus);
+    if (rel && rel !== '保密') chips.push(escapeHtml(rel));
+    if (!chips.length) return '';
+    return '<div class="pps-detail-row">' + chips.slice(0, 4).map(function (txt) { return '<span class="pps-detail-chip">' + txt + '</span>'; }).join('') + '</div>';
+  }
+
+  function tagLabel(key) {
+    var found = null;
+    (state.tagCategories || []).some(function (cat) {
+      return (cat.tags || []).some(function (tag) {
+        if (tag.key === key) { found = tag; return true; }
+        return false;
+      });
+    });
+    if (!found) return key;
+    return TEXT[found.labelKey] || found.label || key;
+  }
+
+  function categoryLabel(cat) {
+    return TEXT[cat.labelKey] || cat.label || cat.key;
+  }
+
+  function isProfileComplete(profile) {
+    return !!(profile && profile.displayName && profile.language_flag && profile.language_fluent && profile.language_learning && profile.gender && profile.birthday);
+  }
+
+  function normalisePhotos(list) {
+    if (!Array.isArray(list)) return [];
+    var out = [];
+    list.forEach(function (url) {
+      url = norm(url);
+      if (url && out.indexOf(url) === -1) out.push(url);
+    });
+    return out.slice(0, CONFIG.maxPhotos);
+  }
+
+  function avatarHtml(user, cls) {
+    var src = user && (user.avatar || user.accountPicture || user.uploadedpicture || user.picture);
+    var name = (user && (user.displayName || user.username)) || 'U';
+    if (src) return '<img class="' + cls + '" src="' + escapeHtml(src) + '" alt="avatar">';
+    return '<span class="' + cls + ' pps-avatar-fallback">' + escapeHtml(name.slice(0, 1).toUpperCase()) + '</span>';
+  }
+
+  function iconBack() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>';
+  }
+
+  function iconSettings() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-.4-1.1 1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1A1.7 1.7 0 0 0 2.9 13H3a2 2 0 1 1 0-4h-.09a1.7 1.7 0 0 0 1.1-.4 1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 .4 1.1 1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.2.37.5.7.9.9.33.17.7.26 1.1.26h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.1.26c-.4.2-.7.53-.9.9z"></path></svg>';
+  }
+
+  function iconGreet() {
+    return '👋';
+  }
+
+  function loadTranslations() {
+    return new Promise(function (resolve) {
+      if (!window.require) return resolve();
+      try {
+        window.require(['translator'], function (translator) {
+          var keys = Object.keys(TEXT);
+          if (!translator || typeof translator.translate !== 'function' || !keys.length) return resolve();
+          var left = keys.length;
+          var done = false;
+          function finish() {
+            left -= 1;
+            if (!left && !done) {
+              done = true;
+              resolve();
+            }
           }
-        } catch (err) { obj = {}; }
-        obj.text = text;
-        obj.content = text;
-        obj.client_msg_no = clientMsgNo;
-        obj.clientMsgNo = clientMsgNo;
-        obj.type = 1;
-        return JSON.stringify(obj);
-      };
-      return window.wk.WKSDK.shared().chatManager.send(msgContent, channel);
+          keys.forEach(function (key) {
+            try {
+              translator.translate('[[peipe-partners-swipe:' + key + ']]', function (translated) {
+                if (translated && translated.indexOf('[[') !== 0) TEXT[key] = translated;
+                finish();
+              });
+            } catch (e) {
+              finish();
+            }
+          });
+          setTimeout(function () {
+            if (!done) {
+              done = true;
+              resolve();
+            }
+          }, 1200);
+        }, resolve);
+      } catch (err) {
+        resolve();
+      }
     });
   }
 
-  function markChatRoute(toUid) {
-    return apiFetch(CONFIG.apiBase + '/me/chat-route', {
+
+  function normalPathname() {
+    var base = (window.config && window.config.relative_path) || '';
+    var path = window.location && window.location.pathname || '';
+    if (base && path.indexOf(base) === 0) path = path.slice(base.length) || '/';
+    return path.replace(/\/+$/, '') || '/';
+  }
+
+  function isSwipeRoute() {
+    var path = normalPathname();
+    return path === '/partners/swipe' || path === '/nearby/swipe' || path === '/nearby';
+  }
+
+  function currentMode() {
+    var path = normalPathname();
+    var dataMode = state.root && state.root.getAttribute('data-mode');
+    if (path === '/nearby' || path === '/nearby/swipe') return 'nearby';
+    return dataMode === 'nearby' ? 'nearby' : 'recommend';
+  }
+
+  function cleanupFullScreenMode() {
+    document.documentElement.classList.remove('peipe-swipe-html');
+    document.body.classList.remove('peipe-swipe-mode');
+  }
+
+  function buildChrome() {
+    state.root.innerHTML = '' +
+      '<div class="pps-native-feed" hidden></div>' +
+      '<div class="pps-swiper swiper" hidden><div class="swiper-wrapper"></div></div>' +
+      '<button type="button" class="pps-floating-settings pps-edit-profile" aria-label="' + escapeHtml(TEXT.settings) + '">' + iconSettings() + '</button>' +
+      '<div class="pps-loading">' + escapeHtml(TEXT.loading) + '</div>' +
+      '<div class="pps-toast" hidden></div>' +
+      '<div class="pps-sheet-backdrop"></div>' +
+      '<section class="pps-profile-sheet" role="dialog" aria-modal="true"></section>' +
+      '<div class="pps-comment-backdrop"></div>' +
+      '<section class="pps-comment-sheet" role="dialog" aria-modal="true"></section>' +
+      '<div class="pps-tag-backdrop"></div>' +
+      '<section class="pps-tag-sheet" role="dialog" aria-modal="true"></section>';
+  }
+
+
+  function renderFloatComments(user) {
+    var list = Array.isArray(user.floatComments) ? user.floatComments : [];
+    list = list.filter(function (item) { return item && norm(item.content); }).slice(0, 3);
+    if (!list.length) return '';
+    return '<div class="pps-float-comments">' + list.map(function (item, index) {
+      var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml(String(item.authorName || 'U').slice(0, 1).toUpperCase()) + '</span>';
+      return '<div class="pps-float-comment pps-float-comment-' + index + '"><div class="pps-float-avatar">' + avatar + '</div><div class="pps-float-text">' + escapeHtml(item.content) + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function commentHtml(item) {
+    item = item || {};
+    var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml(String(item.authorName || 'U').slice(0, 1).toUpperCase()) + '</span>';
+    var mine = item.mine ? ' is-mine' : '';
+    return '<div class="pps-comment-item' + mine + '" data-id="' + escapeHtml(item.id || '') + '">' +
+      '<div class="pps-comment-avatar">' + avatar + '</div>' +
+      '<div class="pps-comment-body"><div class="pps-comment-name">' + escapeHtml(item.authorName || 'User') + '</div><div class="pps-comment-content">' + escapeHtml(item.content || '') + '</div></div>' +
+    '</div>';
+  }
+
+  function getUserByUid(uid) {
+    uid = Number(uid || 0);
+    return state.users.filter(function (item) { return Number(item.uid) === uid; })[0] || null;
+  }
+
+  function renderCommentSheet(targetUid, loading) {
+    var user = getUserByUid(targetUid) || {};
+    var sheet = $('.pps-comment-sheet', state.root);
+    if (!sheet) return;
+    sheet.innerHTML = '' +
+      '<div class="pps-comment-head"><div><strong>' + escapeHtml(TEXT.commentTitle) + '</strong><span>' + escapeHtml(user.displayName || user.username || '') + '</span></div><button type="button" class="pps-comment-close">×</button></div>' +
+      '<div class="pps-comment-list">' + (loading ? '<div class="pps-comment-muted">' + escapeHtml(TEXT.loading) + '</div>' : '') + '</div>' +
+      '<div class="pps-comment-editor"><textarea class="pps-comment-input" maxlength="80" placeholder="' + escapeHtml(TEXT.commentPlaceholder) + '"></textarea><button type="button" class="pps-comment-submit">' + escapeHtml(TEXT.commentSubmit) + '</button></div>';
+  }
+
+  function openComments(targetUid) {
+    if (!targetUid) return;
+    state.commentTargetUid = Number(targetUid);
+    renderCommentSheet(targetUid, true);
+    $('.pps-comment-backdrop', state.root).classList.add('is-open');
+    $('.pps-comment-sheet', state.root).classList.add('is-open');
+    loadComments(targetUid);
+  }
+
+  function closeComments() {
+    state.commentTargetUid = 0;
+    $('.pps-comment-backdrop', state.root).classList.remove('is-open');
+    $('.pps-comment-sheet', state.root).classList.remove('is-open');
+  }
+
+  function loadComments(targetUid) {
+    var list = $('.pps-comment-list', state.root);
+    if (!list) return;
+    apiFetch('/api/peipe-swipe/comments/' + encodeURIComponent(targetUid) + '?limit=30').then(function (json) {
+      var comments = Array.isArray(json.comments) ? json.comments : [];
+      var viewer = json.viewerComment || null;
+      list.innerHTML = comments.length ? comments.map(commentHtml).join('') : '<div class="pps-comment-muted">' + escapeHtml(TEXT.commentEmpty) + '</div>';
+      var input = $('.pps-comment-input', state.root);
+      if (input && viewer && viewer.content) {
+        input.value = viewer.content;
+        state.commentViewerItemId = viewer.id || '';
+      } else {
+        state.commentViewerItemId = '';
+      }
+    }).catch(function (err) {
+      list.innerHTML = '<div class="pps-comment-muted">' + escapeHtml(err.message || TEXT.commentFail) + '</div>';
+    });
+  }
+
+  function submitComment() {
+    if (!isLoggedIn()) { toast(TEXT.commentLogin); return; }
+    var targetUid = Number(state.commentTargetUid || 0);
+    var input = $('.pps-comment-input', state.root);
+    var btn = $('.pps-comment-submit', state.root);
+    var content = norm(input && input.value);
+    if (!targetUid) return;
+    if (!content || content.length < 2) { toast(TEXT.commentTooShort); return; }
+    if (btn) { btn.disabled = true; btn.textContent = TEXT.commentSaving; }
+    apiFetch('/api/peipe-swipe/comments/' + encodeURIComponent(targetUid), {
       method: 'POST',
       headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-      body: JSON.stringify({ uid: toUid })
-    }).catch(function () { return {}; });
+      body: jsonBody({ content: content })
+    }).then(function () {
+      toast(TEXT.commentSaved);
+      loadComments(targetUid);
+      // Refresh the current card later so the new floating comment can enter the feed cache on the next pull.
+    }).catch(function (err) {
+      toast(err.message || TEXT.commentFail);
+    }).finally(function () {
+      if (btn) { btn.disabled = false; btn.textContent = TEXT.commentSubmit; }
+    });
   }
 
-  function handleWukongGreet(btn, e) {
-    if (!isLoggedIn()) { error('请先登录'); return; }
-    var uid = findUidFrom(btn);
-    if (!uid) { error('没有找到用户'); return; }
-    var now = Date.now();
-    if (btn.dataset.ppstSentAt && Number(btn.dataset.ppstSentAt || 0) + 5000 > now && btn.dataset.chatUrl) {
-      location.href = btn.dataset.chatUrl;
+  function renderSlide(user, index) {
+    var photos = normalisePhotos(user.photos);
+    if (!photos.length) photos = normalisePhotos([user.avatar || user.accountPicture || user.uploadedpicture || user.picture]);
+    var photoSlides = photos.length ? photos.map(function (src) {
+      return '<div class="swiper-slide"><img class="pps-photo" src="' + escapeHtml(src) + '" alt="photo" loading="eager" decoding="async"></div>';
+    }).join('') : '<div class="swiper-slide"><div class="pps-empty-bg"></div></div>';
+    var dots = photos.length > 1 ? '<div class="pps-pagination"></div>' : '';
+    var seenTags = {};
+    var tags = (user.tags || []).filter(function (key) { if (!key || seenTags[key]) return false; seenTags[key] = true; return true; }).slice(0, 8).map(function (key) { return '<span class="pps-tag">' + escapeHtml(tagLabel(key)) + '</span>'; }).join('');
+    var meta = genderMeta(user);
+    var bio = norm(user.bio) || TEXT.noBio;
+    var nativeList = user.nativeCodes || user.language_fluent || user.nativeCode || '';
+    var learnList = user.learnCodes || user.language_learning || user.learnCode || '';
+    var slideClass = tags ? ' swiper-slide pps-slide pps-has-tags' : ' swiper-slide pps-slide';
+
+    return '' +
+      '<section class="' + slideClass + '" data-index="' + index + '" data-uid="' + Number(user.uid || 0) + '">' +
+        '<div class="pps-photo-layer">' +
+          '<div class="pps-photo-swiper swiper" data-index="' + index + '"><div class="swiper-wrapper">' + photoSlides + '</div>' + dots + '</div>' +
+        '</div>' +
+        '<div class="pps-gradient"></div>' +
+        renderFloatComments(user) +
+        '<div class="pps-info">' +
+          '<div class="pps-user-card">' +
+            renderAvatarBlock(user) +
+            '<div class="pps-user-main">' +
+              '<div class="pps-name-row"><span class="pps-name">' + escapeHtml(user.displayName || user.username || 'User') + '</span>' + (meta ? '<span class="pps-user-meta">' + meta + '</span>' : '') + '</div>' +
+              '<div class="pps-lang-row"><div class="pps-lang-side">' + renderLanguageList(nativeList, 'pps-native-chip', 3) + '</div><span class="pps-arrow">⇋</span><div class="pps-lang-side pps-lang-learn">' + renderLanguageList(learnList, 'pps-learn-chip', 5) + '</div></div>' +
+              renderProfileDetails(user) +
+            '</div>' +
+          '</div>' +
+          '<div class="pps-bio">' + escapeHtml(bio) + '</div>' +
+          (tags ? '<div class="pps-tags">' + tags + '</div>' : '') +
+        '</div>' +
+        '<div class="pps-side-actions"><button type="button" class="pps-comment-btn" data-uid="' + Number(user.uid || 0) + '"><span>💬</span><b>' + escapeHtml(TEXT.commentAction) + '</b></button><button type="button" class="pps-greet-btn" data-uid="' + Number(user.uid || 0) + '"><span class="pps-greet-wave">👋</span><span class="pps-greet-label">Hi</span></button></div>' +
+      '</section>';
+  }
+
+  function updateSlides(reset) {
+    var html = state.users.map(renderSlide).join('');
+    if (window.Swiper && state.swiper) {
+      state.swiper.virtual.slides = state.users.map(renderSlide);
+      state.swiper.virtual.update(true);
+      if (reset) state.swiper.slideTo(0, 0);
+      afterSlideUpdate();
       return;
     }
-    if (btn.dataset.ppstSending === '1') return;
-    btn.dataset.ppstSending = '1';
-    btn.classList.add('ppst-greet-sending');
-    var text = randomGreetingShortcode();
-    sendWukongText(uid, text).then(function () {
-      btn.dataset.ppstSentAt = String(Date.now());
-      btn.classList.add('ppst-greet-sent');
-      toast('已发送，继续刷不会打断；再点一次打开聊天');
-      return markChatRoute(uid);
-    }).then(function (route) {
-      if (route && route.chatUrl) btn.dataset.chatUrl = rel(route.chatUrl);
-      if (CONFIG.greetOpenChatAfterSend && btn.dataset.chatUrl) location.href = btn.dataset.chatUrl;
-    }).catch(function (err) {
-      error((err && err.message) || '发送失败');
-    }).finally(function () {
-      btn.dataset.ppstSending = '0';
-      btn.classList.remove('ppst-greet-sending');
+    var feed = $('.pps-native-feed', state.root);
+    if (feed) feed.innerHTML = html;
+    initPhotoSwipers();
+    preloadAround(state.index);
+  }
+
+
+  function hideSettingsButton() {
+    if (!state.settingsVisible) return;
+    state.settingsVisible = false;
+    var btn = $('.pps-floating-settings', state.root);
+    if (btn) btn.classList.add('is-hidden');
+  }
+
+  function initMainSwiper() {
+    var el = $('.pps-swiper', state.root);
+    if (!el || !window.Swiper) return false;
+    if (state.swiper) return true;
+    state.swiper = new window.Swiper(el, {
+      direction: 'vertical',
+      slidesPerView: 1,
+      speed: 250,
+      threshold: 3,
+      resistanceRatio: 0.38,
+      watchSlidesProgress: true,
+      preventClicks: false,
+      preventClicksPropagation: false,
+      passiveListeners: false,
+      virtual: {
+        enabled: true,
+        addSlidesBefore: 1,
+        addSlidesAfter: 2,
+        slides: state.users.map(renderSlide)
+      },
+      on: {
+        init: function (swiper) {
+          state.index = swiper.activeIndex || 0;
+          afterSlideUpdate();
+        },
+        slideChange: function (swiper) {
+          state.index = swiper.activeIndex || 0;
+          hideSettingsButton();
+          if (state.index >= state.users.length - 4) loadFeed(false);
+          afterSlideUpdate();
+        },
+        virtualUpdate: afterSlideUpdate,
+        reachEnd: function () { loadFeed(false); }
+      }
+    });
+    return true;
+  }
+
+  function afterSlideUpdate() {
+    initPhotoSwipers();
+    preloadAround(state.index);
+  }
+
+  function initPhotoSwipers() {
+    if (!window.Swiper) return;
+    $$('.pps-photo-swiper', state.root).forEach(function (el) {
+      var idx = Number(el.dataset.index || -1);
+      if (state.photoSwipers.has(idx) && state.photoSwipers.get(idx).el === el) return;
+      var user = state.users[idx];
+      if (!user) return;
+      var photos = normalisePhotos(user.photos);
+      if (photos.length <= 1) return;
+      var sw = new window.Swiper(el, {
+        direction: 'horizontal',
+        slidesPerView: 1,
+        speed: 220,
+        nested: true,
+        threshold: 3,
+        resistanceRatio: 0.55,
+        pagination: { el: $('.pps-pagination', el), clickable: false }
+      });
+      state.photoSwipers.set(idx, sw);
     });
   }
 
-  function bindGlobal() {
-    document.addEventListener('click', function (e) {
-      var btn;
-      if ((btn = e.target.closest('.pps-greet-btn'))) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        handleWukongGreet(btn, e);
-        return;
+  function useNativeFeed() {
+    state.nativeMode = true;
+    $('.pps-swiper', state.root).hidden = true;
+    var feed = $('.pps-native-feed', state.root);
+    feed.hidden = false;
+    feed.addEventListener('scroll', function () {
+      var idx = Math.max(0, Math.round(feed.scrollTop / Math.max(1, feed.clientHeight)));
+      if (idx !== state.index) {
+        state.index = idx;
+        hideSettingsButton();
+        preloadAround(idx);
+        if (idx >= state.users.length - 4) loadFeed(false);
       }
-      if ((btn = e.target.closest('.pps-comment-btn,.ppst-open-review'))) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
-      if (e.target.closest('.pps-tags,.pps-tag-list,.pps-profile-tags')) {
-        var tags = e.target.closest('.pps-tags,.pps-tag-list,.pps-profile-tags');
-        tags.classList.toggle('is-expanded');
-        return;
-      }
-      if (e.target.closest('.ppst-card-intro') && !e.target.closest('.ppst-inline-translate')) {
-        e.target.closest('.ppst-card-intro').classList.toggle('is-expanded');
-        return;
-      }
-      if (e.target.closest('.ppst-review-close') || e.target.closest('.ppst-review-mask')) { e.preventDefault(); closeReview(); return; }
-      if ((btn = e.target.closest('.ppst-star'))) { e.preventDefault(); setRating(btn.dataset.key, btn.dataset.value); return; }
-      if (e.target.closest('.ppst-review-submit')) { e.preventDefault(); submitReview(); return; }
-      if ((btn = e.target.closest('.ppst-review-translate'))) { e.preventDefault(); var item = btn.closest('.ppst-review-item'); translateInto(btn, $('.ppst-review-content', item)); return; }
-      if ((btn = e.target.closest('.ppst-input-translate'))) { e.preventDefault(); translateInto(btn, $('.ppst-review-input')); return; }
-      if (e.target.closest('.ppst-settings-close,.ppst-settings-cancel,.ppst-settings-mask')) { e.preventDefault(); closeTranslateSettings(); return; }
-      if ((btn = e.target.closest('.ppst-provider-tabs button'))) { e.preventDefault(); $$('.ppst-provider-tabs button').forEach(function (b) { b.classList.toggle('active', b === btn); }); $('.ppst-provider').value = btn.dataset.provider || 'google'; $('.ppst-ai').classList.toggle('show', btn.dataset.provider === 'ai'); return; }
-      if ((btn = e.target.closest('.ppst-lang-trigger'))) { e.preventDefault(); openLangPicker(btn.dataset.role); return; }
-      if (e.target.closest('.ppst-lang-close,.ppst-lang-mask')) { e.preventDefault(); closeLangPicker(); return; }
-      if ((btn = e.target.closest('.ppst-lang-option'))) { e.preventDefault(); var target = state.langPickerRole === 'source' ? $('.ppst-source-lang') : $('.ppst-target-lang'); if (target) target.value = btn.dataset.code || 'auto'; closeLangPicker(); updateSettingsPreview(); return; }
-      if (e.target.closest('.ppst-settings-save')) {
-        e.preventDefault();
-        saveTranslateSettings({
-          sourceLang: normalizeLangCode($('.ppst-source-lang').value, 'auto'),
-          targetLang: normalizeLangCode($('.ppst-target-lang').value, getDefaultTargetLang()),
-          provider: $('.ppst-provider').value === 'ai' ? 'ai' : 'google',
-          aiEndpoint: norm($('.ppst-ai-endpoint').value), aiModel: norm($('.ppst-ai-model').value), aiApiKey: norm($('.ppst-ai-key').value), aiPrompt: norm($('.ppst-ai-prompt').value) || CONFIG.defaultPrompt,
-          temperature: 0.3
+    });
+  }
+
+  function showFeed() {
+    var loading = $('.pps-loading', state.root);
+    if (loading) loading.hidden = true;
+    if (window.Swiper) {
+      $('.pps-swiper', state.root).hidden = false;
+      $('.pps-native-feed', state.root).hidden = true;
+      initMainSwiper();
+      updateSlides(false);
+    } else {
+      useNativeFeed();
+      updateSlides(false);
+    }
+  }
+
+  function showEmpty(text) {
+    var loading = $('.pps-loading', state.root);
+    if (loading) loading.outerHTML = '<div class="pps-empty">' + escapeHtml(text || TEXT.empty) + '</div>';
+  }
+
+  function preloadImage(src) {
+    if (!src) return;
+    try {
+      var img = new Image();
+      img.decoding = 'async';
+      img.loading = 'eager';
+      img.src = src;
+    } catch (e) {}
+  }
+
+  function preloadAround(index) {
+    var start = Math.max(0, Number(index || 0));
+    var end = Math.min(state.users.length - 1, start + CONFIG.preloadAhead);
+    for (var i = start; i <= end; i += 1) {
+      normalisePhotos(state.users[i] && state.users[i].photos).slice(0, 2).forEach(preloadImage);
+      var avatar = state.users[i] && (state.users[i].avatar || state.users[i].accountPicture);
+      preloadImage(avatar);
+    }
+  }
+
+  function syncLocationIfPossible() {
+    if (!isLoggedIn() || !navigator.geolocation) return Promise.resolve(false);
+    var uid = String(currentUser() && currentUser().uid || '0');
+    var key = 'pps-location-sync:' + uid;
+    var last = Number(localStorage.getItem(key) || 0) || 0;
+    if (Date.now() - last < 6 * 60 * 60 * 1000) return Promise.resolve(false);
+    localStorage.setItem(key, String(Date.now()));
+    return new Promise(function (resolve) {
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        var c = pos && pos.coords;
+        if (!c) return resolve(false);
+        apiFetch('/api/peipe-swipe/location', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
+          body: JSON.stringify({ lat: c.latitude, lng: c.longitude })
+        }).then(function () {
+          resolve(true);
+        }).catch(function (err) {
+          console.warn('[peipe-swipe] location save failed', err);
+          resolve(false);
         });
-        closeTranslateSettings(); toast('翻译设置已保存'); return;
-      }
-      if ((btn = e.target.closest('.ppst-inline-translate'))) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        if (state.translateSuppressClickUntil && Date.now() < state.translateSuppressClickUntil) return;
-        translateInto(btn, btn.previousElementSibling);
+      }, function () { resolve(false); }, {
+        enableHighAccuracy: false,
+        timeout: 6500,
+        maximumAge: 60 * 60 * 1000
+      });
+    });
+  }
+
+  function loadFeed(refresh) {
+    if (state.loading || (state.done && !refresh)) return Promise.resolve();
+    state.loading = true;
+    if (refresh) {
+      state.done = false;
+      state.users = [];
+      state.index = 0;
+      state.photoSwipers.clear();
+    }
+    return apiFetch('/api/peipe-swipe/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize)
+      .then(function (json) {
+        var users = Array.isArray(json.users) ? json.users : [];
+        state.users = refresh ? users : state.users.concat(users);
+        state.done = json.hasMore === false || users.length === 0;
+        if (!state.users.length) showEmpty(TEXT.empty);
+        else showFeed();
+      })
+      .catch(function (err) {
+        console.warn('[peipe-swipe] feed failed', err);
+        showEmpty(err.message || TEXT.empty);
+      })
+      .finally(function () { state.loading = false; });
+  }
+
+  function loadMe() {
+    if (!isLoggedIn()) {
+      state.profileComplete = true;
+      return Promise.resolve();
+    }
+    return apiFetch('/api/peipe-swipe/swipe/me')
+      .then(function (json) {
+        state.profile = json.profile || {};
+        state.profileComplete = !!json.complete;
+        state.tagCategories = json.tagCategories || [];
+        if (!state.profileComplete) openProfile(true);
+      })
+      .catch(function (err) {
+        console.warn('[peipe-swipe] me failed', err);
+      });
+  }
+
+  function ensureGenderOptions() {
+    var seen = {};
+    OPTIONS.genders = (OPTIONS.genders || []).filter(function (item) {
+      if (!item || !item.value || item.value === 'other' || seen[item.value]) return false;
+      seen[item.value] = true;
+      return true;
+    });
+    if (!seen.private && !seen['保密']) OPTIONS.genders.push({ value: 'private', label: TEXT.privateGender });
+  }
+
+  function loadOptions() {
+    ensureGenderOptions();
+    return apiFetch('/api/peipe-swipe/options')
+      .then(function (json) {
+        if (Array.isArray(json.countries)) OPTIONS.countries = json.countries;
+        if (Array.isArray(json.languages)) OPTIONS.languages = json.languages;
+        if (Array.isArray(json.genders)) OPTIONS.genders = json.genders;
+        if (Array.isArray(json.relationships)) OPTIONS.relationships = json.relationships;
+        if (Array.isArray(json.educations)) OPTIONS.educations = json.educations;
+        if (Array.isArray(json.occupations)) OPTIONS.occupations = json.occupations;
+        ensureGenderOptions();
+      })
+      .catch(function () { ensureGenderOptions(); });
+  }
+
+  function loadTags() {
+    return apiFetch('/api/peipe-swipe/swipe/tags')
+      .then(function (json) { state.tagCategories = json.categories || state.tagCategories || []; })
+      .catch(function () {});
+  }
+
+  function toast(text) {
+    var el = $('.pps-toast', state.root);
+    if (!el) return;
+    clearTimeout(state.toastTimer);
+    el.textContent = text;
+    el.hidden = false;
+    requestAnimationFrame(function () { el.classList.add('is-open'); });
+    state.toastTimer = setTimeout(function () {
+      el.classList.remove('is-open');
+      setTimeout(function () { el.hidden = true; }, 210);
+    }, 2100);
+  }
+
+  function greet(uid, btn) {
+    if (!isLoggedIn()) {
+      toast(TEXT.login);
+      return;
+    }
+    if (!uid || !btn || btn.disabled) return;
+    btn.disabled = true;
+    var label = $('.pps-greet-label', btn);
+    var old = label ? label.textContent : TEXT.greet;
+    if (label) label.textContent = TEXT.greeting;
+    apiFetch('/api/peipe-swipe/me/greet', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
+      body: jsonBody({ uid: uid })
+    }).then(function (json) {
+      if (json && json.already) toast(TEXT.greetAlready);
+      else toast(TEXT.greetOk);
+      if (label) label.textContent = TEXT.greeted;
+    }).catch(function (err) {
+      if (/daily-limit/.test(err.message)) toast(TEXT.greetLimit);
+      else toast(err.message || TEXT.greetFail);
+      btn.disabled = false;
+      if (label) label.textContent = old;
+    });
+  }
+
+  var CHOICE_CONFIGS = {};
+
+  function buildSelect(name, list, value) {
+    var html = '';
+    var hasEmpty = false;
+    (list || []).forEach(function (item) {
+      if (String(item.value || '') === '') hasEmpty = true;
+    });
+    if (!hasEmpty) html += '<option value="">' + escapeHtml(TEXT.selectPlaceholder) + '</option>';
+    html += (list || []).map(function (item) {
+      var selected = String(item.value || '') === String(value || '') ? ' selected' : '';
+      return '<option value="' + escapeHtml(item.value || '') + '"' + selected + '>' + escapeHtml(item.label || item.value || TEXT.selectPlaceholder) + '</option>';
+    }).join('');
+    return '<select name="' + name + '">' + html + '</select>';
+  }
+
+  function choiceValues(value, multiple, max) {
+    if (multiple) return normaliseCodeList(value, max || 5);
+    var code = normalCode(value);
+    return code ? [code] : [];
+  }
+
+  function choiceSummary(list, value, type, multiple, max) {
+    var values = choiceValues(value, multiple, max);
+    if (!values.length) return TEXT.selectPlaceholder;
+    return values.map(function (code) {
+      var opt = findOption(list, code) || { value: code, label: code };
+      return optionText(opt, type);
+    }).join('、');
+  }
+
+  function hiddenChoiceValue(value, multiple, max) {
+    var values = choiceValues(value, multiple, max);
+    return multiple ? JSON.stringify(values) : (values[0] || '');
+  }
+
+  function buildChoicePicker(name, list, value, type, multiple, max, title) {
+    CHOICE_CONFIGS[name] = { name: name, list: list || [], type: type || 'text', multiple: !!multiple, max: Number(max || 1) || 1, title: title || name };
+    var hidden = hiddenChoiceValue(value, multiple, max);
+    var summary = choiceSummary(list, value, type, multiple, max);
+    return '<div class="pps-choice-picker" data-name="' + escapeHtml(name) + '">' +
+      '<input type="hidden" name="' + escapeHtml(name) + '" value="' + escapeHtml(hidden) + '">' +
+      '<button type="button" class="pps-choice-open" data-name="' + escapeHtml(name) + '"><span class="pps-choice-summary">' + escapeHtml(summary) + '</span><span class="pps-choice-caret">›</span></button>' +
+    '</div>';
+  }
+
+  function buildChoiceGrid(name, list, value, type, multiple, max) {
+    return buildChoicePicker(name, list, value, type, multiple, max, name);
+  }
+
+  function getChoiceValue(name) {
+    var input = $('.pps-choice-picker[data-name="' + name + '"] input[type="hidden"]', state.root) || $('[name="' + name + '"]', state.root);
+    if (!input) return '';
+    var cfg = CHOICE_CONFIGS[name];
+    if (cfg && cfg.multiple) return normaliseCodeList(input.value, cfg.max || 5);
+    return input.value || '';
+  }
+
+  function updateChoicePicker(name, values) {
+    var cfg = CHOICE_CONFIGS[name];
+    var picker = $('.pps-choice-picker[data-name="' + name + '"]', state.root);
+    if (!cfg || !picker) return;
+    var hidden = $('input[type="hidden"]', picker);
+    var summary = $('.pps-choice-summary', picker);
+    var value = cfg.multiple ? JSON.stringify((values || []).slice(0, cfg.max || 5)) : ((values && values[0]) || '');
+    if (hidden) hidden.value = value;
+    if (summary) summary.textContent = choiceSummary(cfg.list, value, cfg.type, cfg.multiple, cfg.max);
+  }
+
+  function syncChoiceGrid() {}
+
+  function renderPhotoTiles(photos) {
+    photos = normalisePhotos(photos);
+    if (!photos.length) return '';
+    return photos.map(function (src, index) {
+      return '<div class="pps-photo-tile"><img src="' + escapeHtml(src) + '" alt="photo"><button type="button" class="pps-photo-remove" data-index="' + index + '">×</button></div>';
+    }).join('');
+  }
+
+  function renderSelectedTags(tags) {
+    tags = Array.isArray(tags) ? tags : [];
+    if (!tags.length) return '<span class="pps-form-note">' + escapeHtml(TEXT.chooseTags) + '</span>';
+    return tags.map(function (key) { return '<span class="pps-mini-tag">' + escapeHtml(tagLabel(key)) + '</span>'; }).join('');
+  }
+
+  function openProfile(required) {
+    state.requiredProfile = !!required;
+    hideSettingsButton();
+    var profile = Object.assign({}, state.profile || {});
+    profile.photos = normalisePhotos(profile.photos);
+    state.selectedTags = Array.isArray(profile.tags) ? profile.tags.slice(0, 12) : [];
+    var sheet = $('.pps-profile-sheet', state.root);
+    var backdrop = $('.pps-sheet-backdrop', state.root);
+    var me = currentUser() || {};
+    var avatar = profile.avatar || profile.accountPicture || me.picture || me.uploadedpicture || '';
+    var title = required ? TEXT.profileTitle : TEXT.editProfileTitle;
+
+    sheet.innerHTML = '' +
+      '<div class="pps-profile-panel">' +
+        '<div class="pps-profile-scroll">' +
+          '<div class="pps-profile-head"><div><div class="pps-profile-title">' + escapeHtml(title) + '</div><div class="pps-profile-subtitle">' + escapeHtml(TEXT.profileSubtitle) + '</div></div></div>' +
+          '<div class="pps-form-grid">' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.displayName) + '</label><div class="pps-display-row"><button type="button" class="pps-avatar-upload" aria-label="' + escapeHtml(TEXT.uploadAvatar) + '">' + (avatar ? '<img class="pps-form-avatar pps-form-avatar-img" data-avatar="' + escapeHtml(avatar) + '" src="' + escapeHtml(avatar) + '" alt="avatar">' : '<span class="pps-form-avatar pps-form-avatar-img" data-avatar=""></span>') + '<span class="pps-avatar-plus">+</span></button><input class="pps-avatar-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" hidden><input name="displayName" maxlength="40" value="' + escapeHtml(profile.displayName || profile.username || me.username || '') + '"></div></div>' +
+            '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.photos) + '</div><div class="pps-photos-row">' + renderPhotoTiles(profile.photos) + '</div><input class="pps-photo-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" multiple hidden><button type="button" class="pps-upload-btn">' + escapeHtml(TEXT.uploadPhotos) + '</button></div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.bio) + '</label><textarea name="bio" maxlength="180" placeholder="' + escapeHtml(TEXT.bioPlaceholder) + '">' + escapeHtml(profile.bio || '') + '</textarea></div>' +
+            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.country) + '</label>' + buildChoicePicker('language_flag', OPTIONS.countries, profile.language_flag, 'country', false, 1, TEXT.country) + '</div>' +
+            '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.gender) + '</label>' + buildChoicePicker('gender', OPTIONS.genders, profile.gender, 'text', false, 1, TEXT.gender) + '</div>' +
+            '<div class="pps-lang-picker-row pps-span-2">' +
+              '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.nativeLanguage) + '</label>' + buildChoicePicker('language_fluent', OPTIONS.languages, profile.language_fluent, 'language', true, 5, TEXT.nativeLanguage) + '</div>' +
+              '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.learningLanguage) + '</label>' + buildChoicePicker('language_learning', OPTIONS.languages, profile.language_learning, 'language', true, 5, TEXT.learningLanguage) + '</div>' +
+            '</div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.birthday) + '</label><input type="date" name="birthday" value="' + escapeHtml(profile.birthday || '') + '"></div>' +
+            '<div class="pps-field"><label>' + escapeHtml(TEXT.height) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><div class="pps-unit-input"><input inputmode="decimal" name="heightCm" maxlength="5" placeholder="' + escapeHtml(TEXT.heightPlaceholder) + '" value="' + escapeHtml(profile.heightCm || '') + '"><span>cm</span></div></div>' +
+            '<div class="pps-field"><label>' + escapeHtml(TEXT.weight) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label><div class="pps-unit-input"><input inputmode="decimal" name="weightKg" maxlength="5" placeholder="' + escapeHtml(TEXT.weightPlaceholder) + '" value="' + escapeHtml(profile.weightKg || '') + '"><span>kg</span></div></div>' +
+            '<div class="pps-field"><label>' + escapeHtml(TEXT.education) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label>' + buildSelect('education', OPTIONS.educations, profile.education) + '</div>' +
+            '<div class="pps-field"><label>' + escapeHtml(TEXT.relationship) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label>' + buildSelect('relationship', OPTIONS.relationships, profile.relationship || profile.relationshipStatus) + '</div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.occupation) + ' <span>' + escapeHtml(TEXT.optional) + '</span></label>' + buildSelect('occupation', OPTIONS.occupations || [], profile.occupation) + '</div>' +
+            '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.tags) + '</div><div class="pps-selected-tags">' + renderSelectedTags(state.selectedTags) + '</div><button type="button" class="pps-select-tags-btn">' + escapeHtml(TEXT.chooseTags) + '</button></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="pps-profile-actions"><button type="button" class="pps-profile-leave">' + escapeHtml(TEXT.leave) + '</button><button type="button" class="pps-save-btn">' + escapeHtml(TEXT.save) + '</button></div>' +
+      '</div>';
+
+    backdrop.classList.add('is-open');
+    sheet.classList.add('is-open');
+  }
+
+  function closeProfile(force) {
+    if (state.requiredProfile && !force) return;
+    $('.pps-sheet-backdrop', state.root).classList.remove('is-open');
+    $('.pps-profile-sheet', state.root).classList.remove('is-open');
+  }
+
+  function getProfilePhotosFromSheet() {
+    return $$('.pps-photo-tile img', state.root).map(function (img) { return img.getAttribute('src'); }).filter(Boolean).slice(0, CONFIG.maxPhotos);
+  }
+
+  function updateProfilePhotoTiles(photos) {
+    var box = $('.pps-photos-row', state.root);
+    if (box) box.innerHTML = renderPhotoTiles(photos);
+  }
+
+  function getProfileAvatarFromSheet() {
+    var avatar = $('.pps-form-avatar-img', state.root);
+    if (!avatar) return '';
+    return avatar.getAttribute('data-avatar') || avatar.getAttribute('src') || '';
+  }
+
+  function updateProfileAvatar(url) {
+    var avatar = $('.pps-avatar-upload', state.root);
+    if (!avatar || !url) return;
+    avatar.innerHTML = '<img class="pps-form-avatar pps-form-avatar-img" data-avatar="' + escapeHtml(url) + '" src="' + escapeHtml(url) + '" alt="avatar"><span class="pps-avatar-plus">+</span>';
+  }
+
+  function collectProfileData() {
+    var sheet = $('.pps-profile-sheet', state.root);
+    return {
+      displayName: norm($('[name="displayName"]', sheet).value),
+      avatar: getProfileAvatarFromSheet(),
+      photos: getProfilePhotosFromSheet(),
+      bio: norm($('[name="bio"]', sheet).value),
+      language_flag: getChoiceValue('language_flag'),
+      language_fluent: getChoiceValue('language_fluent'),
+      language_learning: getChoiceValue('language_learning'),
+      gender: getChoiceValue('gender'),
+      birthday: $('[name="birthday"]', sheet).value,
+      heightCm: norm($('[name="heightCm"]', sheet).value),
+      weightKg: norm($('[name="weightKg"]', sheet).value),
+      education: $('[name="education"]', sheet).value,
+      relationship: $('[name="relationship"]', sheet).value,
+      occupation: $('[name="occupation"]', sheet).value,
+      interestsText: '',
+      tags: state.selectedTags.slice(0, 12)
+    };
+  }
+
+  function profileMissing(data) {
+    var missing = [];
+    if (!data.displayName) missing.push('displayName');
+    if (!data.language_flag) missing.push('country');
+    if (!normaliseCodeList(data.language_fluent, 5).length) missing.push('nativeLanguage');
+    if (!normaliseCodeList(data.language_learning, 5).length) missing.push('learningLanguage');
+    if (!data.gender) missing.push('gender');
+    if (!data.birthday) missing.push('birthday');
+    return missing;
+  }
+
+  function missingLabel(key) {
+    var map = {
+      displayName: TEXT.displayName,
+      photos: TEXT.photos,
+      country: TEXT.country,
+      nativeLanguage: TEXT.nativeLanguage,
+      learningLanguage: TEXT.learningLanguage,
+      gender: TEXT.gender,
+      birthday: TEXT.birthday
+    };
+    return map[key] || key;
+  }
+
+  function validateProfile(data) {
+    var missing = profileMissing(data);
+    if (missing.length) {
+      toast(TEXT.missingPrefix + missing.map(missingLabel).join('、'));
+      return false;
+    }
+    return true;
+  }
+
+  function saveProfile() {
+    if (state.uploadBusy) return toast(TEXT.uploading);
+    var data = collectProfileData();
+    if (!validateProfile(data)) return;
+    var btn = $('.pps-save-btn', state.root);
+    btn.disabled = true;
+    btn.textContent = TEXT.saving;
+    apiFetch('/api/peipe-swipe/swipe/me', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
+      body: jsonBody(data)
+    }).then(function (json) {
+      state.profile = json.profile || data;
+      state.profileComplete = !!json.complete;
+      state.requiredProfile = false;
+      toast(TEXT.saveOk);
+      $('.pps-sheet-backdrop', state.root).classList.remove('is-open');
+      $('.pps-profile-sheet', state.root).classList.remove('is-open');
+      loadFeed(true);
+    }).catch(function (err) {
+      toast(err.message || TEXT.saveFail);
+    }).finally(function () {
+      btn.disabled = false;
+      btn.textContent = TEXT.save;
+    });
+  }
+
+  function fileExt(file) {
+    var name = String(file && file.name || '').toLowerCase();
+    var m = name.match(/\.([a-z0-9]+)$/);
+    return m ? m[1] : '';
+  }
+
+  function mimeFromFile(file) {
+    var type = String(file && file.type || '').toLowerCase();
+    if (/^image\//.test(type)) return type;
+    var ext = fileExt(file);
+    if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+    if (ext === 'png') return 'image/png';
+    if (ext === 'webp') return 'image/webp';
+    if (ext === 'gif') return 'image/gif';
+    if (ext === 'heic') return 'image/heic';
+    if (ext === 'heif') return 'image/heif';
+    return '';
+  }
+
+  function isImageFile(file) {
+    if (!file) return false;
+    var type = String(file.type || '').toLowerCase();
+    var ext = fileExt(file);
+    if (/^(jpg|jpeg|png|webp|gif|heic|heif)$/i.test(ext)) return true;
+    if (!type || type === 'application/octet-stream') return true;
+    return /^image\//.test(type);
+  }
+
+  function withMime(file, type) {
+    if (!file || !type || file.type === type) return file;
+    try { return new File([file], file.name || ('photo-' + Date.now() + '.jpg'), { type: type, lastModified: file.lastModified || Date.now() }); }
+    catch (e) { return file; }
+  }
+
+  function canCanvasEncode(type) {
+    return new Promise(function (resolve) {
+      try {
+        var c = document.createElement('canvas');
+        c.width = 1;
+        c.height = 1;
+        if (!c.toBlob) return resolve(false);
+        c.toBlob(function (b) { resolve(!!b && b.type === type); }, type, 0.8);
+      } catch (e) { resolve(false); }
+    });
+  }
+
+  function imageConfig(opts) {
+    var base = Object.assign({}, CONFIG.imageConfig || {});
+    return Object.assign({
+      maxSide: 1440,
+      maxSizeMB: 0.12,
+      quality: 0.60,
+      minCompressBytes: 120 * 1024,
+      useWebp: true,
+      qualities: [0.60, 0.52, 0.45, 0.38, 0.32, 0.26, 0.20]
+    }, base, opts || {});
+  }
+
+  function imageTargetBytes(cfg) {
+    return Math.max(30 * 1024, Math.round(Number(cfg.maxSizeMB || 0.12) * 1024 * 1024));
+  }
+
+  function extForMime(type) {
+    type = String(type || '').toLowerCase();
+    if (type === 'image/webp') return '.webp';
+    if (type === 'image/png') return '.png';
+    return '.jpg';
+  }
+
+  function loadImageFromFile(file) {
+    return new Promise(function (resolve, reject) {
+      if (!file) return reject(new Error('empty file'));
+      if (window.createImageBitmap) {
+        window.createImageBitmap(file).then(function (bitmap) {
+          resolve({
+            width: bitmap.width,
+            height: bitmap.height,
+            draw: function (ctx, w, h) { ctx.drawImage(bitmap, 0, 0, w, h); },
+            close: function () { try { bitmap.close && bitmap.close(); } catch (e) {} }
+          });
+        }).catch(function () {
+          var img = new Image();
+          var url = URL.createObjectURL(file);
+          img.onload = function () {
+            URL.revokeObjectURL(url);
+            resolve({
+              width: img.naturalWidth || img.width,
+              height: img.naturalHeight || img.height,
+              draw: function (ctx, w, h) { ctx.drawImage(img, 0, 0, w, h); },
+              close: function () {}
+            });
+          };
+          img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('decode failed')); };
+          img.src = url;
+        });
         return;
       }
-    }, true);
+      var img = new Image();
+      var url = URL.createObjectURL(file);
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        resolve({
+          width: img.naturalWidth || img.width,
+          height: img.naturalHeight || img.height,
+          draw: function (ctx, w, h) { ctx.drawImage(img, 0, 0, w, h); },
+          close: function () {}
+        });
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('decode failed')); };
+      img.src = url;
+    });
   }
 
-
-  function greetStickerUrl(name) {
-    name = String(name || '').toLowerCase();
-    if (!/^hello-(0[1-9]|10)$/.test(name)) return '';
-    return rel('/plugins/nodebb-plugin-peipe-swipe-official/swipe/greet/' + name + '.webm');
+  function canvasToBlob(canvas, type, quality) {
+    return new Promise(function (resolve) {
+      canvas.toBlob(function (blob) { resolve(blob); }, type, quality);
+    });
   }
 
-  function greetStickerNode(name) {
-    var src = greetStickerUrl(name);
-    if (!src) return document.createTextNode('[peipe-greet:' + name + ']');
-    var wrap = document.createElement('span');
-    wrap.className = 'peipe-greet-sticker-wrap';
-    wrap.setAttribute('data-peipe-greet-rendered', name);
-    wrap.innerHTML = '<video class="peipe-greet-sticker" src="' + escapeHtml(src) + '" autoplay loop muted playsinline preload="metadata"></video>';
-    return wrap;
+  function makeCompressedFile(original, blob, type) {
+    if (!blob || !blob.size) return original;
+    var base = String(original && original.name || ('photo-' + Date.now())).replace(/\.[^.]+$/, '');
+    try { return new File([blob], base + extForMime(type), { type: type, lastModified: Date.now() }); }
+    catch (e) { blob.name = base + extForMime(type); return blob; }
   }
 
-  function renderGreetStickers(root) {
-    root = root || document.body;
-    if (!root || root.nodeType !== 1) return;
-    var deny = /^(SCRIPT|STYLE|TEXTAREA|INPUT|SELECT|OPTION|VIDEO|CANVAS)$/;
-    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode: function (node) {
-        if (!node || !node.nodeValue || node.nodeValue.indexOf('[peipe-greet:') === -1) return NodeFilter.FILTER_REJECT;
-        var p = node.parentNode;
-        while (p && p !== (root && root.parentNode)) {
-          if (p.nodeType === 1) {
-            if (deny.test(p.tagName || '')) return NodeFilter.FILTER_REJECT;
-            if (p.classList && (p.classList.contains('peipe-greet-sticker-wrap') || p.classList.contains('composer') || p.classList.contains('write') || p.isContentEditable)) return NodeFilter.FILTER_REJECT;
-          }
-          p = p.parentNode;
+  function compressWithLibrary(file, cfg, targetType) {
+    if (typeof window.imageCompression !== 'function') return Promise.resolve(null);
+    return window.imageCompression(file, {
+      maxSizeMB: Number(cfg.maxSizeMB || 0.12),
+      maxWidthOrHeight: Number(cfg.maxSide || 1440),
+      useWebWorker: true,
+      fileType: targetType,
+      initialQuality: Number(cfg.quality || 0.60),
+      alwaysKeepResolution: false,
+      preserveExif: false
+    }).then(function (blob) {
+      if (!blob || !blob.size) return null;
+      return blob;
+    }).catch(function (err) {
+      console.warn('[peipe-swipe] imageCompression library failed, fallback to canvas', err);
+      return null;
+    });
+  }
+
+  function compressWithCanvas(file, cfg, targetType) {
+    return loadImageFromFile(file).then(function (img) {
+      var w = img.width || 1;
+      var h = img.height || 1;
+      var maxSide = Number(cfg.maxSide || 1440);
+      var scale = Math.min(1, maxSide / Math.max(w, h));
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(w * scale));
+      canvas.height = Math.max(1, Math.round(h * scale));
+      var ctx = canvas.getContext('2d');
+      if (!ctx || !canvas.toBlob) return null;
+      ctx.drawImage && img.draw(ctx, canvas.width, canvas.height);
+      img.close && img.close();
+
+      var targetBytes = imageTargetBytes(cfg);
+      var qualities = Array.isArray(cfg.qualities) && cfg.qualities.length ? cfg.qualities : [cfg.quality || 0.60, 0.52, 0.45, 0.38];
+      var best = null;
+      var chain = Promise.resolve();
+      qualities.forEach(function (q) {
+        chain = chain.then(function () {
+          if (best && best.size <= targetBytes) return best;
+          return canvasToBlob(canvas, targetType, Number(q)).then(function (blob) {
+            if (blob && blob.size) best = blob;
+            return best;
+          });
+        });
+      });
+      return chain.then(function () { return best; });
+    }).catch(function (err) {
+      console.warn('[peipe-swipe] canvas compression failed', err);
+      return null;
+    });
+  }
+
+  function compressImageFile(file, opts) {
+    opts = opts || {};
+    if (!file) return Promise.reject(new Error(TEXT.imageOnly));
+
+    var cfg = imageConfig(opts);
+    var ext = fileExt(file);
+    var type = mimeFromFile(file);
+    var size = Number(file.size || 0);
+
+    if (!isImageFile(file)) return Promise.resolve(file);
+    if (/gif|svg/i.test(type) || /^(gif|svg)$/i.test(ext)) return Promise.resolve(file);
+    if (size > 0 && size < Number(cfg.minCompressBytes || 0)) return Promise.resolve(file);
+    if (/heic|heif/i.test(type) || /^(heic|heif)$/i.test(ext)) return Promise.resolve(file);
+
+    return canCanvasEncode('image/webp').then(function (webp) {
+      var targetType = cfg.useWebp && webp ? 'image/webp' : 'image/jpeg';
+      var targetBytes = imageTargetBytes(cfg);
+      return compressWithLibrary(file, cfg, targetType).then(function (libBlob) {
+        if (libBlob && libBlob.size <= Math.max(targetBytes * 1.25, targetBytes + 35 * 1024)) return libBlob;
+        return compressWithCanvas(file, cfg, targetType).then(function (canvasBlob) {
+          if (!canvasBlob) return libBlob || null;
+          if (!libBlob) return canvasBlob;
+          return canvasBlob.size < libBlob.size ? canvasBlob : libBlob;
+        });
+      }).then(function (blob) {
+        if (!blob || !blob.size) return file;
+        if (size && blob.size >= size * 0.98) return file;
+        return makeCompressedFile(file, blob, targetType);
+      });
+    }).catch(function (err) {
+      console.warn('[peipe-swipe] image compression skipped', err);
+      return file;
+    });
+  }
+
+  function extractUploadUrl(payload) {
+    var q = [payload];
+    var seen = new Set();
+    while (q.length) {
+      var cur = q.shift();
+      if (!cur || seen.has(cur)) continue;
+      if (typeof cur === 'string' && (/^(https?:)?\//i.test(cur) || /^\/assets\//i.test(cur) || /^\/uploads\//i.test(cur))) return cur;
+      if (typeof cur !== 'object') continue;
+      seen.add(cur);
+      if (Array.isArray(cur)) q.push.apply(q, cur);
+      else Object.keys(cur).forEach(function (k) { q.push(cur[k]); });
+    }
+    throw new Error('upload url missing');
+  }
+
+  function uploadToNodeBB(file) {
+    if (!file) return Promise.reject(new Error(TEXT.imageOnly));
+
+    // This is intentionally the same shape as your working topic/video uploader.
+    // Do NOT pre-read the image with FileReader/Image/canvas here; some mobile browsers
+    // fail local decoding even though NodeBB can upload the File successfully.
+    var form = new FormData();
+    form.append('files[]', file);
+    form.append('cid', String(CONFIG.uploadCid || 6));
+
+    return fetch(rel('/api/post/upload'), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'x-csrf-token': csrfToken(),
+        'x-requested-with': 'XMLHttpRequest'
+      },
+      body: form
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        var json = {};
+        try { json = text ? JSON.parse(text) : {}; } catch (e) {}
+        if (!res.ok) {
+          throw new Error(json.error || json.message || (json.status && json.status.message) || ('upload failed ' + res.status));
         }
-        return NodeFilter.FILTER_ACCEPT;
-      }
+        var url = extractUploadUrl(json);
+        if (!url) throw new Error('上传成功但未返回文件地址');
+        return url;
+      });
     });
-    var nodes = [];
-    while (walker.nextNode()) nodes.push(walker.currentNode);
-    nodes.forEach(function (node) {
-      var text = node.nodeValue || '';
-      var re = /\[peipe-greet:(hello-(?:0[1-9]|10))\]/ig;
-      if (!re.test(text)) return;
-      re.lastIndex = 0;
-      var frag = document.createDocumentFragment();
-      var last = 0;
-      var m;
-      while ((m = re.exec(text))) {
-        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-        frag.appendChild(greetStickerNode(m[1].toLowerCase()));
-        last = m.index + m[0].length;
-      }
-      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-      node.parentNode && node.parentNode.replaceChild(frag, node);
+  }
+
+  function handlePhotoFiles(files) {
+    files = Array.prototype.slice.call(files || []).filter(function (file) { return file && file.size !== 0; });
+    if (!files.length) return toast(TEXT.imageOnly);
+
+    var current = getProfilePhotosFromSheet();
+    files = files.slice(0, Math.max(0, CONFIG.maxPhotos - current.length));
+    if (!files.length) return;
+
+    state.uploadBusy = true;
+    var btn = $('.pps-upload-btn', state.root);
+    if (btn) { btn.disabled = true; btn.textContent = TEXT.compressing; }
+
+    var chain = Promise.resolve();
+    var uploaded = [];
+    files.forEach(function (file) {
+      chain = chain.then(function () {
+        // Upload original File directly. Compression can be reintroduced later only as a
+        // non-blocking optimization, never as a prerequisite for upload.
+        return compressImageFile(file).then(function (nextFile) {
+          if (nextFile !== file && btn) btn.textContent = TEXT.uploading;
+          return uploadToNodeBB(nextFile);
+        }).then(function (url) {
+          uploaded.push(url);
+          updateProfilePhotoTiles(current.concat(uploaded).slice(0, CONFIG.maxPhotos));
+        });
+      });
     });
+
+    chain.catch(function (err) {
+      console.warn('[peipe-swipe] photo upload failed', err);
+      toast((err && err.message) || TEXT.imageTooLarge);
+    }).finally(function () {
+      state.uploadBusy = false;
+      if (btn) { btn.disabled = false; btn.textContent = TEXT.uploadPhotos; }
+    });
+  }
+
+  function closeAvatarCrop() {
+    var sheet = $('.pps-crop-sheet', state.root);
+    if (sheet) sheet.remove();
+    if (state.avatarCrop && state.avatarCrop.url) {
+      try { URL.revokeObjectURL(state.avatarCrop.url); } catch (e) {}
+    }
+    state.avatarCrop = null;
+  }
+
+  function updateAvatarCropTransform() {
+    var crop = state.avatarCrop;
+    var img = $('.pps-crop-img', state.root);
+    if (!crop || !img) return;
+    img.style.transform = 'translate(-50%, -50%) translate(' + Math.round(crop.x || 0) + 'px,' + Math.round(crop.y || 0) + 'px) scale(' + Number(crop.zoom || 1).toFixed(2) + ')';
+  }
+
+  function cropAvatarToFile() {
+    var crop = state.avatarCrop;
+    if (!crop || !crop.file || !crop.naturalWidth || !crop.naturalHeight) return Promise.resolve(crop && crop.file);
+    return canCanvasEncode('image/webp').then(function (webp) {
+      var cfg = imageConfig(CONFIG.avatarImageConfig || {});
+      var type = cfg.useWebp && webp ? 'image/webp' : 'image/jpeg';
+      var outSize = 720;
+      var box = 260;
+      var naturalW = crop.naturalWidth;
+      var naturalH = crop.naturalHeight;
+      var baseScale = Math.max(box / naturalW, box / naturalH);
+      var zoom = Math.max(1, Number(crop.zoom || 1));
+      var displayScale = baseScale * zoom;
+      var cropSize = Math.min(naturalW, naturalH, box / displayScale);
+      var centerX = naturalW / 2 - Number(crop.x || 0) / displayScale;
+      var centerY = naturalH / 2 - Number(crop.y || 0) / displayScale;
+      var sx = Math.max(0, Math.min(naturalW - cropSize, centerX - cropSize / 2));
+      var sy = Math.max(0, Math.min(naturalH - cropSize, centerY - cropSize / 2));
+      var canvas = document.createElement('canvas');
+      canvas.width = outSize;
+      canvas.height = outSize;
+      var ctx = canvas.getContext('2d');
+      if (!ctx || !canvas.toBlob) return crop.file;
+      ctx.drawImage(crop.image, sx, sy, cropSize, cropSize, 0, 0, outSize, outSize);
+      var qualities = Array.isArray(cfg.qualities) && cfg.qualities.length ? cfg.qualities : [0.58, 0.5, 0.42, 0.34, 0.28];
+      var targetBytes = imageTargetBytes(cfg);
+      var best = null;
+      var chain = Promise.resolve();
+      qualities.forEach(function (q) {
+        chain = chain.then(function () {
+          if (best && best.size <= targetBytes) return best;
+          return canvasToBlob(canvas, type, Number(q)).then(function (blob) {
+            if (blob && blob.size) best = blob;
+            return best;
+          });
+        });
+      });
+      return chain.then(function () {
+        if (!best || !best.size) return crop.file;
+        return makeCompressedFile(crop.file, best, type);
+      });
+    }).catch(function () {
+      return crop.file;
+    });
+  }
+
+  function uploadAvatarPreparedFile(file) {
+    if (!file || file.size === 0) return toast(TEXT.imageOnly);
+    if (state.uploadBusy) return toast(TEXT.uploading);
+    state.uploadBusy = true;
+    var btn = $('.pps-avatar-upload', state.root);
+    if (btn) btn.classList.add('is-uploading');
+    toast(TEXT.uploading);
+    uploadToNodeBB(file).then(function (url) {
+      updateProfileAvatar(url);
+      toast(TEXT.saveOk);
+    }).catch(function (err) {
+      console.warn('[peipe-swipe] avatar upload failed', err);
+      toast((err && err.message) || TEXT.imageOnly);
+    }).finally(function () {
+      state.uploadBusy = false;
+      if (btn) btn.classList.remove('is-uploading');
+    });
+  }
+
+  function openAvatarCrop(file) {
+    if (!file || file.size === 0) return toast(TEXT.imageOnly);
+    if (!isImageFile(file)) return uploadAvatarPreparedFile(file);
+    var type = mimeFromFile(file);
+    if (/heic|heif|gif|svg/i.test(type) || /^(heic|heif|gif|svg)$/i.test(fileExt(file))) {
+      return uploadAvatarPreparedFile(file);
+    }
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      state.avatarCrop = { file: file, url: url, image: img, naturalWidth: img.naturalWidth || img.width, naturalHeight: img.naturalHeight || img.height, zoom: 1.25, x: 0, y: 0, dragging: false };
+      var old = $('.pps-crop-sheet', state.root);
+      if (old) old.remove();
+      var host = document.createElement('section');
+      host.className = 'pps-crop-sheet is-open';
+      host.innerHTML = '' +
+        '<div class="pps-crop-panel">' +
+          '<div class="pps-crop-title">' + escapeHtml(TEXT.cropAvatar || '裁切头像') + '</div>' +
+          '<div class="pps-crop-tip">' + escapeHtml(TEXT.cropTip || '拖动图片调整位置，滑动缩放。') + '</div>' +
+          '<div class="pps-crop-box"><img class="pps-crop-img" src="' + escapeHtml(url) + '" alt="avatar crop"></div>' +
+          '<input class="pps-crop-range" type="range" min="1" max="3" step="0.01" value="1.25">' +
+          '<div class="pps-crop-actions"><button type="button" class="pps-crop-cancel">' + escapeHtml(TEXT.cropCancel || '取消') + '</button><button type="button" class="pps-crop-use">' + escapeHtml(TEXT.cropUse || '上传头像') + '</button></div>' +
+        '</div>';
+      state.root.appendChild(host);
+      updateAvatarCropTransform();
+    };
+    img.onerror = function () {
+      try { URL.revokeObjectURL(url); } catch (e) {}
+      uploadAvatarPreparedFile(file);
+    };
+    img.src = url;
+  }
+
+  function handleAvatarFile(file) {
+    openAvatarCrop(file);
+  }
+
+  function renderChoiceSheet(name) {
+    hideSettingsButton();
+    var cfg = CHOICE_CONFIGS[name];
+    if (!cfg) return;
+    state.choiceContext = cfg;
+    var input = $('.pps-choice-picker[data-name="' + name + '"] input[type="hidden"]', state.root);
+    var draft = cfg.multiple ? normaliseCodeList(input && input.value, cfg.max || 5) : choiceValues(input && input.value, false, 1);
+    state.choiceDraft = draft;
+    var sheet = $('.pps-tag-sheet', state.root);
+    var choices = (cfg.list || []).map(function (item) {
+      var code = normalCode(item.value || item.code || item.label);
+      if (!code) return '';
+      var selected = draft.indexOf(code) !== -1;
+      return '<button type="button" class="pps-choice-option ' + (selected ? 'is-selected' : '') + '" data-value="' + escapeHtml(code) + '">' + escapeHtml(optionText(item, cfg.type)) + '</button>';
+    }).join('');
+    sheet.dataset.mode = 'choice';
+    sheet.innerHTML = '' +
+      '<div class="pps-tag-panel pps-choice-panel">' +
+        '<div class="pps-tag-scroll pps-choice-scroll">' +
+          '<div class="pps-tag-head"><div><div class="pps-tag-title">' + escapeHtml(cfg.title || TEXT.chooseOption) + '</div>' +
+          '<div class="pps-profile-subtitle">' + (cfg.multiple ? (escapeHtml(TEXT.selectedCount) + ' <span class="pps-choice-count">' + draft.length + '/' + cfg.max + '</span>') : escapeHtml(TEXT.chooseOption)) + '</div></div></div>' +
+          '<div class="pps-choice-sheet-grid">' + choices + '</div>' +
+        '</div>' +
+        '<div class="pps-tag-actions"><button type="button" class="pps-choice-leave">' + escapeHtml(TEXT.leave) + '</button><button type="button" class="pps-choice-clear">' + escapeHtml(TEXT.tagClear) + '</button><button type="button" class="pps-choice-done">' + escapeHtml(TEXT.doneOption || TEXT.save) + '</button></div>' +
+      '</div>';
+    $('.pps-tag-backdrop', state.root).classList.add('is-open');
+    sheet.classList.add('is-open');
+  }
+
+  function updateChoiceCount() {
+    var el = $('.pps-choice-count', state.root);
+    if (el && state.choiceContext) el.textContent = state.choiceDraft.length + '/' + state.choiceContext.max;
+  }
+
+  function toggleChoice(value, btn) {
+    var cfg = state.choiceContext;
+    if (!cfg) return;
+    value = normalCode(value);
+    if (!value) return;
+    if (cfg.multiple) {
+      var idx = state.choiceDraft.indexOf(value);
+      if (idx !== -1) state.choiceDraft.splice(idx, 1);
+      else if (state.choiceDraft.length < (cfg.max || 5)) state.choiceDraft.push(value);
+      else return;
+      if (btn) btn.classList.toggle('is-selected', state.choiceDraft.indexOf(value) !== -1);
+    } else {
+      state.choiceDraft = [value];
+      $$('.pps-choice-option', state.root).forEach(function (node) { node.classList.toggle('is-selected', node === btn); });
+    }
+    updateChoiceCount();
+  }
+
+  function closeChoice(save) {
+    if (save && state.choiceContext) updateChoicePicker(state.choiceContext.name, state.choiceDraft);
+    state.choiceContext = null;
+    state.choiceDraft = [];
+    $('.pps-tag-backdrop', state.root).classList.remove('is-open');
+    $('.pps-tag-sheet', state.root).classList.remove('is-open');
+  }
+
+  function renderTagSheet() {
+    hideSettingsButton();
+    state.tagDraft = Array.from(new Set(state.selectedTags)).slice(0, 12);
+    var sheet = $('.pps-tag-sheet', state.root);
+    var used = {};
+    var groups = (state.tagCategories || []).map(function (cat) {
+      var choices = (cat.tags || []).filter(function (tag) {
+        if (!tag || !tag.key || used[tag.key]) return false;
+        used[tag.key] = true;
+        return true;
+      }).map(function (tag) {
+        var selected = state.tagDraft.indexOf(tag.key) !== -1;
+        return '<button type="button" class="pps-tag-choice ' + (selected ? 'is-selected' : '') + '" data-key="' + escapeHtml(tag.key) + '">' + escapeHtml(TEXT[tag.labelKey] || tag.label || tag.key) + '</button>';
+      }).join('');
+      if (!choices) return '';
+      return '<div class="pps-tag-category">' + escapeHtml(categoryLabel(cat)) + '</div><div class="pps-tag-grid">' + choices + '</div>';
+    }).join('');
+
+    sheet.innerHTML = '' +
+      '<div class="pps-tag-panel">' +
+        '<div class="pps-tag-scroll">' +
+          '<div class="pps-tag-head"><div><div class="pps-tag-title">' + escapeHtml(TEXT.tagTitle) + '</div><div class="pps-profile-subtitle"><span class="pps-tag-count">' + escapeHtml(TEXT.selectedCount) + ' ' + state.tagDraft.length + '/12</span></div></div></div>' +
+          groups +
+        '</div>' +
+        '<div class="pps-tag-actions"><button type="button" class="pps-tag-leave">' + escapeHtml(TEXT.leave) + '</button><button type="button" class="pps-tag-clear">' + escapeHtml(TEXT.tagClear) + '</button><button type="button" class="pps-tag-done">' + escapeHtml(TEXT.tagDone) + '</button></div>' +
+      '</div>';
+    $('.pps-tag-backdrop', state.root).classList.add('is-open');
+    sheet.classList.add('is-open');
+  }
+
+  function closeTags(save) {
+    if (save) {
+      state.selectedTags = state.tagDraft.slice(0, 12);
+      var selectedBox = $('.pps-selected-tags', state.root);
+      if (selectedBox) selectedBox.innerHTML = renderSelectedTags(state.selectedTags);
+    }
+    $('.pps-tag-backdrop', state.root).classList.remove('is-open');
+    $('.pps-tag-sheet', state.root).classList.remove('is-open');
+  }
+
+  function updateTagCount() {
+    var count = $('.pps-tag-count', state.root);
+    if (count) count.textContent = TEXT.selectedCount + ' ' + state.tagDraft.length + '/12';
+  }
+
+  function toggleTag(key, btn) {
+    var idx = state.tagDraft.indexOf(key);
+    if (idx !== -1) state.tagDraft.splice(idx, 1);
+    else if (state.tagDraft.length < 12) state.tagDraft.push(key);
+    else return;
+    if (btn) btn.classList.toggle('is-selected', state.tagDraft.indexOf(key) !== -1);
+    updateTagCount();
   }
 
   function isEditableTarget(el) {
@@ -850,34 +1812,252 @@
   function bindMobileSelectionGuard() {
     if (state.selectionGuardBound) return;
     state.selectionGuardBound = true;
-    document.addEventListener('contextmenu', function (e) {
+    var root = state.root;
+    if (!root) return;
+    root.addEventListener('contextmenu', function (e) {
       if (isEditableTarget(e.target)) return;
-      if (e.target && e.target.closest && e.target.closest('#peipe-swipe-app,.pps-v14-overlay,.peipe-swipe-mode')) e.preventDefault();
+      e.preventDefault();
     }, true);
-    document.addEventListener('selectstart', function (e) {
+    root.addEventListener('selectstart', function (e) {
       if (isEditableTarget(e.target)) return;
-      if (e.target && e.target.closest && e.target.closest('#peipe-swipe-app,.pps-v14-overlay,.peipe-swipe-mode')) e.preventDefault();
+      e.preventDefault();
     }, true);
-    document.addEventListener('dragstart', function (e) {
+    root.addEventListener('dragstart', function (e) {
       if (isEditableTarget(e.target)) return;
-      if (e.target && e.target.closest && e.target.closest('#peipe-swipe-app,.pps-v14-overlay,.peipe-swipe-mode')) e.preventDefault();
+      e.preventDefault();
     }, true);
+  }
+
+  function bindEvents() {
+    state.root.addEventListener('click', function (e) {
+      var btn;
+      if ((btn = e.target.closest('.pps-comment-btn'))) {
+        e.preventDefault();
+        e.stopPropagation();
+        openComments(Number(btn.dataset.uid || 0));
+        return;
+      }
+      if ((btn = e.target.closest('.pps-greet-btn'))) {
+        e.preventDefault();
+        e.stopPropagation();
+        greet(Number(btn.dataset.uid || 0), btn);
+        return;
+      }
+      if (e.target.closest('.pps-comment-close') || e.target.closest('.pps-comment-backdrop')) {
+        e.preventDefault();
+        closeComments();
+        return;
+      }
+      if (e.target.closest('.pps-comment-submit')) {
+        e.preventDefault();
+        submitComment();
+        return;
+      }
+      if (e.target.closest('.pps-edit-profile')) {
+        e.preventDefault();
+        e.stopPropagation();
+        openProfile(false);
+        return;
+      }
+      if (e.target.closest('.pps-profile-leave')) {
+        e.preventDefault();
+        if (state.requiredProfile && window.history && window.history.length > 1) window.history.back();
+        else closeProfile(true);
+        return;
+      }
+      if (e.target.closest('.pps-profile-close')) {
+        e.preventDefault();
+        closeProfile();
+        return;
+      }
+      if ((btn = e.target.closest('.pps-choice-open'))) {
+        e.preventDefault();
+        renderChoiceSheet(btn.dataset.name);
+        return;
+      }
+      if ((btn = e.target.closest('.pps-choice-option'))) {
+        e.preventDefault();
+        toggleChoice(btn.dataset.value, btn);
+        return;
+      }
+      if (e.target.closest('.pps-choice-leave')) {
+        e.preventDefault();
+        closeChoice(false);
+        return;
+      }
+      if (e.target.closest('.pps-choice-done')) {
+        e.preventDefault();
+        closeChoice(true);
+        return;
+      }
+      if (e.target.closest('.pps-choice-clear')) {
+        e.preventDefault();
+        state.choiceDraft = [];
+        $$('.pps-choice-option', state.root).forEach(function (node) { node.classList.remove('is-selected'); });
+        updateChoiceCount();
+        return;
+      }
+      if (e.target.closest('.pps-avatar-upload')) {
+        e.preventDefault();
+        var avatarInput = $('.pps-avatar-input', state.root);
+        if (avatarInput) avatarInput.click();
+        return;
+      }
+      if (e.target.closest('.pps-upload-btn')) {
+        e.preventDefault();
+        var input = $('.pps-photo-input', state.root);
+        if (input) input.click();
+        return;
+      }
+      if ((btn = e.target.closest('.pps-photo-remove'))) {
+        e.preventDefault();
+        var photos = getProfilePhotosFromSheet();
+        photos.splice(Number(btn.dataset.index || 0), 1);
+        updateProfilePhotoTiles(photos);
+        return;
+      }
+      if (e.target.closest('.pps-select-tags-btn')) {
+        e.preventDefault();
+        renderTagSheet();
+        return;
+      }
+      if (e.target.closest('.pps-save-btn')) {
+        e.preventDefault();
+        saveProfile();
+        return;
+      }
+      if (e.target.closest('.pps-tag-leave') || e.target.closest('.pps-tag-close')) {
+        e.preventDefault();
+        closeTags(false);
+        return;
+      }
+      if (e.target.closest('.pps-tag-done')) {
+        e.preventDefault();
+        closeTags(true);
+        return;
+      }
+      if (e.target.closest('.pps-tag-clear')) {
+        e.preventDefault();
+        state.tagDraft = [];
+        $$('.pps-tag-choice', state.root).forEach(function (node) { node.classList.remove('is-selected'); });
+        updateTagCount();
+        return;
+      }
+      if (e.target.closest('.pps-crop-cancel')) {
+        e.preventDefault();
+        closeAvatarCrop();
+        return;
+      }
+      if (e.target.closest('.pps-crop-use')) {
+        e.preventDefault();
+        var useBtn = e.target.closest('.pps-crop-use');
+        if (useBtn) { useBtn.disabled = true; useBtn.textContent = TEXT.uploading; }
+        cropAvatarToFile().then(function (file) {
+          closeAvatarCrop();
+          uploadAvatarPreparedFile(file);
+        }).catch(function () {
+          var original = state.avatarCrop && state.avatarCrop.file;
+          closeAvatarCrop();
+          uploadAvatarPreparedFile(original);
+        });
+        return;
+      }
+      if ((btn = e.target.closest('.pps-tag-choice'))) {
+        e.preventDefault();
+        toggleTag(btn.dataset.key, btn);
+      }
+    }, true);
+
+    state.root.addEventListener('change', function (e) {
+      if (e.target && e.target.classList.contains('pps-avatar-input')) {
+        var avatarFiles = Array.prototype.slice.call(e.target.files || []);
+        e.target.value = '';
+        handleAvatarFile(avatarFiles[0]);
+        return;
+      }
+      if (e.target && e.target.classList.contains('pps-photo-input')) {
+        var files = Array.prototype.slice.call(e.target.files || []);
+        e.target.value = '';
+        handlePhotoFiles(files);
+      }
+    });
+
+    state.root.addEventListener('input', function (e) {
+      if (e.target && e.target.classList.contains('pps-crop-range') && state.avatarCrop) {
+        state.avatarCrop.zoom = Number(e.target.value || 1.25) || 1.25;
+        updateAvatarCropTransform();
+      }
+    });
+
+    state.root.addEventListener('pointerdown', function (e) {
+      if (!e.target.closest || !e.target.closest('.pps-crop-box') || !state.avatarCrop) return;
+      state.avatarCrop.dragging = true;
+      state.avatarCrop.startX = e.clientX;
+      state.avatarCrop.startY = e.clientY;
+      state.avatarCrop.baseX = state.avatarCrop.x || 0;
+      state.avatarCrop.baseY = state.avatarCrop.y || 0;
+      try { e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+
+    state.root.addEventListener('pointermove', function (e) {
+      if (!state.avatarCrop || !state.avatarCrop.dragging) return;
+      e.preventDefault();
+      state.avatarCrop.x = (state.avatarCrop.baseX || 0) + e.clientX - state.avatarCrop.startX;
+      state.avatarCrop.y = (state.avatarCrop.baseY || 0) + e.clientY - state.avatarCrop.startY;
+      updateAvatarCropTransform();
+    });
+
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (name) {
+      state.root.addEventListener(name, function () {
+        if (state.avatarCrop) state.avatarCrop.dragging = false;
+      });
+    });
+  }
+
+  function enterFullScreenMode() {
+    document.documentElement.classList.add('peipe-swipe-html');
+    document.body.classList.add('peipe-swipe-mode');
   }
 
   function init() {
-    state.translateSettings = loadTranslateSettings();
-    document.documentElement.classList.add('pps-v14-overlay');
-    document.body.classList.add('pps-v14-overlay');
-    bindMobileSelectionGuard();
-    enhance(document);
-    bindGlobal();
-    bindDelegatedLongPress();
-    requestDailyLocation();
-    renderGreetStickers(document.body);
-    loadOverlayFeedOnce();
-    var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) { enhance(node); renderGreetStickers(node); } }); }); });
-    obs.observe(document.body, { childList: true, subtree: true });
+    state.root = document.getElementById('peipe-swipe-app');
+    if (!state.root || !isSwipeRoute()) {
+      cleanupFullScreenMode();
+      return;
+    }
+    if (state.root.dataset.ppsReady === '1') return;
+    state.root.dataset.ppsReady = '1';
+    state.mode = currentMode();
+    state.settingsVisible = true;
+    state.swiper = null;
+    state.users = [];
+    state.done = false;
+    state.loading = false;
+    enterFullScreenMode();
+    loadTranslations().then(function () {
+      buildChrome();
+      bindEvents();
+      bindMobileSelectionGuard();
+
+      var swiperReady = ensureSwiper();
+      Promise.all([loadOptions(), loadTags()]).then(function () { return loadMe(); });
+      swiperReady.then(function () {
+        loadFeed(true);
+        syncLocationIfPossible().then(function (updated) { if (updated) loadFeed(true); });
+      });
+    });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+
+  if (window.ajaxify && window.ajaxify.on) {
+    window.ajaxify.on('action:ajaxify.start', function () {
+      if (!isSwipeRoute()) cleanupFullScreenMode();
+    });
+    window.ajaxify.on('action:ajaxify.end', function () {
+      if (!isSwipeRoute()) cleanupFullScreenMode();
+      init();
+    });
+  }
 })();
