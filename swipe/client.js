@@ -4,20 +4,40 @@
    - profile setup with frosted glass sheet
    - direct NodeBB photo upload; optional compression must never block upload
    - no avatar-as-background: avatar is avatar, partner photos are separate
-   FIX LOG:
-   - fixed window guard consistency
-   - replaced Array.from with Array.prototype.slice.call
-   - fixed greet button staying disabled forever after success
-   - fixed loadFeed pagination with offset to avoid duplicates
-   - fixed photoSwipers stale reference cleanup
-   - fixed avatar crop pointer events leaking to swiper
-   - added HEIC format warning
-   - removed dead syncChoiceGrid function
-   - fixed renderFloatComments conflict with overlay v20 (overlay removes them anyway)
-   - fixed ensureGenderOptions deduplication
 */
 (function () {
   'use strict';
+
+  if (typeof Object.assign !== 'function') {
+    Object.assign = function (target) {
+      if (target == null) throw new TypeError('Cannot convert undefined or null to object');
+      var out = Object(target);
+      for (var i = 1; i < arguments.length; i += 1) {
+        var src = arguments[i];
+        if (src == null) continue;
+        Object.keys(Object(src)).forEach(function (key) { out[key] = src[key]; });
+      }
+      return out;
+    };
+  }
+  if (typeof Number.isFinite !== 'function') {
+    Number.isFinite = function (value) { return typeof value === 'number' && isFinite(value); };
+  }
+  if (typeof Math.hypot !== 'function') {
+    Math.hypot = function (x, y) {
+      x = Number(x || 0); y = Number(y || 0);
+      return Math.sqrt(x * x + y * y);
+    };
+  }
+  if (typeof window.Map !== 'function') {
+    window.Map = function () { this._keys = []; this._values = []; };
+    window.Map.prototype.has = function (key) { return this._keys.indexOf(key) !== -1; };
+    window.Map.prototype.get = function (key) { var i = this._keys.indexOf(key); return i === -1 ? undefined : this._values[i]; };
+    window.Map.prototype.set = function (key, value) { var i = this._keys.indexOf(key); if (i === -1) { this._keys.push(key); this._values.push(value); } else { this._values[i] = value; } return this; };
+    window.Map.prototype.delete = function (key) { var i = this._keys.indexOf(key); if (i === -1) return false; this._keys.splice(i, 1); this._values.splice(i, 1); return true; };
+    window.Map.prototype.clear = function () { this._keys.length = 0; this._values.length = 0; };
+    window.Map.prototype.forEach = function (cb) { for (var i = 0; i < this._keys.length; i += 1) cb(this._values[i], this._keys[i], this); };
+  }
 
   if (window.__peipePartnersSwipeV12) return;
   window.__peipePartnersSwipeV12 = true;
@@ -29,17 +49,12 @@
   window.__peipePartnersSwipeV6 = true;
   window.__peipePartnersSwipeV5 = true;
 
+  // NodeBB ajaxify tries to load a forum route module named after the template.
+  // Defining this small no-op module prevents the "Cannot find module ./peipe-partners-swipe" console error.
   if (typeof define === 'function' && define.amd && !window.__peipePartnersSwipeForumModule) {
     window.__peipePartnersSwipeForumModule = true;
     define('forum/peipe-partners-swipe', [], function () { return { init: function () {} }; });
     try { define('forum/peipe-nearby-swipe', [], function () { return { init: function () {} }; }); } catch (err) {}
-  }
-
-  /* ── Math.hypot polyfill ── */
-  if (typeof Math.hypot !== 'function') {
-    Math.hypot = function (x, y) {
-      return Math.sqrt(x * x + y * y);
-    };
   }
 
   var CONFIG = Object.assign({
@@ -254,11 +269,11 @@
     root: null,
     swiper: null,
     users: [],
-    seenUids: {}, /* FIX: track seen UIDs to avoid duplicates in feed */
+    seenUids: {},
     loading: false,
     done: false,
     index: 0,
-    offset: 0, /* FIX: pagination offset */
+    offset: 0,
     profile: null,
     profileComplete: false,
     requiredProfile: false,
@@ -271,10 +286,7 @@
     commentTargetUid: 0,
     commentViewerItemId: '',
     nativeMode: false,
-    settingsVisible: true,
-    choiceContext: null,
-    choiceDraft: [],
-    avatarCrop: null
+    settingsVisible: true
   };
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -512,8 +524,8 @@
     if (edu && edu !== '保密') chips.push(escapeHtml(edu));
     var job = optionLabel(OPTIONS.occupations || [], user.occupation) || user.occupation;
     if (job && job !== TEXT.selectPlaceholder) chips.push(escapeHtml(job));
-    var relStatus = optionLabel(OPTIONS.relationships, user.relationship || user.relationshipStatus);
-    if (relStatus && relStatus !== '保密') chips.push(escapeHtml(relStatus));
+    var rel = optionLabel(OPTIONS.relationships, user.relationship || user.relationshipStatus);
+    if (rel && rel !== '保密') chips.push(escapeHtml(rel));
     if (!chips.length) return '';
     return '<div class="pps-detail-row">' + chips.slice(0, 4).map(function (txt) { return '<span class="pps-detail-chip">' + txt + '</span>'; }).join('') + '</div>';
   }
@@ -555,8 +567,16 @@
     return '<span class="' + cls + ' pps-avatar-fallback">' + escapeHtml(name.slice(0, 1).toUpperCase()) + '</span>';
   }
 
+  function iconBack() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>';
+  }
+
   function iconSettings() {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-.4-1.1 1.7 1.7 0 0 0-1-.6 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1A1.7 1.7 0 0 0 2.9 13H3a2 2 0 1 1 0-4h-.09a1.7 1.7 0 0 0 1.1-.4 1.7 1.7 0 0 0 .6-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 .4 1.1 1.7 1.7 0 0 0 1 .6 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.2.37.5.7.9.9.33.17.7.26 1.1.26h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.1.26c-.4.2-.7.53-.9.9z"></path></svg>';
+  }
+
+  function iconGreet() {
+    return '👋';
   }
 
   function loadTranslations() {
@@ -639,10 +659,14 @@
   }
 
 
-  /* FIX: renderFloatComments kept for backward compat, but overlay v20 removes them.
-     Return empty string to avoid wasted DOM. */
   function renderFloatComments(user) {
-    return '';
+    var list = Array.isArray(user.floatComments) ? user.floatComments : [];
+    list = list.filter(function (item) { return item && norm(item.content); }).slice(0, 3);
+    if (!list.length) return '';
+    return '<div class="pps-float-comments">' + list.map(function (item, index) {
+      var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml(String(item.authorName || 'U').slice(0, 1).toUpperCase()) + '</span>';
+      return '<div class="pps-float-comment pps-float-comment-' + index + '"><div class="pps-float-avatar">' + avatar + '</div><div class="pps-float-text">' + escapeHtml(item.content) + '</div></div>';
+    }).join('') + '</div>';
   }
 
   function commentHtml(item) {
@@ -720,6 +744,7 @@
     }).then(function () {
       toast(TEXT.commentSaved);
       loadComments(targetUid);
+      // Refresh the current card later so the new floating comment can enter the feed cache on the next pull.
     }).catch(function (err) {
       toast(err.message || TEXT.commentFail);
     }).finally(function () {
@@ -748,6 +773,7 @@
           '<div class="pps-photo-swiper swiper" data-index="' + index + '"><div class="swiper-wrapper">' + photoSlides + '</div>' + dots + '</div>' +
         '</div>' +
         '<div class="pps-gradient"></div>' +
+        renderFloatComments(user) +
         '<div class="pps-info">' +
           '<div class="pps-user-card">' +
             renderAvatarBlock(user) +
@@ -765,6 +791,7 @@
   }
 
   function updateSlides(reset) {
+    var html = state.users.map(renderSlide).join('');
     if (window.Swiper && state.swiper) {
       state.swiper.virtual.slides = state.users.map(renderSlide);
       state.swiper.virtual.update(true);
@@ -773,7 +800,7 @@
       return;
     }
     var feed = $('.pps-native-feed', state.root);
-    if (feed) feed.innerHTML = state.users.map(renderSlide).join('');
+    if (feed) feed.innerHTML = html;
     initPhotoSwipers();
     preloadAround(state.index);
   }
@@ -831,18 +858,15 @@
 
   function initPhotoSwipers() {
     if (!window.Swiper) return;
-    /* FIX: clean up stale photo swipers whose DOM has been removed by virtual rendering */
     state.photoSwipers.forEach(function (sw, idx) {
-      if (!sw.el || !sw.el.parentNode || !document.contains(sw.el)) {
-        try { sw.destroy(true, true); } catch (err) {}
+      if (!sw || !sw.el || !(document.body && document.body.contains(sw.el))) {
+        try { sw && sw.destroy && sw.destroy(true, true); } catch (err) {}
         state.photoSwipers.delete(idx);
       }
     });
-
     $$('.pps-photo-swiper', state.root).forEach(function (el) {
       var idx = Number(el.dataset.index || -1);
       if (state.photoSwipers.has(idx) && state.photoSwipers.get(idx).el === el) return;
-      /* If there's a stale entry for this index, destroy it */
       if (state.photoSwipers.has(idx)) {
         try { state.photoSwipers.get(idx).destroy(true, true); } catch (err) {}
         state.photoSwipers.delete(idx);
@@ -948,7 +972,11 @@
     });
   }
 
-  /* FIX: loadFeed now uses offset for pagination and deduplicates by uid */
+  function resetPhotoSwipers() {
+    state.photoSwipers.forEach(function (sw) { try { sw && sw.destroy && sw.destroy(true, true); } catch (err) {} });
+    state.photoSwipers.clear();
+  }
+
   function loadFeed(refresh) {
     if (state.loading || (state.done && !refresh)) return Promise.resolve();
     state.loading = true;
@@ -958,29 +986,22 @@
       state.seenUids = {};
       state.index = 0;
       state.offset = 0;
-      /* FIX: destroy all photo swipers on refresh */
-      state.photoSwipers.forEach(function (sw) {
-        try { sw.destroy(true, true); } catch (err) {}
-      });
-      state.photoSwipers.clear();
+      resetPhotoSwipers();
     }
-    var url = '/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') +
-      '&limit=' + CONFIG.pageSize +
-      '&offset=' + state.offset;
+    var url = '/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize + '&offset=' + encodeURIComponent(state.offset || 0);
     return apiFetch(url)
       .then(function (json) {
         var users = Array.isArray(json.users) ? json.users : [];
-        /* FIX: deduplicate */
-        var newUsers = [];
-        users.forEach(function (u) {
-          var uid = String(u && u.uid || 0);
-          if (uid === '0' || state.seenUids[uid]) return;
+        var fresh = [];
+        users.forEach(function (user) {
+          var uid = String(user && user.uid || '');
+          if (!uid || state.seenUids[uid]) return;
           state.seenUids[uid] = true;
-          newUsers.push(u);
+          fresh.push(user);
         });
-        state.users = refresh ? newUsers : state.users.concat(newUsers);
+        state.users = refresh ? fresh : state.users.concat(fresh);
         state.offset = state.users.length;
-        state.done = json.hasMore === false || users.length === 0;
+        state.done = json.hasMore === false || users.length === 0 || (!refresh && fresh.length === 0);
         if (!state.users.length) showEmpty(TEXT.empty);
         else showFeed();
       })
@@ -1015,7 +1036,7 @@
       seen[item.value] = true;
       return true;
     });
-    if (!seen['private']) OPTIONS.genders.push({ value: 'private', label: TEXT.privateGender });
+    if (!seen.private && !seen['保密']) OPTIONS.genders.push({ value: 'private', label: TEXT.privateGender });
   }
 
   function loadOptions() {
@@ -1052,7 +1073,6 @@
     }, 2100);
   }
 
-  /* FIX: greet now re-enables button after a delay so user can greet again later */
   function greet(uid, btn) {
     if (!isLoggedIn()) {
       toast(TEXT.login);
@@ -1072,8 +1092,7 @@
       else toast(TEXT.greetOk);
       if (label) label.textContent = TEXT.greeted;
       btn.classList.add('pps-greeted');
-      /* FIX: re-enable after 3 seconds so user can navigate back to this card */
-      setTimeout(function () { btn.disabled = false; }, 3000);
+      setTimeout(function () { btn.disabled = false; }, 1600);
     }).catch(function (err) {
       if (/daily-limit/.test(err.message)) toast(TEXT.greetLimit);
       else toast(err.message || TEXT.greetFail);
@@ -1128,6 +1147,10 @@
     '</div>';
   }
 
+  function buildChoiceGrid(name, list, value, type, multiple, max) {
+    return buildChoicePicker(name, list, value, type, multiple, max, name);
+  }
+
   function getChoiceValue(name) {
     var input = $('.pps-choice-picker[data-name="' + name + '"] input[type="hidden"]', state.root) || $('[name="' + name + '"]', state.root);
     if (!input) return '';
@@ -1146,6 +1169,8 @@
     if (hidden) hidden.value = value;
     if (summary) summary.textContent = choiceSummary(cfg.list, value, cfg.type, cfg.multiple, cfg.max);
   }
+
+  function syncChoiceGrid() {}
 
   function renderPhotoTiles(photos) {
     photos = normalisePhotos(photos);
@@ -1166,7 +1191,6 @@
     hideSettingsButton();
     var profile = Object.assign({}, state.profile || {});
     profile.photos = normalisePhotos(profile.photos);
-    /* FIX: use slice instead of Array.from */
     state.selectedTags = Array.isArray(profile.tags) ? profile.tags.slice(0, 12) : [];
     var sheet = $('.pps-profile-sheet', state.root);
     var backdrop = $('.pps-sheet-backdrop', state.root);
@@ -1341,6 +1365,12 @@
     return /^image\//.test(type);
   }
 
+  function withMime(file, type) {
+    if (!file || !type || file.type === type) return file;
+    try { return new File([file], file.name || ('photo-' + Date.now() + '.jpg'), { type: type, lastModified: file.lastModified || Date.now() }); }
+    catch (e) { return file; }
+  }
+
   function canCanvasEncode(type) {
     return new Promise(function (resolve) {
       try {
@@ -1463,7 +1493,7 @@
       canvas.height = Math.max(1, Math.round(h * scale));
       var ctx = canvas.getContext('2d');
       if (!ctx || !canvas.toBlob) return null;
-      img.draw(ctx, canvas.width, canvas.height);
+      ctx.drawImage && img.draw(ctx, canvas.width, canvas.height);
       img.close && img.close();
 
       var targetBytes = imageTargetBytes(cfg);
@@ -1498,9 +1528,8 @@
     if (!isImageFile(file)) return Promise.resolve(file);
     if (/gif|svg/i.test(type) || /^(gif|svg)$/i.test(ext)) return Promise.resolve(file);
     if (size > 0 && size < Number(cfg.minCompressBytes || 0)) return Promise.resolve(file);
-    /* FIX: warn about HEIC/HEIF but still attempt upload */
     if (/heic|heif/i.test(type) || /^(heic|heif)$/i.test(ext)) {
-      toast(TEXT.imageHeicUnsupported || 'HEIC/HEIF 格式可能不被支持');
+      toast(TEXT.imageHeicUnsupported || 'HEIC/HEIF 格式可能不被支持，建议转为 JPG 后上传');
       return Promise.resolve(file);
     }
 
@@ -1534,12 +1563,8 @@
       if (typeof cur === 'string' && (/^(https?:)?\//i.test(cur) || /^\/assets\//i.test(cur) || /^\/uploads\//i.test(cur))) return cur;
       if (typeof cur !== 'object') continue;
       seen.push(cur);
-      if (Array.isArray(cur)) {
-        for (var i = 0; i < cur.length; i++) q.push(cur[i]);
-      } else {
-        var keys = Object.keys(cur);
-        for (var j = 0; j < keys.length; j++) q.push(cur[keys[j]]);
-      }
+      if (Array.isArray(cur)) q.push.apply(q, cur);
+      else Object.keys(cur).forEach(function (k) { q.push(cur[k]); });
     }
     throw new Error('upload url missing');
   }
@@ -1547,6 +1572,9 @@
   function uploadToNodeBB(file) {
     if (!file) return Promise.reject(new Error(TEXT.imageOnly));
 
+    // This is intentionally the same shape as your working topic/video uploader.
+    // Do NOT pre-read the image with FileReader/Image/canvas here; some mobile browsers
+    // fail local decoding even though NodeBB can upload the File successfully.
     var form = new FormData();
     form.append('files[]', file);
     form.append('cid', String(CONFIG.uploadCid || 6));
@@ -1589,8 +1617,10 @@
     var uploaded = [];
     files.forEach(function (file) {
       chain = chain.then(function () {
+        // Upload original File directly. Compression can be reintroduced later only as a
+        // non-blocking optimization, never as a prerequisite for upload.
         return compressImageFile(file).then(function (nextFile) {
-          if (btn) btn.textContent = TEXT.uploading;
+          if (nextFile !== file && btn) btn.textContent = TEXT.uploading;
           return uploadToNodeBB(nextFile);
         }).then(function (url) {
           uploaded.push(url);
@@ -1773,7 +1803,6 @@
       if (btn) btn.classList.toggle('is-selected', state.choiceDraft.indexOf(value) !== -1);
     } else {
       state.choiceDraft = [value];
-
       $$('.pps-choice-option', state.root).forEach(function (node) { node.classList.toggle('is-selected', node === btn); });
     }
     updateChoiceCount();
@@ -1789,14 +1818,12 @@
 
   function renderTagSheet() {
     hideSettingsButton();
-    /* FIX: deduplicate tagDraft properly */
-    var seen = {};
+    var tagSeen = {};
     state.tagDraft = [];
     (state.selectedTags || []).forEach(function (key) {
-      if (key && !seen[key]) { seen[key] = true; state.tagDraft.push(key); }
+      if (key && !tagSeen[key]) { tagSeen[key] = true; state.tagDraft.push(key); }
     });
     state.tagDraft = state.tagDraft.slice(0, 12);
-
     var sheet = $('.pps-tag-sheet', state.root);
     var used = {};
     var groups = (state.tagCategories || []).map(function (cat) {
@@ -1849,9 +1876,6 @@
   }
 
   function bindEvents() {
-    if (!state.root || state.root.dataset.ppsEventsBound === '1') return;
-    state.root.dataset.ppsEventsBound = '1';
-
     state.root.addEventListener('click', function (e) {
       var btn;
       if ((btn = e.target.closest('.pps-comment-btn'))) {
@@ -1916,7 +1940,6 @@
       if (e.target.closest('.pps-choice-clear')) {
         e.preventDefault();
         state.choiceDraft = [];
-
         $$('.pps-choice-option', state.root).forEach(function (node) { node.classList.remove('is-selected'); });
         updateChoiceCount();
         return;
@@ -1963,7 +1986,6 @@
       if (e.target.closest('.pps-tag-clear')) {
         e.preventDefault();
         state.tagDraft = [];
-
         $$('.pps-tag-choice', state.root).forEach(function (node) { node.classList.remove('is-selected'); });
         updateTagCount();
         return;
@@ -2014,11 +2036,9 @@
       }
     });
 
-    /* FIX: avatar crop pointer events scoped to .pps-crop-box only, using stopPropagation
-       to prevent them from reaching the swiper */
     state.root.addEventListener('pointerdown', function (e) {
       if (!e.target.closest || !e.target.closest('.pps-crop-box') || !state.avatarCrop) return;
-      e.stopPropagation(); /* FIX: prevent swiper from capturing this */
+      e.stopPropagation();
       state.avatarCrop.dragging = true;
       state.avatarCrop.startX = e.clientX;
       state.avatarCrop.startY = e.clientY;
@@ -2030,7 +2050,7 @@
     state.root.addEventListener('pointermove', function (e) {
       if (!state.avatarCrop || !state.avatarCrop.dragging) return;
       e.preventDefault();
-      e.stopPropagation(); /* FIX: prevent swiper interference */
+      e.stopPropagation();
       state.avatarCrop.x = (state.avatarCrop.baseX || 0) + e.clientX - state.avatarCrop.startX;
       state.avatarCrop.y = (state.avatarCrop.baseY || 0) + e.clientY - state.avatarCrop.startY;
       updateAvatarCropTransform();
@@ -2048,15 +2068,12 @@
     document.body.classList.add('peipe-swipe-mode');
   }
 
-  function destroySwiper() {
+  function destroySwiperInstances() {
     if (state.swiper) {
       try { state.swiper.destroy(true, true); } catch (err) {}
       state.swiper = null;
     }
-    state.photoSwipers.forEach(function (sw) {
-      try { sw.destroy(true, true); } catch (err) {}
-    });
-    state.photoSwipers.clear();
+    resetPhotoSwipers();
   }
 
   function init() {
@@ -2093,16 +2110,13 @@
     window.ajaxify.on('action:ajaxify.start', function () {
       if (!isSwipeRoute()) {
         cleanupFullScreenMode();
-        destroySwiper();
+        destroySwiperInstances();
       }
     });
     window.ajaxify.on('action:ajaxify.end', function () {
       if (!isSwipeRoute()) {
         cleanupFullScreenMode();
-        destroySwiper();
-      } else {
-        /* FIX: reset ready flag so init can re-run after navigation */
-        if (state.root) state.root.dataset.ppsReady = '0';
+        destroySwiperInstances();
       }
       init();
     });
