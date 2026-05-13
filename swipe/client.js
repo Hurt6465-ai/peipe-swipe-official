@@ -237,8 +237,6 @@
     root: null,
     swiper: null,
     users: [],
-    seenUids: {},
-    feedRequestId: 0,
     loading: false,
     done: false,
     index: 0,
@@ -254,7 +252,11 @@
     commentTargetUid: 0,
     commentViewerItemId: '',
     nativeMode: false,
-    settingsVisible: true
+    nativeFeedBound: false,
+    settingsVisible: true,
+    seenUids: {},
+    feedRequestId: 0,
+    selectionGuardBound: false
   };
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -287,7 +289,16 @@
       accept: 'application/json',
       'x-requested-with': 'XMLHttpRequest'
     }, options.headers || {});
+    var timeoutMs = Number(options.timeoutMs || 12000);
+    var timer = 0;
+    if (window.AbortController && !options.signal) {
+      var controller = new AbortController();
+      options.signal = controller.signal;
+      timer = setTimeout(function () { try { controller.abort(); } catch (e) {} }, timeoutMs);
+    }
+    delete options.timeoutMs;
     return fetch(rel(url), options).then(function (res) {
+      if (timer) clearTimeout(timer);
       return res.json().catch(function () { return {}; }).then(function (json) {
         if (!res.ok) {
           var msg = json.error || json.message || (json.status && json.status.message) || ('HTTP ' + res.status);
@@ -628,8 +639,8 @@
 
 
   function renderFloatComments(user) {
-    // Floating comments are hidden in the v14 overlay and used to add many extra DOM nodes.
-    // Keep this empty so first card rendering stays fast.
+    // Floating comments add extra DOM and are hidden in the v14 visual layer.
+    // Keep this empty so first-card render is faster and safer.
     return '';
   }
 
@@ -720,8 +731,8 @@
     var photos = normalisePhotos(user.photos);
     if (!photos.length) photos = normalisePhotos([user.avatar || user.accountPicture || user.uploadedpicture || user.picture]);
     var photoSlides = photos.length ? photos.map(function (src, photoIndex) {
-      var eager = index <= CONFIG.preloadAhead && photoIndex === 0;
-      return '<div class="swiper-slide"><img class="pps-photo" src="' + escapeHtml(src) + '" alt="photo" loading="' + (eager ? 'eager' : 'lazy') + '" fetchpriority="' + (eager ? 'high' : 'low') + '" decoding="async"></div>';
+      var eager = Number(index || 0) <= Number(state.index || 0) + 1 && photoIndex === 0;
+      return '<div class="swiper-slide"><img class="pps-photo" src="' + escapeHtml(src) + '" alt="photo" loading="' + (eager ? 'eager' : 'lazy') + '" decoding="async"' + (eager ? ' fetchpriority="high"' : '') + '></div>';
     }).join('') : '<div class="swiper-slide"><div class="pps-empty-bg"></div></div>';
     var dots = photos.length > 1 ? '<div class="pps-pagination"></div>' : '';
     var seenTags = {};
@@ -756,6 +767,7 @@
   }
 
   function updateSlides(reset) {
+    var html = state.users.map(renderSlide).join('');
     if (window.Swiper && state.swiper) {
       state.swiper.virtual.slides = state.users.map(renderSlide);
       state.swiper.virtual.update(true);
@@ -763,9 +775,8 @@
       afterSlideUpdate();
       return;
     }
-
     var feed = $('.pps-native-feed', state.root);
-    if (feed) feed.innerHTML = state.users.map(renderSlide).join('');
+    if (feed) feed.innerHTML = html;
     initPhotoSwipers();
     preloadAround(state.index);
   }
@@ -853,9 +864,13 @@
 
   function useNativeFeed() {
     state.nativeMode = true;
-    $('.pps-swiper', state.root).hidden = true;
+    var swiperEl = $('.pps-swiper', state.root);
+    if (swiperEl) swiperEl.hidden = true;
     var feed = $('.pps-native-feed', state.root);
+    if (!feed) return;
     feed.hidden = false;
+    if (state.nativeFeedBound) return;
+    state.nativeFeedBound = true;
     feed.addEventListener('scroll', function () {
       var idx = Math.max(0, Math.round(feed.scrollTop / Math.max(1, feed.clientHeight)));
       if (idx !== state.index) {
@@ -870,9 +885,12 @@
   function showFeed() {
     var loading = $('.pps-loading', state.root);
     if (loading) loading.hidden = true;
+
     if (window.Swiper) {
-      $('.pps-swiper', state.root).hidden = false;
-      $('.pps-native-feed', state.root).hidden = true;
+      var swiperEl = $('.pps-swiper', state.root);
+      var nativeEl = $('.pps-native-feed', state.root);
+      if (swiperEl) swiperEl.hidden = false;
+      if (nativeEl) nativeEl.hidden = true;
       initMainSwiper();
       updateSlides(false);
     } else {
@@ -939,9 +957,7 @@
     var input = Array.isArray(users) ? users : [];
     var out = [];
 
-    if (refresh) {
-      state.seenUids = {};
-    }
+    if (refresh) state.seenUids = {};
 
     input.forEach(function (u) {
       var uid = String(u && u.uid || '');
@@ -965,32 +981,26 @@
       state.users = [];
       state.seenUids = {};
       state.index = 0;
-      state.photoSwipers.forEach(function (sw) { try { sw.destroy(true, true); } catch (e) {} });
+      state.photoSwipers.forEach(function (sw) { try { sw && sw.destroy && sw.destroy(true, true); } catch (e) {} });
       state.photoSwipers.clear();
     }
 
-    var url = '/api/peipe-swipe/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize;
-
-    return apiFetch(url)
+    return apiFetch('/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize, { timeoutMs: 12000 })
       .then(function (json) {
         if (requestId !== state.feedRequestId) return;
 
         var rawUsers = Array.isArray(json.users) ? json.users : [];
         var added = appendUniqueUsers(rawUsers, refresh);
-
         state.done = json.hasMore === false || rawUsers.length === 0 || (!refresh && added.length === 0);
 
-        if (!state.users.length) {
-          showEmpty(TEXT.empty);
-        } else {
-          showFeed();
-        }
+        if (!state.users.length) showEmpty(TEXT.empty);
+        else showFeed();
       })
       .catch(function (err) {
         if (requestId !== state.feedRequestId) return;
         console.warn('[peipe-swipe] feed failed', err);
-        if (!state.users.length) showEmpty(err.message || TEXT.empty);
-        else toast(err.message || TEXT.empty);
+        if (!state.users.length) showEmpty((err && err.message) || TEXT.empty);
+        else toast((err && err.message) || TEXT.empty);
       })
       .finally(function () {
         if (requestId === state.feedRequestId) state.loading = false;
@@ -1076,8 +1086,6 @@
       if (json && json.already) toast(TEXT.greetAlready);
       else toast(TEXT.greetOk);
       if (label) label.textContent = TEXT.greeted;
-      btn.classList.add('pps-greeted');
-      setTimeout(function () { btn.disabled = false; }, 3000);
     }).catch(function (err) {
       if (/daily-limit/.test(err.message)) toast(TEXT.greetLimit);
       else toast(err.message || TEXT.greetFail);
@@ -1852,6 +1860,32 @@
     updateTagCount();
   }
 
+  function isEditableTarget(el) {
+    return !!(el && el.closest && el.closest('input, textarea, select, option, [contenteditable="true"], .composer, .write'));
+  }
+
+  function bindMobileSelectionGuard() {
+    if (state.selectionGuardBound) return;
+    state.selectionGuardBound = true;
+    var root = state.root;
+    if (!root) return;
+
+    root.addEventListener('contextmenu', function (e) {
+      if (isEditableTarget(e.target)) return;
+      e.preventDefault();
+    }, true);
+
+    root.addEventListener('selectstart', function (e) {
+      if (isEditableTarget(e.target)) return;
+      e.preventDefault();
+    }, true);
+
+    root.addEventListener('dragstart', function (e) {
+      if (isEditableTarget(e.target)) return;
+      e.preventDefault();
+    }, true);
+  }
+
   function bindEvents() {
     state.root.addEventListener('click', function (e) {
       var btn;
@@ -2076,29 +2110,24 @@
 
     enterFullScreenMode();
 
-    // First paint and first feed request must not wait for translator/options/Swiper.
+    // First paint and first feed request must not wait for translator/options/profile/Swiper.
     buildChrome();
     bindEvents();
     bindMobileSelectionGuard();
     loadFeed(true);
 
-    // Load translations in the background. Do not block the first card.
+    // Background-only bootstrap. These should never block the first card.
     loadTranslations().catch(function () {});
 
-    // Load profile/options/tags in the background. Profile sheet can open after feed starts.
     Promise.all([loadOptions(), loadTags()])
       .then(function () { return loadMe(); })
-      .catch(function (err) {
-        console.warn('[peipe-swipe] profile bootstrap failed', err);
-      });
+      .catch(function (err) { console.warn('[peipe-swipe] profile bootstrap failed', err); });
 
-    // Load Swiper in the background and upgrade the already-rendered native feed.
     ensureSwiper().then(function () {
       if (!state.root || !isSwipeRoute()) return;
       if (state.users && state.users.length) showFeed();
     });
 
-    // Location sync is useful, but it should never block first card rendering.
     setTimeout(function () {
       syncLocationIfPossible().then(function (updated) {
         if (updated && state.root && isSwipeRoute()) loadFeed(true);
@@ -2120,7 +2149,10 @@
       if (!isSwipeRoute()) {
         cleanupFullScreenMode();
         destroySwiper();
+        return;
       }
+      var root = document.getElementById('peipe-swipe-app');
+      if (root) root.dataset.ppsReady = '0';
       init();
     });
   }
