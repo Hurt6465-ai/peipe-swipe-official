@@ -8,37 +8,6 @@
 (function () {
   'use strict';
 
-  if (typeof Object.assign !== 'function') {
-    Object.assign = function (target) {
-      if (target == null) throw new TypeError('Cannot convert undefined or null to object');
-      var out = Object(target);
-      for (var i = 1; i < arguments.length; i += 1) {
-        var src = arguments[i];
-        if (src == null) continue;
-        Object.keys(Object(src)).forEach(function (key) { out[key] = src[key]; });
-      }
-      return out;
-    };
-  }
-  if (typeof Number.isFinite !== 'function') {
-    Number.isFinite = function (value) { return typeof value === 'number' && isFinite(value); };
-  }
-  if (typeof Math.hypot !== 'function') {
-    Math.hypot = function (x, y) {
-      x = Number(x || 0); y = Number(y || 0);
-      return Math.sqrt(x * x + y * y);
-    };
-  }
-  if (typeof window.Map !== 'function') {
-    window.Map = function () { this._keys = []; this._values = []; };
-    window.Map.prototype.has = function (key) { return this._keys.indexOf(key) !== -1; };
-    window.Map.prototype.get = function (key) { var i = this._keys.indexOf(key); return i === -1 ? undefined : this._values[i]; };
-    window.Map.prototype.set = function (key, value) { var i = this._keys.indexOf(key); if (i === -1) { this._keys.push(key); this._values.push(value); } else { this._values[i] = value; } return this; };
-    window.Map.prototype.delete = function (key) { var i = this._keys.indexOf(key); if (i === -1) return false; this._keys.splice(i, 1); this._values.splice(i, 1); return true; };
-    window.Map.prototype.clear = function () { this._keys.length = 0; this._values.length = 0; };
-    window.Map.prototype.forEach = function (cb) { for (var i = 0; i < this._keys.length; i += 1) cb(this._values[i], this._keys[i], this); };
-  }
-
   if (window.__peipePartnersSwipeV12) return;
   window.__peipePartnersSwipeV12 = true;
   window.__peipePartnersSwipeV11 = true;
@@ -99,7 +68,6 @@
     uploadAvatar: '上传头像',
     imageTooLarge: '图片压缩后仍超过 5MB，请换一张图片',
     imageOnly: '请选择图片',
-    imageHeicUnsupported: 'HEIC/HEIF 格式可能不被支持，建议转为 JPG 后上传',
     maxPhotos: '',
     bio: '介绍',
     bioPlaceholder: '介绍一下你想练什么语言、喜欢聊什么。',
@@ -269,11 +237,9 @@
     root: null,
     swiper: null,
     users: [],
-    seenUids: {},
     loading: false,
     done: false,
     index: 0,
-    offset: 0,
     profile: null,
     profileComplete: false,
     requiredProfile: false,
@@ -858,19 +824,9 @@
 
   function initPhotoSwipers() {
     if (!window.Swiper) return;
-    state.photoSwipers.forEach(function (sw, idx) {
-      if (!sw || !sw.el || !(document.body && document.body.contains(sw.el))) {
-        try { sw && sw.destroy && sw.destroy(true, true); } catch (err) {}
-        state.photoSwipers.delete(idx);
-      }
-    });
     $$('.pps-photo-swiper', state.root).forEach(function (el) {
       var idx = Number(el.dataset.index || -1);
       if (state.photoSwipers.has(idx) && state.photoSwipers.get(idx).el === el) return;
-      if (state.photoSwipers.has(idx)) {
-        try { state.photoSwipers.get(idx).destroy(true, true); } catch (err) {}
-        state.photoSwipers.delete(idx);
-      }
       var user = state.users[idx];
       if (!user) return;
       var photos = normalisePhotos(user.photos);
@@ -972,42 +928,26 @@
     });
   }
 
-  function resetPhotoSwipers() {
-    state.photoSwipers.forEach(function (sw) { try { sw && sw.destroy && sw.destroy(true, true); } catch (err) {} });
-    state.photoSwipers.clear();
-  }
-
   function loadFeed(refresh) {
     if (state.loading || (state.done && !refresh)) return Promise.resolve();
     state.loading = true;
     if (refresh) {
       state.done = false;
       state.users = [];
-      state.seenUids = {};
       state.index = 0;
-      state.offset = 0;
-      resetPhotoSwipers();
+      state.photoSwipers.clear();
     }
-    var url = '/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize + '&offset=' + encodeURIComponent(state.offset || 0);
-    return apiFetch(url)
+    return apiFetch('/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize)
       .then(function (json) {
         var users = Array.isArray(json.users) ? json.users : [];
-        var fresh = [];
-        users.forEach(function (user) {
-          var uid = String(user && user.uid || '');
-          if (!uid || state.seenUids[uid]) return;
-          state.seenUids[uid] = true;
-          fresh.push(user);
-        });
-        state.users = refresh ? fresh : state.users.concat(fresh);
-        state.offset = state.users.length;
-        state.done = json.hasMore === false || users.length === 0 || (!refresh && fresh.length === 0);
+        state.users = refresh ? users : state.users.concat(users);
+        state.done = json.hasMore === false || users.length === 0;
         if (!state.users.length) showEmpty(TEXT.empty);
         else showFeed();
       })
       .catch(function (err) {
         console.warn('[peipe-swipe] feed failed', err);
-        if (!state.users.length) showEmpty(err.message || TEXT.empty);
+        showEmpty(err.message || TEXT.empty);
       })
       .finally(function () { state.loading = false; });
   }
@@ -1091,8 +1031,6 @@
       if (json && json.already) toast(TEXT.greetAlready);
       else toast(TEXT.greetOk);
       if (label) label.textContent = TEXT.greeted;
-      btn.classList.add('pps-greeted');
-      setTimeout(function () { btn.disabled = false; }, 1600);
     }).catch(function (err) {
       if (/daily-limit/.test(err.message)) toast(TEXT.greetLimit);
       else toast(err.message || TEXT.greetFail);
@@ -1528,10 +1466,7 @@
     if (!isImageFile(file)) return Promise.resolve(file);
     if (/gif|svg/i.test(type) || /^(gif|svg)$/i.test(ext)) return Promise.resolve(file);
     if (size > 0 && size < Number(cfg.minCompressBytes || 0)) return Promise.resolve(file);
-    if (/heic|heif/i.test(type) || /^(heic|heif)$/i.test(ext)) {
-      toast(TEXT.imageHeicUnsupported || 'HEIC/HEIF 格式可能不被支持，建议转为 JPG 后上传');
-      return Promise.resolve(file);
-    }
+    if (/heic|heif/i.test(type) || /^(heic|heif)$/i.test(ext)) return Promise.resolve(file);
 
     return canCanvasEncode('image/webp').then(function (webp) {
       var targetType = cfg.useWebp && webp ? 'image/webp' : 'image/jpeg';
@@ -1556,13 +1491,13 @@
 
   function extractUploadUrl(payload) {
     var q = [payload];
-    var seen = [];
+    var seen = new Set();
     while (q.length) {
       var cur = q.shift();
-      if (!cur || seen.indexOf(cur) !== -1) continue;
+      if (!cur || seen.has(cur)) continue;
       if (typeof cur === 'string' && (/^(https?:)?\//i.test(cur) || /^\/assets\//i.test(cur) || /^\/uploads\//i.test(cur))) return cur;
       if (typeof cur !== 'object') continue;
-      seen.push(cur);
+      seen.add(cur);
       if (Array.isArray(cur)) q.push.apply(q, cur);
       else Object.keys(cur).forEach(function (k) { q.push(cur[k]); });
     }
@@ -1818,12 +1753,7 @@
 
   function renderTagSheet() {
     hideSettingsButton();
-    var tagSeen = {};
-    state.tagDraft = [];
-    (state.selectedTags || []).forEach(function (key) {
-      if (key && !tagSeen[key]) { tagSeen[key] = true; state.tagDraft.push(key); }
-    });
-    state.tagDraft = state.tagDraft.slice(0, 12);
+    state.tagDraft = Array.from(new Set(state.selectedTags)).slice(0, 12);
     var sheet = $('.pps-tag-sheet', state.root);
     var used = {};
     var groups = (state.tagCategories || []).map(function (cat) {
@@ -2038,7 +1968,6 @@
 
     state.root.addEventListener('pointerdown', function (e) {
       if (!e.target.closest || !e.target.closest('.pps-crop-box') || !state.avatarCrop) return;
-      e.stopPropagation();
       state.avatarCrop.dragging = true;
       state.avatarCrop.startX = e.clientX;
       state.avatarCrop.startY = e.clientY;
@@ -2050,7 +1979,6 @@
     state.root.addEventListener('pointermove', function (e) {
       if (!state.avatarCrop || !state.avatarCrop.dragging) return;
       e.preventDefault();
-      e.stopPropagation();
       state.avatarCrop.x = (state.avatarCrop.baseX || 0) + e.clientX - state.avatarCrop.startX;
       state.avatarCrop.y = (state.avatarCrop.baseY || 0) + e.clientY - state.avatarCrop.startY;
       updateAvatarCropTransform();
@@ -2068,14 +1996,6 @@
     document.body.classList.add('peipe-swipe-mode');
   }
 
-  function destroySwiperInstances() {
-    if (state.swiper) {
-      try { state.swiper.destroy(true, true); } catch (err) {}
-      state.swiper = null;
-    }
-    resetPhotoSwipers();
-  }
-
   function init() {
     state.root = document.getElementById('peipe-swipe-app');
     if (!state.root || !isSwipeRoute()) {
@@ -2088,10 +2008,8 @@
     state.settingsVisible = true;
     state.swiper = null;
     state.users = [];
-    state.seenUids = {};
     state.done = false;
     state.loading = false;
-    state.offset = 0;
     enterFullScreenMode();
     loadTranslations().then(function () {
       buildChrome();
@@ -2108,16 +2026,10 @@
 
   if (window.ajaxify && window.ajaxify.on) {
     window.ajaxify.on('action:ajaxify.start', function () {
-      if (!isSwipeRoute()) {
-        cleanupFullScreenMode();
-        destroySwiperInstances();
-      }
+      if (!isSwipeRoute()) cleanupFullScreenMode();
     });
     window.ajaxify.on('action:ajaxify.end', function () {
-      if (!isSwipeRoute()) {
-        cleanupFullScreenMode();
-        destroySwiperInstances();
-      }
+      if (!isSwipeRoute()) cleanupFullScreenMode();
       init();
     });
   }
