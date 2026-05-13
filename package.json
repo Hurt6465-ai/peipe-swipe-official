@@ -1,5 +1,5 @@
 {
-  "name": "nodebb-plugin-peipe-partners",
+  "name": "nodebb-plugin-peipe-swipe-official",
   "version": "1.2.0",
   "description": "全屏语伴",
   "main": "library.js",
