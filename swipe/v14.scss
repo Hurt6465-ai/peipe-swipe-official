@@ -1362,3 +1362,212 @@ body.pps-v14-overlay #peipe-swipe-app .pps-text.is-expanded {
   -webkit-line-clamp: unset !important;
   display: block !important;
 }
+
+/* =========================================================
+   FINAL OVERRIDE: remove username / language transparent strip
+   ========================================================= */
+
+/* 1. 先把父级容器的阴影和透明背景全部清掉 */
+body.peipe-swipe-mode #peipe-swipe-app .pps-info,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-card,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-main,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name-row,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-side,
+body.pps-v14-overlay #peipe-swipe-app .pps-info,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-card,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-main,
+body.pps-v14-overlay #peipe-swipe-app .pps-name-row,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-row,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-side,
+.pps-v14-overlay .pps-info,
+.pps-v14-overlay .pps-user-card,
+.pps-v14-overlay .pps-user-main,
+.pps-v14-overlay .pps-name-row,
+.pps-v14-overlay .pps-lang-row,
+.pps-v14-overlay .pps-lang-side {
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 0 !important;
+  outline: 0 !important;
+  text-shadow: none !important;
+}
+
+/* 2. 语言码和用户名本体改成纯文字，不要胶囊背景，不要内边距 */
+body.peipe-swipe-mode #peipe-swipe-app .pps-name,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code,
+body.peipe-swipe-mode #peipe-swipe-app .pps-native-chip,
+body.peipe-swipe-mode #peipe-swipe-app .pps-learn-chip,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-space,
+body.peipe-swipe-mode #peipe-swipe-app .pps-arrow,
+body.pps-v14-overlay #peipe-swipe-app .pps-name,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-code,
+body.pps-v14-overlay #peipe-swipe-app .pps-native-chip,
+body.pps-v14-overlay #peipe-swipe-app .pps-learn-chip,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-space,
+body.pps-v14-overlay #peipe-swipe-app .pps-arrow,
+.pps-v14-overlay .pps-name,
+.pps-v14-overlay .pps-lang-code,
+.pps-v14-overlay .pps-native-chip,
+.pps-v14-overlay .pps-learn-chip,
+.pps-v14-overlay .pps-lang-space,
+.pps-v14-overlay .pps-arrow {
+  display: inline !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-text-stroke: 0 !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, .48),
+    0 2px 5px rgba(0, 0, 0, .22) !important;
+}
+
+/* 3. 杀掉伪元素，很多“长条膜”其实是 ::before / ::after */
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-card::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-card::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-main::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-main::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name-row::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name-row::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-side::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-side::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-card::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-card::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-main::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-main::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-name-row::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-name-row::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-name::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-name::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-row::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-row::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-side::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-side::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-code::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-code::after,
+.pps-v14-overlay .pps-user-card::before,
+.pps-v14-overlay .pps-user-card::after,
+.pps-v14-overlay .pps-user-main::before,
+.pps-v14-overlay .pps-user-main::after,
+.pps-v14-overlay .pps-name-row::before,
+.pps-v14-overlay .pps-name-row::after,
+.pps-v14-overlay .pps-name::before,
+.pps-v14-overlay .pps-name::after,
+.pps-v14-overlay .pps-lang-row::before,
+.pps-v14-overlay .pps-lang-row::after,
+.pps-v14-overlay .pps-lang-side::before,
+.pps-v14-overlay .pps-lang-side::after,
+.pps-v14-overlay .pps-lang-code::before,
+.pps-v14-overlay .pps-lang-code::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  background: none !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* 4. 母语/学习语言行保留间距，但不保留背景 */
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-row,
+.pps-v14-overlay .pps-lang-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  padding: 0 !important;
+  margin-top: 2px !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-side,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-side,
+.pps-v14-overlay .pps-lang-side {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+
+/* 5. 如果那条长膜来自底部全屏渐变，直接关掉 */
+body.peipe-swipe-mode #peipe-swipe-app .pps-gradient,
+body.pps-v14-overlay #peipe-swipe-app .pps-gradient,
+.pps-v14-overlay .pps-gradient {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  background: none !important;
+  background-image: none !important;
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  pointer-events: none !important;
+}
+
+/* 6. 介绍最多 4 行 */
+body.peipe-swipe-mode #peipe-swipe-app .pps-bio,
+body.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro,
+body.peipe-swipe-mode #peipe-swipe-app .pps-about,
+body.peipe-swipe-mode #peipe-swipe-app .pps-intro,
+body.peipe-swipe-mode #peipe-swipe-app .pps-description,
+body.peipe-swipe-mode #peipe-swipe-app .pps-profile-intro,
+body.peipe-swipe-mode #peipe-swipe-app .pps-text,
+body.pps-v14-overlay #peipe-swipe-app .pps-bio,
+body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro,
+body.pps-v14-overlay #peipe-swipe-app .pps-about,
+body.pps-v14-overlay #peipe-swipe-app .pps-intro,
+body.pps-v14-overlay #peipe-swipe-app .pps-description,
+body.pps-v14-overlay #peipe-swipe-app .pps-profile-intro,
+body.pps-v14-overlay #peipe-swipe-app .pps-text,
+.pps-v14-overlay .pps-bio,
+.pps-v14-overlay .ppst-card-intro,
+.pps-v14-overlay .pps-about,
+.pps-v14-overlay .pps-intro,
+.pps-v14-overlay .pps-description,
+.pps-v14-overlay .pps-profile-intro,
+.pps-v14-overlay .pps-text {
+  line-height: 1.58 !important;
+  max-height: 6.32em !important;
+  overflow: hidden !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 4 !important;
+  -webkit-box-orient: vertical !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  background: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
