@@ -8,13 +8,21 @@
 (function () {
   'use strict';
 
-  if (window.__peipeSwipeV16Overlay) return;
+  if (window.__peipeSwipeV20Overlay) return;
+  window.__peipeSwipeV20Overlay = true;
   window.__peipeSwipeV16Overlay = true;
   window.__peipeSwipeV15Overlay = true;
   window.__peipeSwipeV14Overlay = true;
 
+
+  if (typeof Math.hypot !== 'function') {
+    Math.hypot = function (x, y) {
+      return Math.sqrt(x * x + y * y);
+    };
+  }
+
   var CONFIG = {
-    apiBase: '/api/peipe-partners',
+    apiBase: '/api/peipe-swipe',
     geoKey: 'pps:geo:last-post-at',
     geoMaxAge: 24 * 60 * 60 * 1000,
     translateSettingsKey: 'x-topic-translate-settings',
@@ -245,7 +253,7 @@
   function getTextValue(el) {
     if (!el) return '';
     if (el.tagName && /^(TEXTAREA|INPUT)$/i.test(el.tagName)) return el.value || '';
-    var text = el.classList && el.classList.contains('ppst-card-text') ? el.textContent : (el.dataset && el.dataset.originalText || el.textContent);
+    var text = el.classList && el.classList.contains('ppst-card-text') ? el.textContent : ((el.dataset && el.dataset.originalText) || el.textContent);
     return text || '';
   }
   function setTextValue(el, value) {
@@ -291,8 +299,8 @@
         btn.title = '翻译 / 长按设置';
         el.appendChild(text);
         el.appendChild(btn);
-        btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); translateInto(btn, text); });
-        bindLongPress(btn, function () { openTranslateSettings(); });
+        // Click and long-press are handled by delegated global handlers.
+        // Keeping a direct click handler here causes a double translate/toggle on mobile.
       });
     });
   }
@@ -358,6 +366,32 @@
   function distanceHtml(txt) {
     return '<span class="ppst-location-icon"><i class="fa-solid fa-location-dot"></i></span><span>' + escapeHtml(txt) + '</span>';
   }
+  function slideFrom(el) {
+    var cur = el;
+    while (cur && cur !== document.body) {
+      if (cur.classList && (cur.classList.contains('swiper-slide') || cur.classList.contains('pps-slide') || cur.classList.contains('pps-card') || cur.classList.contains('pps-slide-item'))) return cur;
+      cur = cur.parentNode;
+    }
+    return null;
+  }
+
+  function uidFromName(slide) {
+    if (!slide) return 0;
+    var nameEl = $('.pps-username,.pps-name,.pps-display-name,.username', slide);
+    var name = norm(nameEl && nameEl.textContent).toLowerCase();
+    if (!name) return 0;
+    var u = state.userMapByName[name];
+    return u ? Number(u.uid || 0) : 0;
+  }
+
+  function uidFromSlideOrder(slide) {
+    if (!slide || !slide.dataset) return 0;
+    var idx = Number(slide.dataset.index);
+    if (!Number.isFinite(idx)) return 0;
+    var u = state.userList[idx];
+    return u ? Number(u.uid || 0) : 0;
+  }
+
   function findUserDataFrom(el) {
     var uid = findUidFrom(el);
     return uid ? state.userMap[String(uid)] || null : null;
@@ -519,7 +553,6 @@
       var editor = $('.ppst-review-editor');
       if (!isLoggedIn()) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">请先登录后评价</div>'); return; }
       if (!can.eligible) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">聊天超过 24 小时后才可以评价</div>'); }
-      $$('.ppst-review-translate,.ppst-input-translate').forEach(function (btn) { bindLongPress(btn, function () { openTranslateSettings(); }); });
     }).catch(function (err) { $('.ppst-review-summary').textContent = err.message || '加载失败'; });
   }
   function submitReview() {
@@ -759,7 +792,7 @@
   function greetStickerUrl(name) {
     name = String(name || '').toLowerCase();
     if (!/^hello-(0[1-9]|10)$/.test(name)) return '';
-    return rel('/plugins/nodebb-plugin-peipe-partners/swipe/greet/' + name + '.webm');
+    return rel('/plugins/nodebb-plugin-peipe-swipe-official/swipe/greet/' + name + '.webm');
   }
 
   function greetStickerNode(name) {
@@ -780,7 +813,7 @@
       acceptNode: function (node) {
         if (!node || !node.nodeValue || node.nodeValue.indexOf('[peipe-greet:') === -1) return NodeFilter.FILTER_REJECT;
         var p = node.parentNode;
-        while (p && p !== root.parentNode) {
+        while (p && p !== (root && root.parentNode)) {
           if (p.nodeType === 1) {
             if (deny.test(p.tagName || '')) return NodeFilter.FILTER_REJECT;
             if (p.classList && (p.classList.contains('peipe-greet-sticker-wrap') || p.classList.contains('composer') || p.classList.contains('write') || p.isContentEditable)) return NodeFilter.FILTER_REJECT;
@@ -810,22 +843,38 @@
     });
   }
 
-  function deferOverlayWork(fn, delay) {
-    var run = function () { try { fn(); } catch (err) {} };
-    if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: delay || 1500 });
-    else setTimeout(run, delay || 0);
+  function isEditableTarget(el) {
+    return !!(el && el.closest && el.closest('input, textarea, select, option, [contenteditable="true"], .composer, .write'));
+  }
+
+  function bindMobileSelectionGuard() {
+    if (state.selectionGuardBound) return;
+    state.selectionGuardBound = true;
+    document.addEventListener('contextmenu', function (e) {
+      if (isEditableTarget(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('#peipe-swipe-app,.pps-v14-overlay,.peipe-swipe-mode')) e.preventDefault();
+    }, true);
+    document.addEventListener('selectstart', function (e) {
+      if (isEditableTarget(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('#peipe-swipe-app,.pps-v14-overlay,.peipe-swipe-mode')) e.preventDefault();
+    }, true);
+    document.addEventListener('dragstart', function (e) {
+      if (isEditableTarget(e.target)) return;
+      if (e.target && e.target.closest && e.target.closest('#peipe-swipe-app,.pps-v14-overlay,.peipe-swipe-mode')) e.preventDefault();
+    }, true);
   }
 
   function init() {
     state.translateSettings = loadTranslateSettings();
     document.documentElement.classList.add('pps-v14-overlay');
     document.body.classList.add('pps-v14-overlay');
+    bindMobileSelectionGuard();
     enhance(document);
     bindGlobal();
     bindDelegatedLongPress();
+    requestDailyLocation();
     renderGreetStickers(document.body);
-    deferOverlayWork(loadOverlayFeedOnce, 500);
-    deferOverlayWork(requestDailyLocation, 1800);
+    loadOverlayFeedOnce();
     var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) { enhance(node); renderGreetStickers(node); } }); }); });
     obs.observe(document.body, { childList: true, subtree: true });
   }
