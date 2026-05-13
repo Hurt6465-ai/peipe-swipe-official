@@ -1067,208 +1067,108 @@
 .ppst-distance-line::before {
   display: none !important;
 }
-
-/* === Peipe v14 final overlay overrides: no text film, inner small online dot, mobile selection guard === */
-.pps-v14-overlay,
-.pps-v14-overlay * {
-  -webkit-tap-highlight-color: transparent !important;
-}
-
-.pps-v14-overlay #peipe-swipe-app,
-.pps-v14-overlay #peipe-swipe-app * {
-  -webkit-user-select: none !important;
-  user-select: none !important;
-  -webkit-touch-callout: none !important;
-}
-
-.pps-v14-overlay input,
-.pps-v14-overlay textarea,
-.pps-v14-overlay select,
-.pps-v14-overlay option,
-.pps-v14-overlay [contenteditable="true"],
-.pps-v14-overlay [contenteditable=""],
-.pps-v14-overlay .composer,
-.pps-v14-overlay .write {
-  -webkit-user-select: text !important;
-  user-select: text !important;
-  -webkit-touch-callout: default !important;
-}
-
-.pps-v14-overlay .pps-gradient,
-.pps-v14-overlay .pps-photo-layer::after,
-.pps-v14-overlay .pps-info::before,
-.pps-v14-overlay .pps-info::after,
-.pps-v14-overlay .pps-user-card::before,
-.pps-v14-overlay .pps-user-card::after,
-.pps-v14-overlay .pps-name-row::before,
-.pps-v14-overlay .pps-name-row::after,
-.pps-v14-overlay .pps-name::before,
-.pps-v14-overlay .pps-name::after,
-.pps-v14-overlay .pps-lang-row::before,
-.pps-v14-overlay .pps-lang-row::after,
-.pps-v14-overlay .pps-lang-side::before,
-.pps-v14-overlay .pps-lang-side::after,
-.pps-v14-overlay .pps-lang-code::before,
-.pps-v14-overlay .pps-lang-code::after,
-.pps-v14-overlay .ppst-card-intro::before,
-.pps-v14-overlay .ppst-card-intro::after,
-.pps-v14-overlay .ppst-distance-line::before,
-.pps-v14-overlay .ppst-distance-line::after {
-  display: none !important;
-  content: none !important;
-  opacity: 0 !important;
-}
-
-.pps-v14-overlay .pps-name,
-.pps-v14-overlay .pps-lang-row,
-.pps-v14-overlay .pps-lang-side,
-.pps-v14-overlay .pps-lang-code,
-.pps-v14-overlay .pps-native-chip,
-.pps-v14-overlay .pps-learn-chip,
-.pps-v14-overlay .pps-arrow,
-.pps-v14-overlay .ppst-card-intro,
-.pps-v14-overlay .ppst-card-text,
-.pps-v14-overlay .ppst-distance-line {
-  background: transparent !important;
-  background-color: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
-  border: 0 !important;
-  outline: 0 !important;
-  filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  -webkit-text-stroke: 0 transparent !important;
+/* Peipe Swipe Official v14 final text-film removal */
+body.pps-v14-overlay,
+html.pps-v14-overlay {
   font-family: MiSans, "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
 }
 
-.pps-v14-overlay .pps-name {
-  font-weight: 780 !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,.48), 0 4px 12px rgba(0,0,0,.24) !important;
+body.pps-v14-overlay #peipe-swipe-app,
+html.pps-v14-overlay #peipe-swipe-app,
+body.pps-v14-overlay .pps-slide,
+body.pps-v14-overlay .pps-card,
+body.pps-v14-overlay .swiper-slide {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
-.pps-v14-overlay .pps-lang-row,
-.pps-v14-overlay .pps-lang-code,
-.pps-v14-overlay .pps-native-chip,
-.pps-v14-overlay .pps-learn-chip,
-.pps-v14-overlay .pps-arrow,
-.pps-v14-overlay .ppst-card-text,
-.pps-v14-overlay .ppst-distance-line {
-  font-weight: 720 !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,.46), 0 3px 10px rgba(0,0,0,.22) !important;
+body.pps-v14-overlay input,
+body.pps-v14-overlay textarea,
+body.pps-v14-overlay select,
+body.pps-v14-overlay [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
-.pps-v14-overlay .pps-avatar,
-.pps-v14-overlay .pps-avatar-fallback,
-.pps-v14-overlay .pps-form-avatar {
-  border: .5px solid rgba(255,255,255,.92) !important;
-  box-shadow: 0 8px 20px rgba(0,0,0,.22) !important;
-}
-
-.pps-v14-overlay .pps-online-dot {
-  width: 5px !important;
-  height: 5px !important;
-  top: 6px !important;
-  right: 6px !important;
-  border: .5px solid rgba(255,255,255,.92) !important;
-  background: #22c55e !important;
-  box-shadow: 0 0 5px rgba(34,197,94,.42) !important;
-}
-
-/* Peipe Swipe final text-film kill switch v3 - overlay copy */
-.pps-v14-overlay .pps-user-card,
-.pps-v14-overlay .pps-user-main,
-.pps-v14-overlay .pps-name-row,
-.pps-v14-overlay .pps-name-row > *,
-.pps-v14-overlay .pps-name,
-.pps-v14-overlay .pps-name *,
-.pps-v14-overlay .pps-lang-row,
-.pps-v14-overlay .pps-lang-row > *,
-.pps-v14-overlay .pps-lang-side,
-.pps-v14-overlay .pps-lang-side > *,
-.pps-v14-overlay .pps-lang-code,
-.pps-v14-overlay .pps-native-chip,
-.pps-v14-overlay .pps-learn-chip,
-.pps-v14-overlay .pps-lang-chip,
-.pps-v14-overlay .pps-chip,
-.pps-v14-overlay .pps-arrow {
-  background: none !important;
+body.pps-v14-overlay .pps-user-card,
+body.pps-v14-overlay .pps-user-main,
+body.pps-v14-overlay .pps-name-row,
+body.pps-v14-overlay .pps-name,
+body.pps-v14-overlay .pps-lang-row,
+body.pps-v14-overlay .pps-lang-side,
+body.pps-v14-overlay .pps-lang-chip,
+body.pps-v14-overlay .pps-native-chip,
+body.pps-v14-overlay .pps-learn-chip,
+body.pps-v14-overlay .pps-lang-code,
+body.pps-v14-overlay .pps-arrow {
+  background: transparent !important;
   background-color: transparent !important;
   background-image: none !important;
+  border-color: transparent !important;
   box-shadow: none !important;
-  border: 0 !important;
-  outline: 0 !important;
   filter: none !important;
-  -webkit-filter: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   -webkit-text-stroke: 0 !important;
-  text-stroke: 0 !important;
-  -webkit-background-clip: border-box !important;
-  background-clip: border-box !important;
   -webkit-text-fill-color: currentColor !important;
-  mix-blend-mode: normal !important;
-  isolation: auto !important;
 }
 
-.pps-v14-overlay .pps-name-row::before,
-.pps-v14-overlay .pps-name-row::after,
-.pps-v14-overlay .pps-name::before,
-.pps-v14-overlay .pps-name::after,
-.pps-v14-overlay .pps-lang-row::before,
-.pps-v14-overlay .pps-lang-row::after,
-.pps-v14-overlay .pps-lang-side::before,
-.pps-v14-overlay .pps-lang-side::after,
-.pps-v14-overlay .pps-lang-code::before,
-.pps-v14-overlay .pps-lang-code::after,
-.pps-v14-overlay .pps-native-chip::before,
-.pps-v14-overlay .pps-native-chip::after,
-.pps-v14-overlay .pps-learn-chip::before,
-.pps-v14-overlay .pps-learn-chip::after,
-.pps-v14-overlay .pps-lang-chip::before,
-.pps-v14-overlay .pps-lang-chip::after,
-.pps-v14-overlay .pps-chip::before,
-.pps-v14-overlay .pps-chip::after {
-  content: none !important;
+body.pps-v14-overlay .pps-user-card::before,
+body.pps-v14-overlay .pps-user-card::after,
+body.pps-v14-overlay .pps-user-main::before,
+body.pps-v14-overlay .pps-user-main::after,
+body.pps-v14-overlay .pps-name-row::before,
+body.pps-v14-overlay .pps-name-row::after,
+body.pps-v14-overlay .pps-name::before,
+body.pps-v14-overlay .pps-name::after,
+body.pps-v14-overlay .pps-lang-row::before,
+body.pps-v14-overlay .pps-lang-row::after,
+body.pps-v14-overlay .pps-lang-side::before,
+body.pps-v14-overlay .pps-lang-side::after,
+body.pps-v14-overlay .pps-lang-chip::before,
+body.pps-v14-overlay .pps-lang-chip::after,
+body.pps-v14-overlay .pps-lang-code::before,
+body.pps-v14-overlay .pps-lang-code::after {
   display: none !important;
-  background: none !important;
+  content: none !important;
+  background: transparent !important;
   box-shadow: none !important;
-  opacity: 0 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
-.pps-v14-overlay .pps-name {
-  padding: 0 !important;
-  margin: 0 !important;
-  border-radius: 0 !important;
-  font-weight: 760 !important;
-  color: rgba(255,255,255,.98) !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,.38), 0 2px 6px rgba(0,0,0,.22) !important;
+body.pps-v14-overlay .pps-name {
+  font-weight: 780 !important;
+  letter-spacing: -.02em !important;
+  text-shadow: 0 1px 5px rgba(0,0,0,.38), 0 2px 12px rgba(0,0,0,.28) !important;
 }
 
-.pps-v14-overlay .pps-lang-row,
-.pps-v14-overlay .pps-lang-side,
-.pps-v14-overlay .pps-lang-code,
-.pps-v14-overlay .pps-native-chip,
-.pps-v14-overlay .pps-learn-chip,
-.pps-v14-overlay .pps-lang-chip,
-.pps-v14-overlay .pps-chip,
-.pps-v14-overlay .pps-arrow {
-  padding: 0 !important;
-  margin-top: 0 !important;
-  border-radius: 0 !important;
-  font-weight: 680 !important;
-  color: rgba(255,255,255,.93) !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,.34), 0 2px 5px rgba(0,0,0,.18) !important;
+body.pps-v14-overlay .pps-lang-row,
+body.pps-v14-overlay .pps-lang-code,
+body.pps-v14-overlay .pps-lang-chip {
+  font-weight: 720 !important;
+  text-shadow: 0 1px 4px rgba(0,0,0,.34), 0 2px 10px rgba(0,0,0,.24) !important;
 }
 
-.pps-v14-overlay .pps-online-dot {
+body.pps-v14-overlay .pps-avatar,
+body.pps-v14-overlay .pps-avatar-fallback,
+body.pps-v14-overlay .pps-form-avatar {
+  border: .5px solid rgba(255,255,255,.95) !important;
+  box-shadow: 0 1px 8px rgba(0,0,0,.22) !important;
+}
+
+body.pps-v14-overlay .pps-online-dot {
   width: 8px !important;
   height: 8px !important;
-  top: 5px !important;
   right: 5px !important;
-  border: .5px solid rgba(255,255,255,.95) !important;
-  border-radius: 999px !important;
-  background: #22c55e !important;
-  box-shadow: 0 0 0 .5px rgba(0,0,0,.18), 0 0 7px rgba(34,197,94,.45) !important;
-  transform: none !important;
+  bottom: 5px !important;
+  border: 1px solid rgba(255,255,255,.95) !important;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.16), 0 1px 5px rgba(0,0,0,.25) !important;
+}
+
+body.pps-v14-overlay img {
+  -webkit-user-drag: none;
+  user-drag: none;
 }
