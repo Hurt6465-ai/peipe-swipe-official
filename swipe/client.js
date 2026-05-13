@@ -46,10 +46,9 @@
       useWebp: true,
       qualities: [0.58, 0.50, 0.42, 0.34, 0.28, 0.22]
     },
-    preloadAhead: 3,
-    feedCacheMs: 2 * 60 * 1000,
-    swiperCss: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.css',
-    swiperJs: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.js',
+    preloadAhead: 2,
+    swiperCss: '/plugins/nodebb-plugin-peipe-swipe-official/swipe/vendor/swiper-bundle.min.css',
+    swiperJs: '/plugins/nodebb-plugin-peipe-swipe-official/swipe/vendor/swiper-bundle.min.js',
     swiperFallbackCss: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css',
     swiperFallbackJs: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js'
   }, window.PEIPE_SWIPE_CONFIG || {});
@@ -253,9 +252,7 @@
     commentTargetUid: 0,
     commentViewerItemId: '',
     nativeMode: false,
-    settingsVisible: true,
-    fastPaintedFromCache: false,
-    selectGuardBound: false
+    settingsVisible: true
   };
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -280,65 +277,6 @@
   function currentUser() { return (window.app && window.app.user) || null; }
   function isLoggedIn() { var u = currentUser(); return !!(u && Number(u.uid || 0) > 0); }
   function jsonBody(data) { return JSON.stringify(data || {}); }
-
-
-  function safeJsonGet(key, fallback) {
-    try {
-      var raw = sessionStorage.getItem(key) || localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch (e) {
-      return fallback;
-    }
-  }
-
-  function safeJsonSet(key, value, persistent) {
-    try {
-      (persistent ? localStorage : sessionStorage).setItem(key, JSON.stringify(value));
-    } catch (e) {}
-  }
-
-  function feedCacheKey() {
-    return 'pps:swipe:first-page:' + (state.mode || currentMode());
-  }
-
-  function paintCachedFeed() {
-    var cache = safeJsonGet(feedCacheKey(), null);
-    if (!cache || !Array.isArray(cache.users) || !cache.users.length) return false;
-    if (Date.now() - Number(cache.t || 0) > Number(CONFIG.feedCacheMs || 120000)) return false;
-    state.users = cache.users.slice(0, CONFIG.pageSize || 18);
-    state.done = cache.hasMore === false;
-    state.fastPaintedFromCache = true;
-    showFeed();
-    return true;
-  }
-
-  function deferWork(fn, delay) {
-    var run = function () { try { fn(); } catch (err) { console.warn('[peipe-swipe] deferred work failed', err); } };
-    if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: delay || 1200 });
-    else setTimeout(run, delay || 0);
-  }
-
-  function isTextEditingTarget(target) {
-    return !!(target && target.closest && target.closest('input, textarea, select, option, [contenteditable="true"], [contenteditable=""], .composer, .write'));
-  }
-
-  function bindMobileSelectionGuard() {
-    if (!state.root || state.selectGuardBound) return;
-    state.selectGuardBound = true;
-    ['contextmenu', 'selectstart', 'dragstart'].forEach(function (name) {
-      state.root.addEventListener(name, function (e) {
-        if (isTextEditingTarget(e.target)) return;
-        e.preventDefault();
-      }, { capture: true });
-    });
-    document.addEventListener('selectionchange', function () {
-      if (!state.root || !isSwipeRoute()) return;
-      var active = document.activeElement;
-      if (isTextEditingTarget(active)) return;
-      var sel = window.getSelection && window.getSelection();
-      if (sel && !sel.isCollapsed) sel.removeAllRanges();
-    });
-  }
 
   function apiFetch(url, options) {
     options = options || {};
@@ -740,7 +678,7 @@
   function loadComments(targetUid) {
     var list = $('.pps-comment-list', state.root);
     if (!list) return;
-    apiFetch('/api/peipe-partners/comments/' + encodeURIComponent(targetUid) + '?limit=30').then(function (json) {
+    apiFetch('/api/peipe-swipe/comments/' + encodeURIComponent(targetUid) + '?limit=30').then(function (json) {
       var comments = Array.isArray(json.comments) ? json.comments : [];
       var viewer = json.viewerComment || null;
       list.innerHTML = comments.length ? comments.map(commentHtml).join('') : '<div class="pps-comment-muted">' + escapeHtml(TEXT.commentEmpty) + '</div>';
@@ -765,7 +703,7 @@
     if (!targetUid) return;
     if (!content || content.length < 2) { toast(TEXT.commentTooShort); return; }
     if (btn) { btn.disabled = true; btn.textContent = TEXT.commentSaving; }
-    apiFetch('/api/peipe-partners/comments/' + encodeURIComponent(targetUid), {
+    apiFetch('/api/peipe-swipe/comments/' + encodeURIComponent(targetUid), {
       method: 'POST',
       headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
       body: jsonBody({ content: content })
@@ -972,7 +910,7 @@
       navigator.geolocation.getCurrentPosition(function (pos) {
         var c = pos && pos.coords;
         if (!c) return resolve(false);
-        apiFetch('/api/peipe-partners/location', {
+        apiFetch('/api/peipe-swipe/location', {
           method: 'PUT',
           headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
           body: JSON.stringify({ lat: c.latitude, lng: c.longitude })
@@ -995,19 +933,15 @@
     state.loading = true;
     if (refresh) {
       state.done = false;
-      if (!state.fastPaintedFromCache) {
-        state.users = [];
-        state.index = 0;
-        state.photoSwipers.clear();
-      }
+      state.users = [];
+      state.index = 0;
+      state.photoSwipers.clear();
     }
-    return apiFetch('/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize)
+    return apiFetch('/api/peipe-swipe/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize)
       .then(function (json) {
         var users = Array.isArray(json.users) ? json.users : [];
         state.users = refresh ? users : state.users.concat(users);
-        state.fastPaintedFromCache = false;
         state.done = json.hasMore === false || users.length === 0;
-        if (refresh && users.length) safeJsonSet(feedCacheKey(), { t: Date.now(), users: users.slice(0, CONFIG.pageSize || 18), hasMore: json.hasMore }, false);
         if (!state.users.length) showEmpty(TEXT.empty);
         else showFeed();
       })
@@ -1023,7 +957,7 @@
       state.profileComplete = true;
       return Promise.resolve();
     }
-    return apiFetch('/api/peipe-partners/swipe/me')
+    return apiFetch('/api/peipe-swipe/swipe/me')
       .then(function (json) {
         state.profile = json.profile || {};
         state.profileComplete = !!json.complete;
@@ -1047,7 +981,7 @@
 
   function loadOptions() {
     ensureGenderOptions();
-    return apiFetch('/api/peipe-partners/options')
+    return apiFetch('/api/peipe-swipe/options')
       .then(function (json) {
         if (Array.isArray(json.countries)) OPTIONS.countries = json.countries;
         if (Array.isArray(json.languages)) OPTIONS.languages = json.languages;
@@ -1061,7 +995,7 @@
   }
 
   function loadTags() {
-    return apiFetch('/api/peipe-partners/swipe/tags')
+    return apiFetch('/api/peipe-swipe/swipe/tags')
       .then(function (json) { state.tagCategories = json.categories || state.tagCategories || []; })
       .catch(function () {});
   }
@@ -1089,7 +1023,7 @@
     var label = $('.pps-greet-label', btn);
     var old = label ? label.textContent : TEXT.greet;
     if (label) label.textContent = TEXT.greeting;
-    apiFetch('/api/peipe-partners/me/greet', {
+    apiFetch('/api/peipe-swipe/me/greet', {
       method: 'POST',
       headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
       body: jsonBody({ uid: uid })
@@ -1174,6 +1108,7 @@
     if (summary) summary.textContent = choiceSummary(cfg.list, value, cfg.type, cfg.multiple, cfg.max);
   }
 
+  function syncChoiceGrid() {}
 
   function renderPhotoTiles(photos) {
     photos = normalisePhotos(photos);
@@ -1320,7 +1255,7 @@
     var btn = $('.pps-save-btn', state.root);
     btn.disabled = true;
     btn.textContent = TEXT.saving;
-    apiFetch('/api/peipe-partners/swipe/me', {
+    apiFetch('/api/peipe-swipe/swipe/me', {
       method: 'PUT',
       headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
       body: jsonBody(data)
@@ -1870,6 +1805,29 @@
     updateTagCount();
   }
 
+  function isEditableTarget(el) {
+    return !!(el && el.closest && el.closest('input, textarea, select, option, [contenteditable="true"], .composer, .write'));
+  }
+
+  function bindMobileSelectionGuard() {
+    if (state.selectionGuardBound) return;
+    state.selectionGuardBound = true;
+    var root = state.root;
+    if (!root) return;
+    root.addEventListener('contextmenu', function (e) {
+      if (isEditableTarget(e.target)) return;
+      e.preventDefault();
+    }, true);
+    root.addEventListener('selectstart', function (e) {
+      if (isEditableTarget(e.target)) return;
+      e.preventDefault();
+    }, true);
+    root.addEventListener('dragstart', function (e) {
+      if (isEditableTarget(e.target)) return;
+      e.preventDefault();
+    }, true);
+  }
+
   function bindEvents() {
     state.root.addEventListener('click', function (e) {
       var btn;
@@ -2075,30 +2033,18 @@
     state.users = [];
     state.done = false;
     state.loading = false;
-    state.fastPaintedFromCache = false;
     enterFullScreenMode();
-    buildChrome();
-    bindEvents();
-    bindMobileSelectionGuard();
-
     loadTranslations().then(function () {
-      if (state.users.length) updateSlides(false);
-    });
+      buildChrome();
+      bindEvents();
+      bindMobileSelectionGuard();
 
-    ensureSwiper().then(function () {
-      if (state.users.length && !state.swiper) showFeed();
-    });
-
-    Promise.all([loadOptions(), loadTags()]).then(function () {
-      if (state.users.length) updateSlides(false);
-    });
-
-    loadMe();
-    paintCachedFeed();
-    loadFeed(true).then(function () {
-      deferWork(function () {
+      var swiperReady = ensureSwiper();
+      Promise.all([loadOptions(), loadTags()]).then(function () { return loadMe(); });
+      swiperReady.then(function () {
+        loadFeed(true);
         syncLocationIfPossible().then(function (updated) { if (updated) loadFeed(true); });
-      }, 1600);
+      });
     });
   }
 
