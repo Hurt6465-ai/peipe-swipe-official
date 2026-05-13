@@ -6,13 +6,8 @@ const swipe = require('./swipe');
 const partnerReviews = require('./swipe/comments');
 const user = require.main.require('./src/user');
 const db = require.main.require('./src/database');
-
 let messaging = null;
-try {
-  messaging = require.main.require('./src/messaging');
-} catch (err) {
-  messaging = null;
-}
+try { messaging = require.main.require('./src/messaging'); } catch (err) { messaging = null; }
 
 const plugin = {};
 
@@ -31,19 +26,15 @@ async function saveLocation(uid, body) {
   if (partner && typeof partner.saveLocation === 'function') {
     return partner.saveLocation(uid, body || {});
   }
-
   uid = Number(uid || 0);
   const lat = Number(body && body.lat);
   const lng = Number(body && body.lng);
   const accuracy = Number(body && body.accuracy) || 0;
-
   if (!uid || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
     return { ok: false, error: 'invalid-location' };
   }
-
   const now = Date.now();
   const expiresAt = now + 7 * 24 * 60 * 60 * 1000;
-
   await user.setUserFields(uid, {
     lat,
     lng,
@@ -53,11 +44,10 @@ async function saveLocation(uid, body) {
     peipe_partner_location_updated_at: now,
     peipe_partner_location_expires_at: expiresAt,
   });
-
   await db.sortedSetAdd('peipePartners:location:updated', now, uid).catch(() => {});
-
   return { ok: true, lat, lng, accuracy, updatedAt: now, expiresAt };
 }
+
 
 function toRad(value) {
   return Number(value || 0) * Math.PI / 180;
@@ -68,174 +58,94 @@ function distanceKm(a, b) {
   const lng1 = Number(a && a.lng);
   const lat2 = Number(b && b.lat);
   const lng2 = Number(b && b.lng);
-
-  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) {
-    return 0;
-  }
-
+  if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return 0;
   const r = 6371;
   const dLat = toRad(lat2 - lat1);
   const dLng = toRad(lng2 - lng1);
-  const x = Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return r * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
 function formatDistance(km) {
   km = Number(km || 0);
-
-  if (!Number.isFinite(km) || km <= 0) {
-    return '';
-  }
-
-  if (km < 0.5) {
-    return '500米内';
-  }
-
-  if (km < 1) {
-    return `${Math.round(km * 1000)}米`;
-  }
-
-  if (km > 1000) {
-    return '1000km外';
-  }
-
+  if (!Number.isFinite(km) || km <= 0) return '';
+  if (km < 0.5) return '500米内';
+  if (km < 1) return `${Math.round(km * 1000)}米`;
+  if (km > 1000) return '1000km外';
   return `${Math.round(km)}km`;
 }
 
 function parseGeoRow(row) {
-  if (!row) {
-    return null;
-  }
-
+  if (!row) return null;
   const expiresAt = Number(row.peipe_partner_location_expires_at || row.location_expires_at || 0);
-  if (expiresAt && expiresAt < Date.now()) {
-    return null;
-  }
-
+  if (expiresAt && expiresAt < Date.now()) return null;
   const lat = Number(row.lat || row.peipe_partner_lat);
   const lng = Number(row.lng || row.peipe_partner_lng);
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return null;
-  }
-
-  if (Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001) {
-    return null;
-  }
-
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001) return null;
   return { lat, lng };
 }
 
 async function getViewerGeo(uid) {
   uid = Number(uid || 0);
-
-  if (!uid) {
-    return null;
-  }
-
-  const row = await user.getUserFields(uid, [
-    'lat',
-    'lng',
-    'peipe_partner_lat',
-    'peipe_partner_lng',
-    'peipe_partner_location_expires_at',
-  ]).catch(() => null);
-
+  if (!uid) return null;
+  const row = await user.getUserFields(uid, ['lat', 'lng', 'peipe_partner_lat', 'peipe_partner_lng', 'peipe_partner_location_expires_at']).catch(() => null);
   return parseGeoRow(row);
 }
 
 async function decorateFeedWithDistance(req, payload) {
   const users = Array.isArray(payload && payload.users) ? payload.users : [];
-
-  if (!users.length) {
-    return payload;
-  }
-
+  if (!users.length) return payload;
   const viewerGeo = await getViewerGeo(req.uid);
-
-  if (!viewerGeo) {
-    return payload;
-  }
-
+  if (!viewerGeo) return payload;
   const uids = users.map(item => Number(item && item.uid)).filter(Boolean);
-  const rows = await user.getUsersFields(uids, [
-    'uid',
-    'lat',
-    'lng',
-    'peipe_partner_lat',
-    'peipe_partner_lng',
-    'peipe_partner_location_expires_at',
-  ]).catch(() => []);
-
+  const rows = await user.getUsersFields(uids, ['uid', 'lat', 'lng', 'peipe_partner_lat', 'peipe_partner_lng', 'peipe_partner_location_expires_at']).catch(() => []);
   const geo = new Map();
-
   rows.forEach((row) => {
     const point = parseGeoRow(row);
-    if (point) {
-      geo.set(Number(row.uid), point);
-    }
+    if (point) geo.set(Number(row.uid), point);
   });
-
   payload.users = users.map((item) => {
     const targetGeo = geo.get(Number(item.uid));
     const km = distanceKm(viewerGeo, targetGeo);
-
     if (km > 0) {
       item.distanceKm = km;
       item.distanceText = formatDistance(km);
     }
-
     return item;
   });
-
   return payload;
 }
 
 const GREET_STICKERS = [
-  'hello-01',
-  'hello-02',
-  'hello-03',
-  'hello-04',
-  'hello-05',
-  'hello-06',
-  'hello-07',
-  'hello-08',
-  'hello-09',
-  'hello-10',
+  'hello-01', 'hello-02', 'hello-03', 'hello-04', 'hello-05',
+  'hello-06', 'hello-07', 'hello-08', 'hello-09', 'hello-10'
 ];
 
 function randomWaveMessage() {
   const name = GREET_STICKERS[Math.floor(Math.random() * GREET_STICKERS.length)];
+  // Send a stable shortcode, then client-v14 renders it as a WEBM video sticker.
+  // Do not send Markdown image here because .webm is not a normal image.
   return name ? `[peipe-greet:${name}]` : '👋';
 }
+
 
 async function prepareWukongChatRoute(req) {
   const fromUid = Number(req.uid || 0);
   const toUid = Number(req.body && (req.body.uid || req.body.toUid || req.body.targetUid));
-
-  if (!fromUid) {
-    return { ok: false, error: 'login-required' };
-  }
-
-  if (!toUid || toUid === fromUid) {
-    return { ok: false, error: 'invalid-user' };
-  }
+  if (!fromUid) return { ok: false, error: 'login-required' };
+  if (!toUid || toUid === fromUid) return { ok: false, error: 'invalid-user' };
 
   let roomId = '';
-
   if (messaging && typeof messaging.hasPrivateChat === 'function') {
     await messaging.canMessageUser(fromUid, toUid).catch(() => {});
     roomId = await messaging.hasPrivateChat(fromUid, toUid).catch(() => '') || '';
-
     if (!roomId && typeof messaging.newRoom === 'function') {
       roomId = await messaging.newRoom(fromUid, { uids: [String(toUid)] }).catch(() => '') || '';
     }
   }
 
   let userslug = '';
-
   try {
     const row = await user.getUserFields(toUid, ['userslug', 'username']);
     userslug = row && (row.userslug || row.username) || '';
@@ -245,84 +155,57 @@ async function prepareWukongChatRoute(req) {
     await partner.markChatted(fromUid, { uid: toUid, toUid }).catch(() => {});
   }
 
-  const chatUrl = userslug ?
-    `/user/${encodeURIComponent(userslug)}/chats${roomId ? `/${encodeURIComponent(roomId)}` : ''}` :
-    '';
-
+  const chatUrl = userslug ? ('/user/' + encodeURIComponent(userslug) + '/chats' + (roomId ? '/' + encodeURIComponent(roomId) : '')) : '';
   return { ok: true, mode: 'wukong', roomId, uid: toUid, userslug, chatUrl };
 }
 
 async function sendPrivateGreeting(req) {
   const fromUid = Number(req.uid || 0);
   const toUid = Number(req.body && (req.body.uid || req.body.toUid || req.body.targetUid));
-
-  if (!fromUid) {
-    return { ok: false, error: 'login-required' };
-  }
-
-  if (!toUid || toUid === fromUid) {
-    return { ok: false, error: 'invalid-user' };
-  }
+  if (!fromUid) return { ok: false, error: 'login-required' };
+  if (!toUid || toUid === fromUid) return { ok: false, error: 'invalid-user' };
 
   if (!messaging || typeof messaging.hasPrivateChat !== 'function') {
     return partner.greet(fromUid, req.body || {});
   }
 
   await messaging.canMessageUser(fromUid, toUid);
-
   let roomId = await messaging.hasPrivateChat(fromUid, toUid);
-
   if (!roomId) {
     roomId = await messaging.newRoom(fromUid, { uids: [String(toUid)] });
   }
 
   const content = randomWaveMessage();
   const message = await messaging.sendMessage({ uid: fromUid, roomId, content });
-
   if (message && typeof messaging.notifyUsersInRoom === 'function') {
     await messaging.notifyUsersInRoom(fromUid, roomId, message).catch(() => {});
   }
-
   if (partner && typeof partner.markChatted === 'function') {
     await partner.markChatted(fromUid, { uid: toUid, toUid }).catch(() => {});
   }
-
   return { ok: true, mode: 'chat', roomId, message, content };
 }
 
-/**
- * Register normal page routes.
- *
- * Important:
- * routeHelpers.setupPageRoute uses this argument shape:
- *   setupPageRoute(router, route, middleware, middlewares, controller)
- *
- * The broken version passed:
- *   setupPageRoute(router, route, [], controller)
- *
- * That omits the NodeBB middleware object, so the mounted page route can fail
- * or never be registered correctly on newer NodeBB versions.
- */
-function setupPage(router, middleware, route, template, data) {
-  routeHelpers.setupPageRoute(router, route, middleware, [], (req, res) => {
-    const payload = typeof data === 'function' ? data(req) : (data || {});
-    res.render(template, Object.assign({ uid: req.uid || 0 }, payload));
+plugin.init = async ({ router, middleware }) => {
+  routeHelpers.setupPageRoute(router, '/partners', [], (req, res) => {
+    res.render('peipe-partners', { uid: req.uid || 0 });
   });
-}
 
-plugin.init = async (params) => {
-  const router = params && params.router;
-  const middleware = params && params.middleware;
+  routeHelpers.setupPageRoute(router, '/nearby', [], (req, res) => {
+    res.render('peipe-partners-swipe', { uid: req.uid || 0, mode: 'nearby' });
+  });
 
-  if (!router || !middleware) {
-    throw new Error('[peipe-partners] static:app.load params missing router or middleware');
-  }
+  routeHelpers.setupPageRoute(router, '/nearby/list', [], (req, res) => {
+    res.render('peipe-nearby', { uid: req.uid || 0 });
+  });
 
-  setupPage(router, middleware, '/partners', 'peipe-partners');
-  setupPage(router, middleware, '/nearby', 'peipe-partners-swipe', { mode: 'nearby' });
-  setupPage(router, middleware, '/nearby/list', 'peipe-nearby');
-  setupPage(router, middleware, '/partners/swipe', 'peipe-partners-swipe', { mode: 'recommend' });
-  setupPage(router, middleware, '/nearby/swipe', 'peipe-partners-swipe', { mode: 'nearby' });
+  routeHelpers.setupPageRoute(router, '/partners/swipe', [], (req, res) => {
+    res.render('peipe-partners-swipe', { uid: req.uid || 0, mode: 'recommend' });
+  });
+
+  routeHelpers.setupPageRoute(router, '/nearby/swipe', [], (req, res) => {
+    res.render('peipe-partners-swipe', { uid: req.uid || 0, mode: 'nearby' });
+  });
 
   router.get('/api/peipe-partners', asyncRoute(async (req, res) => {
     json(res, await partner.list(req));
