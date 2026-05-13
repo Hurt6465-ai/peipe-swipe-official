@@ -2495,314 +2495,151 @@ body.peipe-swipe-mode [component="container"] {
   display: none !important;
   }
 }
-
-/* === Peipe swipe final rewrite overrides: clean text, thinner avatar ring, inner online dot, faster mobile feel === */
-.peipe-swipe-html,
-.peipe-swipe-mode,
-.peipe-swipe-mode #peipe-swipe-app,
-.peipe-swipe-mode #peipe-swipe-app * {
-  -webkit-user-select: none !important;
-  user-select: none !important;
-  -webkit-touch-callout: none !important;
-  -webkit-tap-highlight-color: transparent !important;
-}
-
-.peipe-swipe-mode input,
-.peipe-swipe-mode textarea,
-.peipe-swipe-mode select,
-.peipe-swipe-mode option,
-.peipe-swipe-mode [contenteditable="true"],
-.peipe-swipe-mode [contenteditable=""],
-.peipe-swipe-mode .composer,
-.peipe-swipe-mode .write,
-.peipe-swipe-mode input *,
-.peipe-swipe-mode textarea * {
-  -webkit-user-select: text !important;
-  user-select: text !important;
-  -webkit-touch-callout: default !important;
-}
-
-.peipe-swipe-mode img,
-.peipe-swipe-mode video,
-.peipe-swipe-mode canvas {
-  -webkit-user-drag: none !important;
-  user-drag: none !important;
-}
-
-.peipe-swipe-mode #peipe-swipe-app,
-.peipe-swipe-mode #peipe-swipe-app .pps-slide,
-.peipe-swipe-mode #peipe-swipe-app .pps-info,
-.peipe-swipe-mode #peipe-swipe-app .pps-user-card,
-.peipe-swipe-mode #peipe-swipe-app .pps-user-main,
-.peipe-swipe-mode #peipe-swipe-app .pps-name-row,
-.peipe-swipe-mode #peipe-swipe-app .pps-name,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-row,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-side,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-code,
-.peipe-swipe-mode #peipe-swipe-app .pps-native-chip,
-.peipe-swipe-mode #peipe-swipe-app .pps-learn-chip,
-.peipe-swipe-mode #peipe-swipe-app .pps-arrow,
-.peipe-swipe-mode #peipe-swipe-app .pps-bio,
-.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro,
-.peipe-swipe-mode #peipe-swipe-app .ppst-card-text,
-.peipe-swipe-mode #peipe-swipe-app .ppst-distance-line {
+/* Peipe Swipe Official side-by-side install + no text-film final overrides */
+body.peipe-swipe-mode #peipe-swipe-app,
+body.pps-v14-overlay #peipe-swipe-app {
   font-family: MiSans, "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
-.peipe-swipe-mode #peipe-swipe-app .pps-gradient,
-.peipe-swipe-mode #peipe-swipe-app .pps-photo-layer::after,
-.peipe-swipe-mode #peipe-swipe-app .pps-info::before,
-.peipe-swipe-mode #peipe-swipe-app .pps-info::after,
-.peipe-swipe-mode #peipe-swipe-app .pps-user-card::before,
-.peipe-swipe-mode #peipe-swipe-app .pps-user-card::after,
-.peipe-swipe-mode #peipe-swipe-app .pps-name-row::before,
-.peipe-swipe-mode #peipe-swipe-app .pps-name-row::after,
-.peipe-swipe-mode #peipe-swipe-app .pps-name::before,
-.peipe-swipe-mode #peipe-swipe-app .pps-name::after,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-row::before,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-row::after,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-side::before,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-side::after,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-code::before,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-code::after,
-.peipe-swipe-mode #peipe-swipe-app .pps-bio::before,
-.peipe-swipe-mode #peipe-swipe-app .pps-bio::after,
-.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro::before,
-.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro::after,
-.peipe-swipe-mode #peipe-swipe-app .ppst-distance-line::before,
-.peipe-swipe-mode #peipe-swipe-app .ppst-distance-line::after {
-  display: none !important;
-  content: none !important;
-  opacity: 0 !important;
+body.peipe-swipe-mode #peipe-swipe-app input,
+body.peipe-swipe-mode #peipe-swipe-app textarea,
+body.peipe-swipe-mode #peipe-swipe-app select,
+body.peipe-swipe-mode #peipe-swipe-app [contenteditable="true"],
+body.pps-v14-overlay #peipe-swipe-app input,
+body.pps-v14-overlay #peipe-swipe-app textarea,
+body.pps-v14-overlay #peipe-swipe-app select,
+body.pps-v14-overlay #peipe-swipe-app [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
-.peipe-swipe-mode #peipe-swipe-app .pps-user-card,
-.peipe-swipe-mode #peipe-swipe-app .pps-user-main,
-.peipe-swipe-mode #peipe-swipe-app .pps-name-row,
-.peipe-swipe-mode #peipe-swipe-app .pps-name,
-.peipe-swipe-mode #peipe-swipe-app .pps-user-meta,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-row,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-side,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-code,
-.peipe-swipe-mode #peipe-swipe-app .pps-native-chip,
-.peipe-swipe-mode #peipe-swipe-app .pps-learn-chip,
-.peipe-swipe-mode #peipe-swipe-app .pps-arrow,
-.peipe-swipe-mode #peipe-swipe-app .pps-bio,
-.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro,
-.peipe-swipe-mode #peipe-swipe-app .ppst-card-text,
-.peipe-swipe-mode #peipe-swipe-app .ppst-distance-line {
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-card,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-main,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name-row,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-side,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-chip,
+body.peipe-swipe-mode #peipe-swipe-app .pps-native-chip,
+body.peipe-swipe-mode #peipe-swipe-app .pps-learn-chip,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code,
+body.peipe-swipe-mode #peipe-swipe-app .pps-arrow,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-card,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-main,
+body.pps-v14-overlay #peipe-swipe-app .pps-name-row,
+body.pps-v14-overlay #peipe-swipe-app .pps-name,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-row,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-side,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-chip,
+body.pps-v14-overlay #peipe-swipe-app .pps-native-chip,
+body.pps-v14-overlay #peipe-swipe-app .pps-learn-chip,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-code,
+body.pps-v14-overlay #peipe-swipe-app .pps-arrow {
   background: transparent !important;
   background-color: transparent !important;
   background-image: none !important;
+  border-color: transparent !important;
   box-shadow: none !important;
-  border: 0 !important;
-  outline: 0 !important;
   filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  -webkit-text-stroke: 0 transparent !important;
-}
-
-.peipe-swipe-mode #peipe-swipe-app .pps-name {
-  font-weight: 780 !important;
-  letter-spacing: .01em !important;
-  color: rgba(255,255,255,.98) !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,.48), 0 4px 12px rgba(0,0,0,.24) !important;
-}
-
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-row,
-.peipe-swipe-mode #peipe-swipe-app .pps-lang-code,
-.peipe-swipe-mode #peipe-swipe-app .pps-native-chip,
-.peipe-swipe-mode #peipe-swipe-app .pps-learn-chip,
-.peipe-swipe-mode #peipe-swipe-app .pps-arrow {
-  font-weight: 720 !important;
-  color: rgba(255,255,255,.94) !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,.46), 0 3px 10px rgba(0,0,0,.22) !important;
-}
-
-.peipe-swipe-mode #peipe-swipe-app .pps-bio,
-.peipe-swipe-mode #peipe-swipe-app .ppst-card-text,
-.peipe-swipe-mode #peipe-swipe-app .ppst-distance-line {
-  color: rgba(255,255,255,.94) !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,.48), 0 4px 12px rgba(0,0,0,.22) !important;
-}
-
-.peipe-swipe-mode #peipe-swipe-app .pps-avatar-wrap {
-  position: relative !important;
-  overflow: visible !important;
-}
-
-.peipe-swipe-mode #peipe-swipe-app .pps-avatar,
-.peipe-swipe-mode #peipe-swipe-app .pps-avatar-fallback,
-.peipe-swipe-mode #peipe-swipe-app .pps-form-avatar,
-.peipe-swipe-mode #peipe-swipe-app .pps-review-avatar img,
-.peipe-swipe-mode #peipe-swipe-app .pps-comment-avatar img {
-  border: .5px solid rgba(255,255,255,.92) !important;
-  box-shadow: 0 8px 20px rgba(0,0,0,.22) !important;
-  outline: 0 !important;
-}
-
-@supports not (border: .5px solid rgba(255,255,255,.92)) {
-  .peipe-swipe-mode #peipe-swipe-app .pps-avatar,
-  .peipe-swipe-mode #peipe-swipe-app .pps-avatar-fallback,
-  .peipe-swipe-mode #peipe-swipe-app .pps-form-avatar {
-    border: 1px solid rgba(255,255,255,.72) !important;
-  }
-}
-
-.peipe-swipe-mode #peipe-swipe-app .pps-online-dot {
-  width: 5px !important;
-  height: 5px !important;
-  top: 6px !important;
-  right: 6px !important;
-  z-index: 4 !important;
-  border: .5px solid rgba(255,255,255,.92) !important;
-  background: #22c55e !important;
-  box-shadow: 0 0 5px rgba(34,197,94,.42) !important;
-  transform: none !important;
-}
-
-/* Peipe Swipe final text-film kill switch v3
-   Problem source: username/language nodes can inherit pill backgrounds or halo shadows
-   from older bundled CSS. This block intentionally targets the real rendered spans
-   and their parent rows without relying only on body route classes. */
-#peipe-swipe-app .pps-user-card,
-#peipe-swipe-app .pps-user-main,
-#peipe-swipe-app .pps-name-row,
-#peipe-swipe-app .pps-name-row > *,
-#peipe-swipe-app .pps-name,
-#peipe-swipe-app .pps-name *,
-#peipe-swipe-app .pps-lang-row,
-#peipe-swipe-app .pps-lang-row > *,
-#peipe-swipe-app .pps-lang-side,
-#peipe-swipe-app .pps-lang-side > *,
-#peipe-swipe-app .pps-lang-code,
-#peipe-swipe-app .pps-native-chip,
-#peipe-swipe-app .pps-learn-chip,
-#peipe-swipe-app .pps-lang-chip,
-#peipe-swipe-app .pps-chip,
-#peipe-swipe-app .pps-arrow,
-.pps-v14-overlay .pps-user-card,
-.pps-v14-overlay .pps-user-main,
-.pps-v14-overlay .pps-name-row,
-.pps-v14-overlay .pps-name-row > *,
-.pps-v14-overlay .pps-name,
-.pps-v14-overlay .pps-name *,
-.pps-v14-overlay .pps-lang-row,
-.pps-v14-overlay .pps-lang-row > *,
-.pps-v14-overlay .pps-lang-side,
-.pps-v14-overlay .pps-lang-side > *,
-.pps-v14-overlay .pps-lang-code,
-.pps-v14-overlay .pps-native-chip,
-.pps-v14-overlay .pps-learn-chip,
-.pps-v14-overlay .pps-lang-chip,
-.pps-v14-overlay .pps-chip,
-.pps-v14-overlay .pps-arrow {
-  background: none !important;
-  background-color: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
-  border: 0 !important;
-  outline: 0 !important;
-  filter: none !important;
-  -webkit-filter: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   -webkit-text-stroke: 0 !important;
-  text-stroke: 0 !important;
-  -webkit-background-clip: border-box !important;
-  background-clip: border-box !important;
   -webkit-text-fill-color: currentColor !important;
-  mix-blend-mode: normal !important;
-  isolation: auto !important;
 }
 
-#peipe-swipe-app .pps-name-row::before,
-#peipe-swipe-app .pps-name-row::after,
-#peipe-swipe-app .pps-name::before,
-#peipe-swipe-app .pps-name::after,
-#peipe-swipe-app .pps-lang-row::before,
-#peipe-swipe-app .pps-lang-row::after,
-#peipe-swipe-app .pps-lang-side::before,
-#peipe-swipe-app .pps-lang-side::after,
-#peipe-swipe-app .pps-lang-code::before,
-#peipe-swipe-app .pps-lang-code::after,
-#peipe-swipe-app .pps-native-chip::before,
-#peipe-swipe-app .pps-native-chip::after,
-#peipe-swipe-app .pps-learn-chip::before,
-#peipe-swipe-app .pps-learn-chip::after,
-#peipe-swipe-app .pps-lang-chip::before,
-#peipe-swipe-app .pps-lang-chip::after,
-#peipe-swipe-app .pps-chip::before,
-#peipe-swipe-app .pps-chip::after,
-.pps-v14-overlay .pps-name-row::before,
-.pps-v14-overlay .pps-name-row::after,
-.pps-v14-overlay .pps-name::before,
-.pps-v14-overlay .pps-name::after,
-.pps-v14-overlay .pps-lang-row::before,
-.pps-v14-overlay .pps-lang-row::after,
-.pps-v14-overlay .pps-lang-side::before,
-.pps-v14-overlay .pps-lang-side::after,
-.pps-v14-overlay .pps-lang-code::before,
-.pps-v14-overlay .pps-lang-code::after,
-.pps-v14-overlay .pps-native-chip::before,
-.pps-v14-overlay .pps-native-chip::after,
-.pps-v14-overlay .pps-learn-chip::before,
-.pps-v14-overlay .pps-learn-chip::after,
-.pps-v14-overlay .pps-lang-chip::before,
-.pps-v14-overlay .pps-lang-chip::after,
-.pps-v14-overlay .pps-chip::before,
-.pps-v14-overlay .pps-chip::after {
-  content: none !important;
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-card::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-card::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-main::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-main::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name-row::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name-row::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-side::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-side::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-chip::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-chip::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-card::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-card::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-main::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-main::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-name-row::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-name-row::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-name::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-name::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-row::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-row::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-side::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-side::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-chip::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-chip::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-code::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-code::after {
   display: none !important;
-  background: none !important;
+  content: none !important;
+  background: transparent !important;
   box-shadow: none !important;
-  opacity: 0 !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
-#peipe-swipe-app .pps-name,
-.pps-v14-overlay .pps-name {
-  padding: 0 !important;
-  margin: 0 !important;
-  border-radius: 0 !important;
-  font-weight: 760 !important;
-  color: rgba(255,255,255,.98) !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,.38), 0 2px 6px rgba(0,0,0,.22) !important;
+body.peipe-swipe-mode #peipe-swipe-app .pps-name,
+body.pps-v14-overlay #peipe-swipe-app .pps-name {
+  font-weight: 780 !important;
+  letter-spacing: -.02em !important;
+  text-shadow: 0 1px 5px rgba(0,0,0,.38), 0 2px 12px rgba(0,0,0,.28) !important;
 }
 
-#peipe-swipe-app .pps-lang-row,
-#peipe-swipe-app .pps-lang-side,
-#peipe-swipe-app .pps-lang-code,
-#peipe-swipe-app .pps-native-chip,
-#peipe-swipe-app .pps-learn-chip,
-#peipe-swipe-app .pps-lang-chip,
-#peipe-swipe-app .pps-chip,
-#peipe-swipe-app .pps-arrow,
-.pps-v14-overlay .pps-lang-row,
-.pps-v14-overlay .pps-lang-side,
-.pps-v14-overlay .pps-lang-code,
-.pps-v14-overlay .pps-native-chip,
-.pps-v14-overlay .pps-learn-chip,
-.pps-v14-overlay .pps-lang-chip,
-.pps-v14-overlay .pps-chip,
-.pps-v14-overlay .pps-arrow {
-  padding: 0 !important;
-  margin-top: 0 !important;
-  border-radius: 0 !important;
-  font-weight: 680 !important;
-  color: rgba(255,255,255,.93) !important;
-  text-shadow: 0 1px 2px rgba(0,0,0,.34), 0 2px 5px rgba(0,0,0,.18) !important;
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-chip,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-row,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-code,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-chip {
+  font-weight: 720 !important;
+  text-shadow: 0 1px 4px rgba(0,0,0,.34), 0 2px 10px rgba(0,0,0,.24) !important;
 }
 
-#peipe-swipe-app .pps-online-dot,
-.pps-v14-overlay .pps-online-dot {
+body.peipe-swipe-mode #peipe-swipe-app .pps-gradient,
+body.pps-v14-overlay #peipe-swipe-app .pps-gradient {
+  pointer-events: none !important;
+}
+
+body.peipe-swipe-mode #peipe-swipe-app .pps-avatar-wrap,
+body.pps-v14-overlay #peipe-swipe-app .pps-avatar-wrap {
+  position: relative !important;
+}
+
+body.peipe-swipe-mode #peipe-swipe-app .pps-avatar,
+body.peipe-swipe-mode #peipe-swipe-app .pps-avatar-fallback,
+body.peipe-swipe-mode #peipe-swipe-app .pps-form-avatar,
+body.pps-v14-overlay #peipe-swipe-app .pps-avatar,
+body.pps-v14-overlay #peipe-swipe-app .pps-avatar-fallback,
+body.pps-v14-overlay #peipe-swipe-app .pps-form-avatar {
+  border: .5px solid rgba(255,255,255,.95) !important;
+  box-shadow: 0 1px 8px rgba(0,0,0,.22) !important;
+}
+
+body.peipe-swipe-mode #peipe-swipe-app .pps-online-dot,
+body.pps-v14-overlay #peipe-swipe-app .pps-online-dot {
   width: 8px !important;
   height: 8px !important;
-  top: 5px !important;
   right: 5px !important;
-  border: .5px solid rgba(255,255,255,.95) !important;
-  border-radius: 999px !important;
-  background: #22c55e !important;
-  box-shadow: 0 0 0 .5px rgba(0,0,0,.18), 0 0 7px rgba(34,197,94,.45) !important;
-  transform: none !important;
+  bottom: 5px !important;
+  border: 1px solid rgba(255,255,255,.95) !important;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.16), 0 1px 5px rgba(0,0,0,.25) !important;
+}
+
+body.peipe-swipe-mode #peipe-swipe-app img,
+body.pps-v14-overlay #peipe-swipe-app img {
+  -webkit-user-drag: none;
+  user-drag: none;
 }
