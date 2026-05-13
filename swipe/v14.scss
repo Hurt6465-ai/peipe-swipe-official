@@ -1173,34 +1173,69 @@ body.pps-v14-overlay img {
   user-drag: none;
 }
 
-/* Final card text cleanup: remove transparent film behind name/lang/bio */
+
+
+/* =========================================================
+   FINAL: remove all transparent film behind full-screen card text
+   Keep text directly on photo, with only soft shadow.
+   ========================================================= */
+
+body.peipe-swipe-mode #peipe-swipe-app .pps-gradient,
+body.pps-v14-overlay #peipe-swipe-app .pps-gradient,
+body.peipe-swipe-mode.pps-v14-overlay #peipe-swipe-app .pps-gradient {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  background: none !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+/* Remove glass / strip / capsule backgrounds from every text area */
 body.peipe-swipe-mode #peipe-swipe-app .pps-info,
-body.peipe-swipe-mode #peipe-swipe-app .pps-info *,
 body.peipe-swipe-mode #peipe-swipe-app .pps-user-card,
 body.peipe-swipe-mode #peipe-swipe-app .pps-user-main,
 body.peipe-swipe-mode #peipe-swipe-app .pps-name-row,
 body.peipe-swipe-mode #peipe-swipe-app .pps-name,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-meta,
 body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row,
 body.peipe-swipe-mode #peipe-swipe-app .pps-lang-side,
 body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code,
 body.peipe-swipe-mode #peipe-swipe-app .pps-native-chip,
 body.peipe-swipe-mode #peipe-swipe-app .pps-learn-chip,
+body.peipe-swipe-mode #peipe-swipe-app .pps-arrow,
 body.peipe-swipe-mode #peipe-swipe-app .pps-bio,
 body.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro,
+body.peipe-swipe-mode #peipe-swipe-app .pps-about,
+body.peipe-swipe-mode #peipe-swipe-app .pps-intro,
+body.peipe-swipe-mode #peipe-swipe-app .pps-description,
+body.peipe-swipe-mode #peipe-swipe-app .pps-profile-intro,
+body.peipe-swipe-mode #peipe-swipe-app .pps-text,
+body.peipe-swipe-mode #peipe-swipe-app .ppst-card-text,
 body.pps-v14-overlay #peipe-swipe-app .pps-info,
-body.pps-v14-overlay #peipe-swipe-app .pps-info *,
 body.pps-v14-overlay #peipe-swipe-app .pps-user-card,
 body.pps-v14-overlay #peipe-swipe-app .pps-user-main,
 body.pps-v14-overlay #peipe-swipe-app .pps-name-row,
 body.pps-v14-overlay #peipe-swipe-app .pps-name,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-meta,
 body.pps-v14-overlay #peipe-swipe-app .pps-lang-row,
 body.pps-v14-overlay #peipe-swipe-app .pps-lang-side,
 body.pps-v14-overlay #peipe-swipe-app .pps-lang-code,
 body.pps-v14-overlay #peipe-swipe-app .pps-native-chip,
 body.pps-v14-overlay #peipe-swipe-app .pps-learn-chip,
+body.pps-v14-overlay #peipe-swipe-app .pps-arrow,
 body.pps-v14-overlay #peipe-swipe-app .pps-bio,
-body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro {
-  background: transparent !important;
+body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro,
+body.pps-v14-overlay #peipe-swipe-app .pps-about,
+body.pps-v14-overlay #peipe-swipe-app .pps-intro,
+body.pps-v14-overlay #peipe-swipe-app .pps-description,
+body.pps-v14-overlay #peipe-swipe-app .pps-profile-intro,
+body.pps-v14-overlay #peipe-swipe-app .pps-text,
+body.pps-v14-overlay #peipe-swipe-app .ppst-card-text {
+  background: none !important;
   background-color: transparent !important;
   background-image: none !important;
   -webkit-backdrop-filter: none !important;
@@ -1212,55 +1247,78 @@ body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro {
   -webkit-text-stroke: 0 !important;
 }
 
-/* Kill pseudo-element masks/glass behind text */
+/* Kill pseudo-element strips */
 body.peipe-swipe-mode #peipe-swipe-app .pps-info::before,
 body.peipe-swipe-mode #peipe-swipe-app .pps-info::after,
 body.peipe-swipe-mode #peipe-swipe-app .pps-user-card::before,
 body.peipe-swipe-mode #peipe-swipe-app .pps-user-card::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-main::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-user-main::after,
 body.peipe-swipe-mode #peipe-swipe-app .pps-name-row::before,
 body.peipe-swipe-mode #peipe-swipe-app .pps-name-row::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-name::after,
 body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row::before,
 body.peipe-swipe-mode #peipe-swipe-app .pps-lang-row::after,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-side::before,
+body.peipe-swipe-mode #peipe-swipe-app .pps-lang-side::after,
 body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code::before,
 body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code::after,
 body.peipe-swipe-mode #peipe-swipe-app .pps-bio::before,
 body.peipe-swipe-mode #peipe-swipe-app .pps-bio::after,
+body.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro::before,
+body.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro::after,
 body.pps-v14-overlay #peipe-swipe-app .pps-info::before,
 body.pps-v14-overlay #peipe-swipe-app .pps-info::after,
 body.pps-v14-overlay #peipe-swipe-app .pps-user-card::before,
 body.pps-v14-overlay #peipe-swipe-app .pps-user-card::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-main::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-user-main::after,
 body.pps-v14-overlay #peipe-swipe-app .pps-name-row::before,
 body.pps-v14-overlay #peipe-swipe-app .pps-name-row::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-name::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-name::after,
 body.pps-v14-overlay #peipe-swipe-app .pps-lang-row::before,
 body.pps-v14-overlay #peipe-swipe-app .pps-lang-row::after,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-side::before,
+body.pps-v14-overlay #peipe-swipe-app .pps-lang-side::after,
 body.pps-v14-overlay #peipe-swipe-app .pps-lang-code::before,
 body.pps-v14-overlay #peipe-swipe-app .pps-lang-code::after,
 body.pps-v14-overlay #peipe-swipe-app .pps-bio::before,
-body.pps-v14-overlay #peipe-swipe-app .pps-bio::after {
+body.pps-v14-overlay #peipe-swipe-app .pps-bio::after,
+body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro::before,
+body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro::after {
   content: none !important;
   display: none !important;
-  background: transparent !important;
+  background: none !important;
+  background-image: none !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+  filter: none !important;
 }
 
-/* Keep text readable without a background film */
+/* Softer text only, no hard stroke and no smoky strip */
 body.peipe-swipe-mode #peipe-swipe-app .pps-name,
 body.peipe-swipe-mode #peipe-swipe-app .pps-lang-code,
+body.peipe-swipe-mode #peipe-swipe-app .pps-arrow,
 body.peipe-swipe-mode #peipe-swipe-app .pps-bio,
 body.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro,
+body.peipe-swipe-mode #peipe-swipe-app .ppst-card-text,
 body.pps-v14-overlay #peipe-swipe-app .pps-name,
 body.pps-v14-overlay #peipe-swipe-app .pps-lang-code,
+body.pps-v14-overlay #peipe-swipe-app .pps-arrow,
 body.pps-v14-overlay #peipe-swipe-app .pps-bio,
-body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro {
+body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro,
+body.pps-v14-overlay #peipe-swipe-app .ppst-card-text {
   color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
   text-shadow:
-    0 1px 2px rgba(0, 0, 0, .56),
-    0 3px 10px rgba(0, 0, 0, .34) !important;
+    0 1px 2px rgba(0, 0, 0, .50),
+    0 2px 6px rgba(0, 0, 0, .26) !important;
 }
 
-/* Bio / intro: show up to 4 lines */
+/* Bio / intro: max 4 lines */
 body.peipe-swipe-mode #peipe-swipe-app .pps-bio,
 body.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro,
 body.peipe-swipe-mode #peipe-swipe-app .pps-about,
@@ -1285,7 +1343,7 @@ body.pps-v14-overlay #peipe-swipe-app .pps-text {
   overflow-wrap: anywhere !important;
 }
 
-/* Tap/click expanded intro still shows full text */
+/* Expanded intro still shows full text */
 body.peipe-swipe-mode #peipe-swipe-app .pps-bio.is-expanded,
 body.peipe-swipe-mode #peipe-swipe-app .ppst-card-intro.is-expanded,
 body.peipe-swipe-mode #peipe-swipe-app .pps-about.is-expanded,
