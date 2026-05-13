@@ -8,30 +8,7 @@
 (function () {
   'use strict';
 
-  if (typeof Object.assign !== 'function') {
-    Object.assign = function (target) {
-      if (target == null) throw new TypeError('Cannot convert undefined or null to object');
-      var out = Object(target);
-      for (var i = 1; i < arguments.length; i += 1) {
-        var src = arguments[i];
-        if (src == null) continue;
-        Object.keys(Object(src)).forEach(function (key) { out[key] = src[key]; });
-      }
-      return out;
-    };
-  }
-  if (typeof Number.isFinite !== 'function') {
-    Number.isFinite = function (value) { return typeof value === 'number' && isFinite(value); };
-  }
-  if (typeof Math.hypot !== 'function') {
-    Math.hypot = function (x, y) {
-      x = Number(x || 0); y = Number(y || 0);
-      return Math.sqrt(x * x + y * y);
-    };
-  }
-
-  if (window.__peipeSwipeV20Overlay) return;
-  window.__peipeSwipeV20Overlay = true;
+  if (window.__peipeSwipeV16Overlay) return;
   window.__peipeSwipeV16Overlay = true;
   window.__peipeSwipeV15Overlay = true;
   window.__peipeSwipeV14Overlay = true;
@@ -148,19 +125,10 @@
     if (data && typeof data.output_text === 'string') return norm(data.output_text);
     return '';
   }
-  function textHash(text) {
-    text = String(text || '');
-    var hash = 0;
-    for (var i = 0; i < text.length; i += 1) {
-      hash = ((hash << 5) - hash) + text.charCodeAt(i);
-      hash |= 0;
-    }
-    return String(text.length) + ':' + (hash >>> 0).toString(36);
-  }
   function translateCacheKey(text) {
     var s = state.translateSettings || loadTranslateSettings();
     var provider = s.provider === 'ai' ? 'ai:' + (s.aiModel || 'model') : 'google';
-    return 'x-topic-v12-translate:' + provider + ':' + s.sourceLang + ':' + s.targetLang + ':' + textHash(norm(text));
+    return 'x-topic-v12-translate:' + provider + ':' + s.sourceLang + ':' + s.targetLang + ':' + encodeURIComponent(norm(text)).slice(0, 220);
   }
   function translateViaGoogle(text, settings) {
     var sl = settings.sourceLang && settings.sourceLang !== 'auto' ? settings.sourceLang : 'auto';
@@ -287,22 +255,18 @@
   }
   function translateInto(targetEl, textEl) {
     if (!textEl) return;
-    var data = textEl.dataset || {};
-    var original = norm(data.originalText || getTextValue(textEl));
+    var original = norm(textEl.dataset.originalText || getTextValue(textEl));
     if (!original) return;
-    if (data.translated === '1') {
-      setTextValue(textEl, data.originalText || original);
-      if (textEl.dataset) textEl.dataset.translated = '0';
+    if (textEl.dataset.translated === '1') {
+      setTextValue(textEl, textEl.dataset.originalText || original);
+      textEl.dataset.translated = '0';
       return;
     }
-    if (targetEl && targetEl.classList) targetEl.classList.add('loading');
+    targetEl.classList.add('loading');
     translateText(original).then(function (out) {
-      if (textEl.dataset && !textEl.dataset.originalText) textEl.dataset.originalText = original;
-      if (out) {
-        setTextValue(textEl, out);
-        if (textEl.dataset) textEl.dataset.translated = '1';
-      }
-    }).catch(function () { error('翻译失败'); }).finally(function () { if (targetEl && targetEl.classList) targetEl.classList.remove('loading'); });
+      if (!textEl.dataset.originalText) textEl.dataset.originalText = original;
+      if (out) { setTextValue(textEl, out); textEl.dataset.translated = '1'; }
+    }).catch(function () { error('翻译失败'); }).finally(function () { targetEl.classList.remove('loading'); });
   }
 
   function maybeAddCardTranslate(root) {
@@ -327,12 +291,8 @@
         btn.title = '翻译 / 长按设置';
         el.appendChild(text);
         el.appendChild(btn);
-        btn.addEventListener('click', function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (state.translateSuppressClickUntil && Date.now() < state.translateSuppressClickUntil) return;
-          translateInto(btn, text);
-        });
+        btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); translateInto(btn, text); });
+        bindLongPress(btn, function () { openTranslateSettings(); });
       });
     });
   }
@@ -398,32 +358,6 @@
   function distanceHtml(txt) {
     return '<span class="ppst-location-icon"><i class="fa-solid fa-location-dot"></i></span><span>' + escapeHtml(txt) + '</span>';
   }
-
-  function slideFrom(el) {
-    if (!el) return null;
-    var cur = el;
-    while (cur && cur !== document.body) {
-      if (cur.classList && (cur.classList.contains('swiper-slide') || cur.classList.contains('pps-slide') || cur.classList.contains('pps-card') || cur.classList.contains('pps-slide-item'))) return cur;
-      cur = cur.parentNode;
-    }
-    return null;
-  }
-  function uidFromName(slide) {
-    if (!slide) return 0;
-    var nameEl = $('.pps-username,.pps-name,.pps-display-name,.username', slide);
-    var name = norm(nameEl && nameEl.textContent).toLowerCase();
-    if (!name) return 0;
-    var user = state.userMapByName[name];
-    return user ? Number(user.uid || 0) : 0;
-  }
-  function uidFromSlideOrder(slide) {
-    if (!slide) return 0;
-    var idx = Number(slide.dataset && slide.dataset.index);
-    if (!isFinite(idx) || idx < 0) return 0;
-    var user = state.userList[idx];
-    return user ? Number(user.uid || 0) : 0;
-  }
-
   function findUserDataFrom(el) {
     var uid = findUidFrom(el);
     return uid ? state.userMap[String(uid)] || null : null;
@@ -583,12 +517,9 @@
         setRatings(json.viewerComment.ratings || {});
       }
       var editor = $('.ppst-review-editor');
-      if (editor) {
-        editor.classList.remove('disabled');
-        $$('.ppst-review-lock', editor).forEach(function (node) { if (node.parentNode) node.parentNode.removeChild(node); });
-      }
-      if (!isLoggedIn()) { if (editor) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">请先登录后评价</div>'); } return; }
-      if (!can.eligible && editor) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">聊天超过 24 小时后才可以评价</div>'); }
+      if (!isLoggedIn()) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">请先登录后评价</div>'); return; }
+      if (!can.eligible) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">聊天超过 24 小时后才可以评价</div>'); }
+      $$('.ppst-review-translate,.ppst-input-translate').forEach(function (btn) { bindLongPress(btn, function () { openTranslateSettings(); }); });
     }).catch(function (err) { $('.ppst-review-summary').textContent = err.message || '加载失败'; });
   }
   function submitReview() {
@@ -643,10 +574,7 @@
     function end(e) {
       if (!target) return;
       clearTimeout(state.longPressTimer);
-      if (fired) {
-        try { e.preventDefault && e.preventDefault(); } catch (err) {}
-        try { e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch (err) {}
-      }
+      if (fired) { e.preventDefault && e.preventDefault(); e.stopImmediatePropagation && e.stopImmediatePropagation(); }
       target = null; fired = false;
     }
     document.addEventListener('pointerdown', start, { passive: false, capture: true });
@@ -659,12 +587,11 @@
 
 
   function loadScriptOnce(url, key) {
-    if (window[key] || (key === 'ppst-wukong-sdk' && window.wk && window.wk.WKSDK)) return Promise.resolve();
+    if (window[key]) return Promise.resolve();
     return new Promise(function (resolve, reject) {
       var existing = document.querySelector('script[data-ppst-key="' + key + '"]');
       if (existing) {
-        if (existing.dataset.loaded === '1' || (key === 'ppst-wukong-sdk' && window.wk && window.wk.WKSDK)) { resolve(); return; }
-        existing.addEventListener('load', function () { existing.dataset.loaded = '1'; resolve(); }, { once: true });
+        existing.addEventListener('load', resolve, { once: true });
         existing.addEventListener('error', reject, { once: true });
         return;
       }
@@ -672,7 +599,7 @@
       s.src = url;
       s.async = true;
       s.dataset.ppstKey = key;
-      s.onload = function () { s.dataset.loaded = '1'; resolve(); };
+      s.onload = resolve;
       s.onerror = reject;
       document.head.appendChild(s);
     });
@@ -800,8 +727,8 @@
       if (e.target.closest('.ppst-review-close') || e.target.closest('.ppst-review-mask')) { e.preventDefault(); closeReview(); return; }
       if ((btn = e.target.closest('.ppst-star'))) { e.preventDefault(); setRating(btn.dataset.key, btn.dataset.value); return; }
       if (e.target.closest('.ppst-review-submit')) { e.preventDefault(); submitReview(); return; }
-      if ((btn = e.target.closest('.ppst-review-translate'))) { e.preventDefault(); if (state.translateSuppressClickUntil && Date.now() < state.translateSuppressClickUntil) return; var item = btn.closest('.ppst-review-item'); translateInto(btn, $('.ppst-review-content', item)); return; }
-      if ((btn = e.target.closest('.ppst-input-translate'))) { e.preventDefault(); if (state.translateSuppressClickUntil && Date.now() < state.translateSuppressClickUntil) return; translateInto(btn, $('.ppst-review-input')); return; }
+      if ((btn = e.target.closest('.ppst-review-translate'))) { e.preventDefault(); var item = btn.closest('.ppst-review-item'); translateInto(btn, $('.ppst-review-content', item)); return; }
+      if ((btn = e.target.closest('.ppst-input-translate'))) { e.preventDefault(); translateInto(btn, $('.ppst-review-input')); return; }
       if (e.target.closest('.ppst-settings-close,.ppst-settings-cancel,.ppst-settings-mask')) { e.preventDefault(); closeTranslateSettings(); return; }
       if ((btn = e.target.closest('.ppst-provider-tabs button'))) { e.preventDefault(); $$('.ppst-provider-tabs button').forEach(function (b) { b.classList.toggle('active', b === btn); }); $('.ppst-provider').value = btn.dataset.provider || 'google'; $('.ppst-ai').classList.toggle('show', btn.dataset.provider === 'ai'); return; }
       if ((btn = e.target.closest('.ppst-lang-trigger'))) { e.preventDefault(); openLangPicker(btn.dataset.role); return; }
@@ -853,7 +780,7 @@
       acceptNode: function (node) {
         if (!node || !node.nodeValue || node.nodeValue.indexOf('[peipe-greet:') === -1) return NodeFilter.FILTER_REJECT;
         var p = node.parentNode;
-        while (p && p !== document.documentElement) {
+        while (p && p !== root.parentNode) {
           if (p.nodeType === 1) {
             if (deny.test(p.tagName || '')) return NodeFilter.FILTER_REJECT;
             if (p.classList && (p.classList.contains('peipe-greet-sticker-wrap') || p.classList.contains('composer') || p.classList.contains('write') || p.isContentEditable)) return NodeFilter.FILTER_REJECT;
