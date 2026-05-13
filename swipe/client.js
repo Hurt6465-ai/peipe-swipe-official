@@ -47,8 +47,8 @@
       qualities: [0.58, 0.50, 0.42, 0.34, 0.28, 0.22]
     },
     preloadAhead: 2,
-    swiperCss: '/plugins/nodebb-plugin-peipe-swipe-official/swipe/vendor/swiper-bundle.min.css',
-    swiperJs: '/plugins/nodebb-plugin-peipe-swipe-official/swipe/vendor/swiper-bundle.min.js',
+    swiperCss: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.css',
+    swiperJs: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.js',
     swiperFallbackCss: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css',
     swiperFallbackJs: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js'
   }, window.PEIPE_SWIPE_CONFIG || {});
@@ -237,6 +237,8 @@
     root: null,
     swiper: null,
     users: [],
+    seenUids: {},
+    feedRequestId: 0,
     loading: false,
     done: false,
     index: 0,
@@ -626,13 +628,9 @@
 
 
   function renderFloatComments(user) {
-    var list = Array.isArray(user.floatComments) ? user.floatComments : [];
-    list = list.filter(function (item) { return item && norm(item.content); }).slice(0, 3);
-    if (!list.length) return '';
-    return '<div class="pps-float-comments">' + list.map(function (item, index) {
-      var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml(String(item.authorName || 'U').slice(0, 1).toUpperCase()) + '</span>';
-      return '<div class="pps-float-comment pps-float-comment-' + index + '"><div class="pps-float-avatar">' + avatar + '</div><div class="pps-float-text">' + escapeHtml(item.content) + '</div></div>';
-    }).join('') + '</div>';
+    // Floating comments are hidden in the v14 overlay and used to add many extra DOM nodes.
+    // Keep this empty so first card rendering stays fast.
+    return '';
   }
 
   function commentHtml(item) {
@@ -678,7 +676,7 @@
   function loadComments(targetUid) {
     var list = $('.pps-comment-list', state.root);
     if (!list) return;
-    apiFetch('/api/peipe-swipe/comments/' + encodeURIComponent(targetUid) + '?limit=30').then(function (json) {
+    apiFetch('/api/peipe-partners/comments/' + encodeURIComponent(targetUid) + '?limit=30').then(function (json) {
       var comments = Array.isArray(json.comments) ? json.comments : [];
       var viewer = json.viewerComment || null;
       list.innerHTML = comments.length ? comments.map(commentHtml).join('') : '<div class="pps-comment-muted">' + escapeHtml(TEXT.commentEmpty) + '</div>';
@@ -703,7 +701,7 @@
     if (!targetUid) return;
     if (!content || content.length < 2) { toast(TEXT.commentTooShort); return; }
     if (btn) { btn.disabled = true; btn.textContent = TEXT.commentSaving; }
-    apiFetch('/api/peipe-swipe/comments/' + encodeURIComponent(targetUid), {
+    apiFetch('/api/peipe-partners/comments/' + encodeURIComponent(targetUid), {
       method: 'POST',
       headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
       body: jsonBody({ content: content })
@@ -721,8 +719,9 @@
   function renderSlide(user, index) {
     var photos = normalisePhotos(user.photos);
     if (!photos.length) photos = normalisePhotos([user.avatar || user.accountPicture || user.uploadedpicture || user.picture]);
-    var photoSlides = photos.length ? photos.map(function (src) {
-      return '<div class="swiper-slide"><img class="pps-photo" src="' + escapeHtml(src) + '" alt="photo" loading="eager" decoding="async"></div>';
+    var photoSlides = photos.length ? photos.map(function (src, photoIndex) {
+      var eager = index <= CONFIG.preloadAhead && photoIndex === 0;
+      return '<div class="swiper-slide"><img class="pps-photo" src="' + escapeHtml(src) + '" alt="photo" loading="' + (eager ? 'eager' : 'lazy') + '" fetchpriority="' + (eager ? 'high' : 'low') + '" decoding="async"></div>';
     }).join('') : '<div class="swiper-slide"><div class="pps-empty-bg"></div></div>';
     var dots = photos.length > 1 ? '<div class="pps-pagination"></div>' : '';
     var seenTags = {};
@@ -757,7 +756,6 @@
   }
 
   function updateSlides(reset) {
-    var html = state.users.map(renderSlide).join('');
     if (window.Swiper && state.swiper) {
       state.swiper.virtual.slides = state.users.map(renderSlide);
       state.swiper.virtual.update(true);
@@ -765,8 +763,9 @@
       afterSlideUpdate();
       return;
     }
+
     var feed = $('.pps-native-feed', state.root);
-    if (feed) feed.innerHTML = html;
+    if (feed) feed.innerHTML = state.users.map(renderSlide).join('');
     initPhotoSwipers();
     preloadAround(state.index);
   }
@@ -824,6 +823,14 @@
 
   function initPhotoSwipers() {
     if (!window.Swiper) return;
+
+    state.photoSwipers.forEach(function (sw, idx) {
+      if (!sw || !sw.el || !document.contains(sw.el)) {
+        try { sw && sw.destroy && sw.destroy(true, true); } catch (e) {}
+        state.photoSwipers.delete(idx);
+      }
+    });
+
     $$('.pps-photo-swiper', state.root).forEach(function (el) {
       var idx = Number(el.dataset.index || -1);
       if (state.photoSwipers.has(idx) && state.photoSwipers.get(idx).el === el) return;
@@ -910,7 +917,7 @@
       navigator.geolocation.getCurrentPosition(function (pos) {
         var c = pos && pos.coords;
         if (!c) return resolve(false);
-        apiFetch('/api/peipe-swipe/location', {
+        apiFetch('/api/peipe-partners/location', {
           method: 'PUT',
           headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
           body: JSON.stringify({ lat: c.latitude, lng: c.longitude })
@@ -928,28 +935,66 @@
     });
   }
 
+  function appendUniqueUsers(users, refresh) {
+    var input = Array.isArray(users) ? users : [];
+    var out = [];
+
+    if (refresh) {
+      state.seenUids = {};
+    }
+
+    input.forEach(function (u) {
+      var uid = String(u && u.uid || '');
+      if (!uid || uid === '0' || state.seenUids[uid]) return;
+      state.seenUids[uid] = true;
+      out.push(u);
+    });
+
+    state.users = refresh ? out : state.users.concat(out);
+    return out;
+  }
+
   function loadFeed(refresh) {
     if (state.loading || (state.done && !refresh)) return Promise.resolve();
+
     state.loading = true;
+    var requestId = ++state.feedRequestId;
+
     if (refresh) {
       state.done = false;
       state.users = [];
+      state.seenUids = {};
       state.index = 0;
+      state.photoSwipers.forEach(function (sw) { try { sw.destroy(true, true); } catch (e) {} });
       state.photoSwipers.clear();
     }
-    return apiFetch('/api/peipe-swipe/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize)
+
+    var url = '/api/peipe-swipe/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize;
+
+    return apiFetch(url)
       .then(function (json) {
-        var users = Array.isArray(json.users) ? json.users : [];
-        state.users = refresh ? users : state.users.concat(users);
-        state.done = json.hasMore === false || users.length === 0;
-        if (!state.users.length) showEmpty(TEXT.empty);
-        else showFeed();
+        if (requestId !== state.feedRequestId) return;
+
+        var rawUsers = Array.isArray(json.users) ? json.users : [];
+        var added = appendUniqueUsers(rawUsers, refresh);
+
+        state.done = json.hasMore === false || rawUsers.length === 0 || (!refresh && added.length === 0);
+
+        if (!state.users.length) {
+          showEmpty(TEXT.empty);
+        } else {
+          showFeed();
+        }
       })
       .catch(function (err) {
+        if (requestId !== state.feedRequestId) return;
         console.warn('[peipe-swipe] feed failed', err);
-        showEmpty(err.message || TEXT.empty);
+        if (!state.users.length) showEmpty(err.message || TEXT.empty);
+        else toast(err.message || TEXT.empty);
       })
-      .finally(function () { state.loading = false; });
+      .finally(function () {
+        if (requestId === state.feedRequestId) state.loading = false;
+      });
   }
 
   function loadMe() {
@@ -957,7 +1002,7 @@
       state.profileComplete = true;
       return Promise.resolve();
     }
-    return apiFetch('/api/peipe-swipe/swipe/me')
+    return apiFetch('/api/peipe-partners/swipe/me')
       .then(function (json) {
         state.profile = json.profile || {};
         state.profileComplete = !!json.complete;
@@ -981,7 +1026,7 @@
 
   function loadOptions() {
     ensureGenderOptions();
-    return apiFetch('/api/peipe-swipe/options')
+    return apiFetch('/api/peipe-partners/options')
       .then(function (json) {
         if (Array.isArray(json.countries)) OPTIONS.countries = json.countries;
         if (Array.isArray(json.languages)) OPTIONS.languages = json.languages;
@@ -995,7 +1040,7 @@
   }
 
   function loadTags() {
-    return apiFetch('/api/peipe-swipe/swipe/tags')
+    return apiFetch('/api/peipe-partners/swipe/tags')
       .then(function (json) { state.tagCategories = json.categories || state.tagCategories || []; })
       .catch(function () {});
   }
@@ -1023,7 +1068,7 @@
     var label = $('.pps-greet-label', btn);
     var old = label ? label.textContent : TEXT.greet;
     if (label) label.textContent = TEXT.greeting;
-    apiFetch('/api/peipe-swipe/me/greet', {
+    apiFetch('/api/peipe-partners/me/greet', {
       method: 'POST',
       headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
       body: jsonBody({ uid: uid })
@@ -1031,6 +1076,8 @@
       if (json && json.already) toast(TEXT.greetAlready);
       else toast(TEXT.greetOk);
       if (label) label.textContent = TEXT.greeted;
+      btn.classList.add('pps-greeted');
+      setTimeout(function () { btn.disabled = false; }, 3000);
     }).catch(function (err) {
       if (/daily-limit/.test(err.message)) toast(TEXT.greetLimit);
       else toast(err.message || TEXT.greetFail);
@@ -1255,7 +1302,7 @@
     var btn = $('.pps-save-btn', state.root);
     btn.disabled = true;
     btn.textContent = TEXT.saving;
-    apiFetch('/api/peipe-swipe/swipe/me', {
+    apiFetch('/api/peipe-partners/swipe/me', {
       method: 'PUT',
       headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
       body: jsonBody(data)
@@ -1805,29 +1852,6 @@
     updateTagCount();
   }
 
-  function isEditableTarget(el) {
-    return !!(el && el.closest && el.closest('input, textarea, select, option, [contenteditable="true"], .composer, .write'));
-  }
-
-  function bindMobileSelectionGuard() {
-    if (state.selectionGuardBound) return;
-    state.selectionGuardBound = true;
-    var root = state.root;
-    if (!root) return;
-    root.addEventListener('contextmenu', function (e) {
-      if (isEditableTarget(e.target)) return;
-      e.preventDefault();
-    }, true);
-    root.addEventListener('selectstart', function (e) {
-      if (isEditableTarget(e.target)) return;
-      e.preventDefault();
-    }, true);
-    root.addEventListener('dragstart', function (e) {
-      if (isEditableTarget(e.target)) return;
-      e.preventDefault();
-    }, true);
-  }
-
   function bindEvents() {
     state.root.addEventListener('click', function (e) {
       var btn;
@@ -2019,33 +2043,67 @@
     document.body.classList.add('peipe-swipe-mode');
   }
 
+  function destroySwiper() {
+    if (state.swiper) {
+      try { state.swiper.destroy(true, true); } catch (e) {}
+      state.swiper = null;
+    }
+
+    state.photoSwipers.forEach(function (sw) {
+      try { sw && sw.destroy && sw.destroy(true, true); } catch (e) {}
+    });
+    state.photoSwipers.clear();
+  }
+
   function init() {
     state.root = document.getElementById('peipe-swipe-app');
     if (!state.root || !isSwipeRoute()) {
       cleanupFullScreenMode();
+      destroySwiper();
       return;
     }
     if (state.root.dataset.ppsReady === '1') return;
+
     state.root.dataset.ppsReady = '1';
     state.mode = currentMode();
     state.settingsVisible = true;
+    state.nativeFeedBound = false;
     state.swiper = null;
     state.users = [];
+    state.seenUids = {};
     state.done = false;
     state.loading = false;
-    enterFullScreenMode();
-    loadTranslations().then(function () {
-      buildChrome();
-      bindEvents();
-      bindMobileSelectionGuard();
 
-      var swiperReady = ensureSwiper();
-      Promise.all([loadOptions(), loadTags()]).then(function () { return loadMe(); });
-      swiperReady.then(function () {
-        loadFeed(true);
-        syncLocationIfPossible().then(function (updated) { if (updated) loadFeed(true); });
+    enterFullScreenMode();
+
+    // First paint and first feed request must not wait for translator/options/Swiper.
+    buildChrome();
+    bindEvents();
+    bindMobileSelectionGuard();
+    loadFeed(true);
+
+    // Load translations in the background. Do not block the first card.
+    loadTranslations().catch(function () {});
+
+    // Load profile/options/tags in the background. Profile sheet can open after feed starts.
+    Promise.all([loadOptions(), loadTags()])
+      .then(function () { return loadMe(); })
+      .catch(function (err) {
+        console.warn('[peipe-swipe] profile bootstrap failed', err);
       });
+
+    // Load Swiper in the background and upgrade the already-rendered native feed.
+    ensureSwiper().then(function () {
+      if (!state.root || !isSwipeRoute()) return;
+      if (state.users && state.users.length) showFeed();
     });
+
+    // Location sync is useful, but it should never block first card rendering.
+    setTimeout(function () {
+      syncLocationIfPossible().then(function (updated) {
+        if (updated && state.root && isSwipeRoute()) loadFeed(true);
+      });
+    }, 1200);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -2053,10 +2111,16 @@
 
   if (window.ajaxify && window.ajaxify.on) {
     window.ajaxify.on('action:ajaxify.start', function () {
-      if (!isSwipeRoute()) cleanupFullScreenMode();
+      if (!isSwipeRoute()) {
+        cleanupFullScreenMode();
+        destroySwiper();
+      }
     });
     window.ajaxify.on('action:ajaxify.end', function () {
-      if (!isSwipeRoute()) cleanupFullScreenMode();
+      if (!isSwipeRoute()) {
+        cleanupFullScreenMode();
+        destroySwiper();
+      }
       init();
     });
   }
