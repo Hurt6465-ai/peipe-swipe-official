@@ -8,6 +8,15 @@ const CONFIG = {
   maxCommentLength: 240,
   listLimit: 40,
   metricKeys: ['language', 'reply', 'friendly', 'patient'],
+  reasonTexts: {
+    'login-required': '请先登录后评价',
+    'invalid-target': '这个用户暂时不能评价',
+    'chat-under-24h': '聊天超过 24 小时后才能评价',
+    'rating-required': '请先选择 1-5 星评分',
+    'empty-comment': '请至少写 2 个字',
+    'no-privileges': '没有权限操作这条评价',
+    'not-found': '评价不存在'
+  },
   authorFields: ['uid', 'username', 'userslug', 'picture', 'uploadedpicture'],
   targetFields: ['uid', 'deleted', 'banned'],
 };
@@ -44,9 +53,20 @@ function clampRating(v) {
 
 function normalizeRatings(input) {
   input = input || {};
+
+  if (typeof input === 'number' || typeof input === 'string') {
+    const rating = clampRating(input);
+    const out = {};
+    CONFIG.metricKeys.forEach((key) => {
+      out[key] = rating;
+    });
+    return out;
+  }
+
+  const fallback = clampRating(input.overall || input.rating || input.star || input.stars);
   const out = {};
   CONFIG.metricKeys.forEach((key) => {
-    out[key] = clampRating(input[key]);
+    out[key] = clampRating(input[key] || fallback);
   });
   return out;
 }
@@ -159,16 +179,28 @@ async function getChatTimes(a, b) {
   return { firstAt, lastAt, durationMs };
 }
 
+
+function reasonText(reason) {
+  return CONFIG.reasonTexts[reason] || reason || '';
+}
+
+function decorateEligibility(result) {
+  result = result || {};
+  const durationMs = n(result.durationMs);
+  const remainingMs = Math.max(0, CONFIG.minChatMs - durationMs);
+  return Object.assign({ reasonText: reasonText(result.reason) }, result, { remainingMs });
+}
+
 async function eligibility(authorUid, targetUid) {
   authorUid = Number(authorUid || 0);
   targetUid = Number(targetUid || 0);
 
   if (!authorUid) {
-    return { ok: false, eligible: false, reason: 'login-required' };
+    return decorateEligibility({ ok: false, eligible: false, reason: 'login-required' });
   }
 
   if (!targetUid || targetUid === authorUid) {
-    return { ok: false, eligible: false, reason: 'invalid-target' };
+    return decorateEligibility({ ok: false, eligible: false, reason: 'invalid-target' });
   }
 
   const [target, chat] = await Promise.all([
@@ -177,16 +209,16 @@ async function eligibility(authorUid, targetUid) {
   ]);
 
   if (!target) {
-    return { ok: false, eligible: false, reason: 'invalid-target' };
+    return decorateEligibility({ ok: false, eligible: false, reason: 'invalid-target' });
   }
 
   const eligible = chat.durationMs >= CONFIG.minChatMs;
 
-  return Object.assign(
+  return decorateEligibility(Object.assign(
     { ok: true, eligible, minChatHours: 24 },
     chat,
     eligible ? {} : { reason: 'chat-under-24h' }
-  );
+  ));
 }
 
 function isVisible(row) {
@@ -302,7 +334,7 @@ async function listForTarget(targetUid, viewerUid, limit) {
       reviews: [],
       viewerComment: null,
       summary: buildSummary([]),
-      canReview: { ok: false, eligible: false, reason: 'invalid-target' },
+      canReview: decorateEligibility({ ok: false, eligible: false, reason: 'invalid-target' }),
     };
   }
 
@@ -315,7 +347,7 @@ async function listForTarget(targetUid, viewerUid, limit) {
 
   const canReviewPromise = viewerUid
     ? eligibility(viewerUid, targetUid)
-    : Promise.resolve({ ok: false, eligible: false, reason: 'login-required' });
+    : Promise.resolve(decorateEligibility({ ok: false, eligible: false, reason: 'login-required' }));
 
   const [rows, existingId, canReview] = await Promise.all([
     rowsPromise,
@@ -366,16 +398,17 @@ async function upsert(req) {
 
   const can = await eligibility(authorUid, targetUid);
   if (!can.eligible) {
-    return Object.assign({ ok: false, error: can.reason || 'not-eligible' }, can);
+    return Object.assign({ ok: false, error: can.reason || 'not-eligible', message: can.reasonText || reasonText(can.reason) }, can);
   }
 
   const content = cleanText(req.body && req.body.content, CONFIG.maxCommentLength);
-  const ratings = normalizeRatings(req.body && req.body.ratings);
+  const rawRating = req.body && (req.body.ratings || req.body.overall || req.body.rating || req.body.stars);
+  const ratings = normalizeRatings(rawRating);
   const overall = overallFromRatings(ratings);
   const anonymous = !!(req.body && req.body.anonymous);
 
-  if (overall <= 0) return { ok: false, error: 'rating-required' };
-  if (!content || content.length < 2) return { ok: false, error: 'empty-comment' };
+  if (overall <= 0) return { ok: false, error: 'rating-required', message: reasonText('rating-required') };
+  if (!content || content.length < 2) return { ok: false, error: 'empty-comment', message: reasonText('empty-comment') };
 
   let id = await safe(db.get(uniqueKey(targetUid, authorUid)), null);
   const timestamp = now();
