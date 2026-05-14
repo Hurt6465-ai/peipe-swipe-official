@@ -1,10 +1,4 @@
-/* Peipe Partners Swipe v20 overlay
-   - no floating comments
-   - reviews require chat duration >= 24h (server enforced)
-   - shared translator settings with topic detail: x-topic-translate-settings
-   - card intro / review input / review content translation
-   - location upload at most once per day
-*/
+
 (function () {
   'use strict';
 
