@@ -15,8 +15,8 @@ try {
 }
 
 const plugin = {};
-const API_PREFIX = '/api/peipe-swipe';
-const API_ROUTE_PREFIX = '/peipe-swipe';
+const API_PREFIXES = ['/api/peipe-partners', '/api/peipe-swipe'];
+const API_ROUTE_PREFIXES = ['/peipe-partners', '/peipe-swipe'];
 const GREET_STICKERS = [
   'hello-01', 'hello-02', 'hello-03', 'hello-04', 'hello-05',
   'hello-06', 'hello-07', 'hello-08', 'hello-09', 'hello-10',
@@ -194,65 +194,67 @@ async function sendPrivateGreeting(req) {
 }
 
 function registerJsonRoutes(router, middleware) {
-  router.get(`${API_PREFIX}/options`, asyncRoute(async (req, res) => {
-    json(res, await partner.options(req));
-  }));
+  API_PREFIXES.forEach((apiPrefix) => {
+    router.get(`${apiPrefix}/options`, asyncRoute(async (req, res) => {
+      json(res, await partner.options(req));
+    }));
 
-  router.put(`${API_PREFIX}/location`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await saveLocation(req.uid, req.body || {}));
-  }));
+    router.put(`${apiPrefix}/location`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await saveLocation(req.uid, req.body || {}));
+    }));
 
-  router.post(`${API_PREFIX}/me/greet`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await sendPrivateGreeting(req));
-  }));
+    router.post(`${apiPrefix}/me/greet`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await sendPrivateGreeting(req));
+    }));
 
-  router.post(`${API_PREFIX}/me/chat-route`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await prepareWukongChatRoute(req));
-  }));
+    router.post(`${apiPrefix}/me/chat-route`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await prepareWukongChatRoute(req));
+    }));
 
-  router.get(`${API_PREFIX}/swipe/feed`, asyncRoute(async (req, res) => {
-    json(res, await decorateFeedWithDistance(req, await swipe.feed(req)));
-  }));
+    router.get(`${apiPrefix}/swipe/feed`, asyncRoute(async (req, res) => {
+      json(res, await decorateFeedWithDistance(req, await swipe.feed(req)));
+    }));
 
-  router.get(`${API_PREFIX}/swipe/tags`, asyncRoute(async (req, res) => {
-    json(res, swipe.tags(req));
-  }));
+    router.get(`${apiPrefix}/swipe/tags`, asyncRoute(async (req, res) => {
+      json(res, swipe.tags(req));
+    }));
 
-  router.get(`${API_PREFIX}/swipe/me`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await swipe.getMe(req.uid));
-  }));
+    router.get(`${apiPrefix}/swipe/me`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await swipe.getMe(req.uid));
+    }));
 
-  router.put(`${API_PREFIX}/swipe/me`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await swipe.saveMe(req.uid, req.body || {}));
-  }));
+    router.put(`${apiPrefix}/swipe/me`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await swipe.saveMe(req.uid, req.body || {}));
+    }));
 
-  router.get(`${API_PREFIX}/comments/:uid`, asyncRoute(async (req, res) => {
-    json(res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
-  }));
+    router.get(`${apiPrefix}/comments/:uid`, asyncRoute(async (req, res) => {
+      json(res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
+    }));
 
-  router.get(`${API_PREFIX}/profile/:uid/comments`, asyncRoute(async (req, res) => {
-    json(res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
-  }));
+    router.get(`${apiPrefix}/profile/:uid/comments`, asyncRoute(async (req, res) => {
+      json(res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
+    }));
 
-  router.get(`${API_PREFIX}/comments/:uid/eligibility`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partnerReviews.eligibility(req.uid, req.params.uid));
-  }));
+    router.get(`${apiPrefix}/comments/:uid/eligibility`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await partnerReviews.eligibility(req.uid, req.params.uid));
+    }));
 
-  router.post(`${API_PREFIX}/comments/:uid`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partnerReviews.upsert(req));
-  }));
+    router.post(`${apiPrefix}/comments/:uid`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await partnerReviews.upsert(req));
+    }));
 
-  router.post(`${API_PREFIX}/profile/:uid/comments`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partnerReviews.upsert(req));
-  }));
+    router.post(`${apiPrefix}/profile/:uid/comments`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await partnerReviews.upsert(req));
+    }));
 
-  router.put(`${API_PREFIX}/comments/item/:id`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partnerReviews.update(req));
-  }));
+    router.put(`${apiPrefix}/comments/item/:id`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await partnerReviews.update(req));
+    }));
 
-  router.delete(`${API_PREFIX}/comments/item/:id`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-    json(res, await partnerReviews.remove(req));
-  }));
+    router.delete(`${apiPrefix}/comments/item/:id`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await partnerReviews.remove(req));
+    }));
+  });
 }
 
 plugin.init = async ({ router, middleware }) => {
@@ -268,64 +270,66 @@ plugin.init = async ({ router, middleware }) => {
 };
 
 plugin.addRoutes = async ({ router, middleware, helpers }) => {
-  routeHelpers.setupApiRoute(router, 'get', `${API_ROUTE_PREFIX}/options`, [], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partner.options(req));
-  });
+  API_ROUTE_PREFIXES.forEach((apiRoutePrefix) => {
+    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/options`, [], async (req, res) => {
+      helpers.formatApiResponse(200, res, await partner.options(req));
+    });
 
-  routeHelpers.setupApiRoute(router, 'put', `${API_ROUTE_PREFIX}/location`, [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await saveLocation(req.uid, req.body || {}));
-  });
+    routeHelpers.setupApiRoute(router, 'put', `${apiRoutePrefix}/location`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await saveLocation(req.uid, req.body || {}));
+    });
 
-  routeHelpers.setupApiRoute(router, 'post', `${API_ROUTE_PREFIX}/me/greet`, [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await sendPrivateGreeting(req));
-  });
+    routeHelpers.setupApiRoute(router, 'post', `${apiRoutePrefix}/me/greet`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await sendPrivateGreeting(req));
+    });
 
-  routeHelpers.setupApiRoute(router, 'post', `${API_ROUTE_PREFIX}/me/chat-route`, [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await prepareWukongChatRoute(req));
-  });
+    routeHelpers.setupApiRoute(router, 'post', `${apiRoutePrefix}/me/chat-route`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await prepareWukongChatRoute(req));
+    });
 
-  routeHelpers.setupApiRoute(router, 'get', `${API_ROUTE_PREFIX}/swipe/feed`, [], async (req, res) => {
-    helpers.formatApiResponse(200, res, await decorateFeedWithDistance(req, await swipe.feed(req)));
-  });
+    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/swipe/feed`, [], async (req, res) => {
+      helpers.formatApiResponse(200, res, await decorateFeedWithDistance(req, await swipe.feed(req)));
+    });
 
-  routeHelpers.setupApiRoute(router, 'get', `${API_ROUTE_PREFIX}/swipe/tags`, [], async (req, res) => {
-    helpers.formatApiResponse(200, res, swipe.tags(req));
-  });
+    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/swipe/tags`, [], async (req, res) => {
+      helpers.formatApiResponse(200, res, swipe.tags(req));
+    });
 
-  routeHelpers.setupApiRoute(router, 'get', `${API_ROUTE_PREFIX}/swipe/me`, [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await swipe.getMe(req.uid));
-  });
+    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/swipe/me`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await swipe.getMe(req.uid));
+    });
 
-  routeHelpers.setupApiRoute(router, 'put', `${API_ROUTE_PREFIX}/swipe/me`, [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await swipe.saveMe(req.uid, req.body || {}));
-  });
+    routeHelpers.setupApiRoute(router, 'put', `${apiRoutePrefix}/swipe/me`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await swipe.saveMe(req.uid, req.body || {}));
+    });
 
-  routeHelpers.setupApiRoute(router, 'get', `${API_ROUTE_PREFIX}/comments/:uid`, [], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
-  });
+    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/comments/:uid`, [], async (req, res) => {
+      helpers.formatApiResponse(200, res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
+    });
 
-  routeHelpers.setupApiRoute(router, 'get', `${API_ROUTE_PREFIX}/profile/:uid/comments`, [], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
-  });
+    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/profile/:uid/comments`, [], async (req, res) => {
+      helpers.formatApiResponse(200, res, await partnerReviews.listForTarget(req.params.uid, req.uid, req.query.limit));
+    });
 
-  routeHelpers.setupApiRoute(router, 'get', `${API_ROUTE_PREFIX}/comments/:uid/eligibility`, [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerReviews.eligibility(req.uid, req.params.uid));
-  });
+    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/comments/:uid/eligibility`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await partnerReviews.eligibility(req.uid, req.params.uid));
+    });
 
-  routeHelpers.setupApiRoute(router, 'post', `${API_ROUTE_PREFIX}/comments/:uid`, [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerReviews.upsert(req));
-  });
+    routeHelpers.setupApiRoute(router, 'post', `${apiRoutePrefix}/comments/:uid`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await partnerReviews.upsert(req));
+    });
 
-  routeHelpers.setupApiRoute(router, 'post', `${API_ROUTE_PREFIX}/profile/:uid/comments`, [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerReviews.upsert(req));
-  });
+    routeHelpers.setupApiRoute(router, 'post', `${apiRoutePrefix}/profile/:uid/comments`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await partnerReviews.upsert(req));
+    });
 
-  routeHelpers.setupApiRoute(router, 'put', `${API_ROUTE_PREFIX}/comments/item/:id`, [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerReviews.update(req));
-  });
+    routeHelpers.setupApiRoute(router, 'put', `${apiRoutePrefix}/comments/item/:id`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await partnerReviews.update(req));
+    });
 
-  routeHelpers.setupApiRoute(router, 'delete', `${API_ROUTE_PREFIX}/comments/item/:id`, [middleware.ensureLoggedIn], async (req, res) => {
-    helpers.formatApiResponse(200, res, await partnerReviews.remove(req));
+    routeHelpers.setupApiRoute(router, 'delete', `${apiRoutePrefix}/comments/item/:id`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await partnerReviews.remove(req));
+    });
   });
 };
 
