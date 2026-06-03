@@ -85,7 +85,19 @@
     options = options || {};
     options.credentials = options.credentials || 'same-origin';
     options.headers = Object.assign({ accept: 'application/json', 'x-requested-with': 'XMLHttpRequest' }, options.headers || {});
-    return fetch(rel(url), options).then(function (res) {
+
+    var timeoutMs = Number(options.timeoutMs || 12000);
+    var controller = null;
+    var timer = 0;
+
+    if (window.AbortController && !options.signal) {
+      controller = new AbortController();
+      options.signal = controller.signal;
+    }
+
+    delete options.timeoutMs;
+
+    var req = fetch(rel(url), options).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (json) {
         var payload = json && json.response ? json.response : json;
         if (!res.ok || payload && payload.ok === false) {
@@ -93,6 +105,18 @@
         }
         return payload || {};
       });
+    });
+
+    var timeout = new Promise(function (resolve, reject) {
+      if (!timeoutMs || timeoutMs <= 0) return;
+      timer = setTimeout(function () {
+        try { if (controller) controller.abort(); } catch (e) {}
+        reject(new Error('请求超时，请检查网络或接口：' + url));
+      }, timeoutMs);
+    });
+
+    return Promise.race([req, timeout]).finally(function () {
+      if (timer) clearTimeout(timer);
     });
   }
 
@@ -350,10 +374,12 @@
   function loadOverlayFeedOnce() {
     if (state.overlayFeedLoaded) return;
     state.overlayFeedLoaded = true;
-    apiFetch(CONFIG.apiBase + '/swipe/feed?mode=' + encodeURIComponent(currentFeedMode()) + '&limit=36').then(function (json) {
+    apiFetch(CONFIG.apiBase + '/swipe/feed?mode=' + encodeURIComponent(currentFeedMode()) + '&limit=36', { timeoutMs: 12000 }).then(function (json) {
       rememberUsers(json.users || []);
       patchDistance(document);
-    }).catch(function () {});
+    }).catch(function () {
+      state.overlayFeedLoaded = false;
+    });
   }
   function formatDistance(km) {
     km = Number(km || 0);
@@ -737,6 +763,19 @@
     return raw || '发送失败';
   }
 
+  function greetSentKey(toUid) {
+    var me = (window.app && window.app.user) || {};
+    return 'pps:wukong-greet-sent:' + String(me.uid || '0') + ':' + String(toUid || '0');
+  }
+
+  function hasLocalWukongGreetSent(toUid) {
+    try { return !!localStorage.getItem(greetSentKey(toUid)); } catch (err) { return false; }
+  }
+
+  function markLocalWukongGreetSent(toUid) {
+    try { localStorage.setItem(greetSentKey(toUid), String(Date.now())); } catch (err) {}
+  }
+
   function reserveWukongGreet(toUid, text) {
     return apiFetch(CONFIG.wkGreetPath, {
       method: 'POST',
@@ -748,37 +787,65 @@
     });
   }
 
+  function waitWukongConnected(timeoutMs) {
+    timeoutMs = Number(timeoutMs || 1800);
+
+    return new Promise(function (resolve) {
+      var wk = window.wk;
+      var done = false;
+      var timer = 0;
+      var listener = null;
+
+      function finish() {
+        if (done) return;
+        done = true;
+        if (timer) clearTimeout(timer);
+        try {
+          if (listener && wk && wk.WKSDK && wk.WKSDK.shared().connectManager && typeof wk.WKSDK.shared().connectManager.removeConnectStatusListener === 'function') {
+            wk.WKSDK.shared().connectManager.removeConnectStatusListener(listener);
+          }
+        } catch (err) {}
+        resolve(true);
+      }
+
+      try {
+        if (!wk || !wk.WKSDK || !wk.WKSDK.shared().connectManager) return finish();
+
+        listener = function (status) {
+          var text = String(status || '');
+          if ((wk.ConnectStatus && status === wk.ConnectStatus.Connected) || /connected/i.test(text) || status === 1) {
+            finish();
+          }
+        };
+
+        if (typeof wk.WKSDK.shared().connectManager.addConnectStatusListener === 'function') {
+          wk.WKSDK.shared().connectManager.addConnectStatusListener(listener);
+        }
+
+        if (!state.wkConnectedStarted) {
+          state.wkConnectedStarted = true;
+          try { wk.WKSDK.shared().connectManager.connect(); } catch (err) {}
+        }
+      } catch (err) {
+        return finish();
+      }
+
+      timer = setTimeout(finish, timeoutMs);
+    });
+  }
+
   function sendWukongText(toUid, text) {
     return ensureWukongReady().then(function () {
+      return waitWukongConnected(1800);
+    }).then(function () {
       if (!window.wk || !window.wk.WKSDK || !window.wk.Channel || !window.wk.MessageText) {
         throw new Error('悟空 SDK 不可用');
       }
-      var clientMsgNo = 'pps_greet_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
       var channel = new window.wk.Channel(String(toUid), 1);
       var msgContent = new window.wk.MessageText(text);
       msgContent.text = text;
       msgContent.content = text;
-      var encode = typeof msgContent.encode === 'function' ? msgContent.encode.bind(msgContent) : null;
-      msgContent.encode = function () {
-        var obj = {};
-        try {
-          var raw = encode ? encode() : null;
-          if (raw instanceof Uint8Array && window.TextDecoder) raw = new TextDecoder('utf-8').decode(raw);
-          if (typeof raw === 'string') {
-            var clean = raw.trim();
-            if (clean && (clean.charAt(0) === '{' || clean.charAt(0) === '[')) obj = JSON.parse(clean);
-            else if (clean) obj = { text: clean, content: clean };
-          } else if (raw && typeof raw === 'object') {
-            obj = Object.assign({}, raw);
-          }
-        } catch (err) { obj = {}; }
-        obj.text = text;
-        obj.content = text;
-        obj.client_msg_no = clientMsgNo;
-        obj.clientMsgNo = clientMsgNo;
-        obj.type = 1;
-        return JSON.stringify(obj);
-      };
+      msgContent.peipeGreet = true;
       return window.wk.WKSDK.shared().chatManager.send(msgContent, channel);
     });
   }
@@ -856,21 +923,24 @@
           : '/wukong/' + encodeURIComponent(String(uid))
       );
 
-      if (reserved && reserved.already) {
+      if (reserved && reserved.already && hasLocalWukongGreetSent(uid)) {
         btn.dataset.ppstSentAt = String(Date.now());
         btn.classList.add('ppst-greet-sent');
         toast('你已经打过招呼了；再点一次打开聊天');
         return null;
       }
 
+      // 后端可能已经记录过 old NodeBB greet，或上次记录成功但悟空发送失败。
+      // 这种 already 只是不再扣次数；本地没成功发过悟空贴纸时，仍补发一次。
       return sendWukongText(uid, text).then(function () {
+        markLocalWukongGreetSent(uid);
         btn.dataset.ppstSentAt = String(Date.now());
         btn.classList.add('ppst-greet-sent');
 
         // 同步悟空独立版会话列表，text 是贴纸 shortcode，聊天页会渲染成打招呼图片/动图
         syncWukongConversation(uid, text);
 
-        toast('已发送打招呼图片；再点一次打开聊天');
+        toast(reserved && reserved.already ? '已补发打招呼图片；再点一次打开聊天' : '已发送打招呼图片；再点一次打开聊天');
 
         return markChatRoute(uid);
       });
