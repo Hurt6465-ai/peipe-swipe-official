@@ -50,7 +50,16 @@
     swiperCss: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.css',
     swiperJs: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.js',
     swiperFallbackCss: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css',
-    swiperFallbackJs: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js'
+    swiperFallbackJs: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js',
+
+    // 悟空独立版接口配置
+    wkSdkUrls: [
+      '/plugins/nodebb-plugin-wukong-chat/static/vendor/wukongimjssdk.umd.js',
+      'https://cdn.jsdelivr.net/npm/wukongimjssdk@latest/lib/wukongimjssdk.umd.js'
+    ],
+    wkTokenPath: '/api/wukong/token',
+    wkConversationUpsertPath: '/api/wukong/conversations/upsert',
+    wkWsPath: '/wkws/'
   }, window.PEIPE_SWIPE_CONFIG || {});
 
   var TEXT = {
@@ -261,7 +270,12 @@
     settingsVisible: true,
     seenUids: {},
     feedRequestId: 0,
-    selectionGuardBound: false
+    selectionGuardBound: false,
+
+    // 悟空 SDK 状态
+    wkReadyPromise: null,
+    wkUid: '',
+    wkConnectedStarted: false
   };
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -312,6 +326,200 @@
         return json.response || json;
       });
     });
+  }
+
+
+  function loadScriptOnce(url, key) {
+    if (window.wk && window.wk.WKSDK) return Promise.resolve();
+
+    key = key || String(url || '');
+
+    return new Promise(function (resolve, reject) {
+      var existing = document.querySelector('script[data-pps-wk-sdk-key="' + key + '"]');
+
+      if (existing) {
+        if (existing.dataset.loaded === '1') return resolve();
+        if (existing.dataset.error === '1') return reject(new Error('悟空 SDK 加载失败'));
+        existing.addEventListener('load', function () { resolve(); }, { once: true });
+        existing.addEventListener('error', function () { reject(new Error('悟空 SDK 加载失败')); }, { once: true });
+        return;
+      }
+
+      var s = document.createElement('script');
+      s.src = rel(url);
+      s.async = true;
+      s.dataset.ppsWkSdkKey = key;
+      s.onload = function () { s.dataset.loaded = '1'; resolve(); };
+      s.onerror = function () { s.dataset.error = '1'; reject(new Error('悟空 SDK 加载失败：' + url)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function loadWukongSdk() {
+    if (window.wk && window.wk.WKSDK) return Promise.resolve();
+
+    var urls = CONFIG.wkSdkUrls || [];
+    var index = 0;
+
+    function next() {
+      var url = urls[index++];
+      if (!url) return Promise.reject(new Error('悟空 SDK 未加载'));
+
+      return loadScriptOnce(url, 'pps-wk-sdk-' + index).then(function () {
+        if (window.wk && window.wk.WKSDK) return true;
+        throw new Error('悟空 SDK 格式不正确');
+      }).catch(function () {
+        return next();
+      });
+    }
+
+    return next();
+  }
+
+  function ensureWukongReady() {
+    if (state.wkReadyPromise) return state.wkReadyPromise;
+
+    state.wkReadyPromise = apiFetch(CONFIG.wkTokenPath, {
+      method: 'GET'
+    }).then(function (token) {
+      if (!token || !token.uid || !token.token) {
+        throw new Error('悟空 token 获取失败');
+      }
+
+      state.wkUid = String(token.uid);
+
+      return loadWukongSdk().then(function () {
+        var wk = window.wk;
+
+        if (!wk || !wk.WKSDK) {
+          throw new Error('悟空 SDK 不可用');
+        }
+
+        wk.WKSDK.shared().config.uid = String(token.uid);
+        wk.WKSDK.shared().config.token = String(token.token);
+
+        // 优先使用 /api/wukong/token 返回的 WebSocket 地址
+        wk.WKSDK.shared().config.addr = String(
+          token.addr ||
+          token.wsAddr ||
+          token.wkws ||
+          ((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + CONFIG.wkWsPath)
+        );
+
+        // 只启动一次连接，避免重复 connect
+        if (!state.wkConnectedStarted) {
+          state.wkConnectedStarted = true;
+          try {
+            wk.WKSDK.shared().connectManager.connect();
+          } catch (err) {}
+        }
+
+        return token;
+      });
+    }).catch(function (err) {
+      state.wkReadyPromise = null;
+      state.wkConnectedStarted = false;
+      throw err;
+    });
+
+    return state.wkReadyPromise;
+  }
+
+  function createWukongTextMessage(text) {
+    var wk = window.wk;
+    if (!wk || !wk.MessageText) {
+      throw new Error('悟空 MessageText 不可用');
+    }
+
+    var clientMsgNo = 'pps_greet_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+    var msgContent = new wk.MessageText(text);
+
+    msgContent.text = text;
+    msgContent.content = text;
+
+    var oldEncode = typeof msgContent.encode === 'function'
+      ? msgContent.encode.bind(msgContent)
+      : null;
+
+    // 兼容不同版本 SDK，保证 text/content/client_msg_no 都带上
+    msgContent.encode = function () {
+      var obj = {};
+
+      try {
+        var raw = oldEncode ? oldEncode() : null;
+
+        if (raw instanceof Uint8Array && window.TextDecoder) {
+          raw = new TextDecoder('utf-8').decode(raw);
+        }
+
+        if (typeof raw === 'string') {
+          var clean = raw.trim();
+          if (clean && (clean.charAt(0) === '{' || clean.charAt(0) === '[')) {
+            obj = JSON.parse(clean);
+          } else if (clean) {
+            obj = { text: clean, content: clean };
+          }
+        } else if (raw && typeof raw === 'object') {
+          obj = Object.assign({}, raw);
+        }
+      } catch (err) {
+        obj = {};
+      }
+
+      obj.text = text;
+      obj.content = text;
+      obj.client_msg_no = clientMsgNo;
+      obj.clientMsgNo = clientMsgNo;
+      obj.type = 1;
+
+      return JSON.stringify(obj);
+    };
+
+    return msgContent;
+  }
+
+  function sendWukongGreet(toUid, text) {
+    return ensureWukongReady().then(function () {
+      var wk = window.wk;
+
+      if (!wk || !wk.WKSDK || !wk.Channel) {
+        throw new Error('悟空 SDK 不可用');
+      }
+
+      var channel = new wk.Channel(String(toUid), 1);
+      var msgContent = createWukongTextMessage(text);
+
+      return Promise.resolve(
+        wk.WKSDK.shared().chatManager.send(msgContent, channel)
+      );
+    });
+  }
+
+  function syncWukongConversation(toUid, text) {
+    return apiFetch(CONFIG.wkConversationUpsertPath, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'x-csrf-token': csrfToken()
+      },
+      body: jsonBody({
+        channel_id: String(toUid),
+        channel_type: 1,
+        ts: Date.now(),
+        text: text,
+        incoming: false,
+        is_self: true,
+        last_from_uid: state.wkUid || String(currentUser() && currentUser().uid || ''),
+        last_from_name: '我'
+      })
+    }).catch(function () {
+      // 会话同步失败不阻断打招呼发送
+    });
+  }
+
+  function openWukongChat(uid) {
+    if (!uid) return;
+    window.location.href = rel('/wukong/' + encodeURIComponent(String(uid)));
   }
 
   function loadAsset(tag, url, attr) {
@@ -1178,24 +1386,46 @@
       toast(TEXT.login);
       return;
     }
+
     if (!uid || !btn || btn.disabled) return;
+
+    // 已经打过招呼，再点一次直接进悟空独立聊天页
+    if (btn.dataset.ppsWukongSent === '1') {
+      openWukongChat(uid);
+      return;
+    }
+
     btn.disabled = true;
+
     var label = $('.pps-greet-label', btn);
     var old = label ? label.textContent : TEXT.greet;
+    var text = '👋 Hi';
+
     if (label) label.textContent = TEXT.greeting;
-    apiFetch('/api/peipe-partners/me/greet', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-      body: jsonBody({ uid: uid })
-    }).then(function (json) {
-      if (json && json.already) toast(TEXT.greetAlready);
-      else toast(TEXT.greetOk);
+
+    sendWukongGreet(uid, text).then(function () {
+      btn.dataset.ppsWukongSent = '1';
+      btn.classList.add('pps-greet-sent');
+
       if (label) label.textContent = TEXT.greeted;
+
+      toast(TEXT.greetOk);
+
+      // 同步到悟空独立版会话列表
+      syncWukongConversation(uid, text);
     }).catch(function (err) {
-      if (/daily-limit/.test(err.message)) toast(TEXT.greetLimit);
-      else toast(err.message || TEXT.greetFail);
+      console.warn('[peipe-swipe] wukong greet failed', err);
+
+      toast((err && err.message) || TEXT.greetFail);
+
       btn.disabled = false;
+
       if (label) label.textContent = old;
+    }).finally(function () {
+      // 发送成功后保持 disabled=false，方便用户再点一次进入聊天
+      if (btn && btn.dataset.ppsWukongSent === '1') {
+        btn.disabled = false;
+      }
     });
   }
 
