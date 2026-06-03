@@ -397,8 +397,12 @@ function postJson(url, payload, timeoutMs) {
           try { data = JSON.parse(raw); } catch (err) { data = { raw }; }
         }
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          const msg = (data && (data.msg || data.error || data.message)) || `wukong-http-${res.statusCode}`;
-          reject(new Error(msg));
+          const msg = (data && (data.msg || data.error || data.message || data.reason || data.raw)) || `wukong-http-${res.statusCode}`;
+          const error = new Error(msg);
+          error.statusCode = res.statusCode;
+          error.response = data;
+          error.raw = raw;
+          reject(error);
           return;
         }
         resolve(data);
@@ -414,15 +418,12 @@ function postJson(url, payload, timeoutMs) {
   });
 }
 
-function wukongPayloadBase64(text, clientMsgNo) {
-  // 悟空官方 /message/send 要求 payload 为 base64。payload 内容按文本消息格式：type=1，content/text 都带上。
+function wukongPayloadBase64(text) {
+  // 悟空 /message/send 的 payload 是 base64 后的消息体。
+  // 文本消息推荐结构是 { type: 1, content: '...' }，不要把 client_msg_no 塞进 payload，client_msg_no 放顶层。
   const payload = {
     type: 1,
     content: text,
-    text,
-    client_msg_no: clientMsgNo,
-    clientMsgNo,
-    peipe_greet: true,
   };
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
 }
@@ -443,11 +444,13 @@ async function sendWukongServerMessage(fromUid, toUid, text) {
       red_dot: 1,
       sync_once: 0,
     },
+    client_msg_no: clientMsgNo,
     from_uid: String(fromUid),
     stream_no: '',
     channel_id: String(toUid),
     channel_type: 1,
-    payload: wukongPayloadBase64(text, clientMsgNo),
+    expire: 0,
+    payload: wukongPayloadBase64(text),
   };
 
   const data = await postJson(url, payload, 6000);
@@ -573,6 +576,8 @@ async function sendPrivateGreeting(req) {
         text,
         wukongSent: false,
         wukongError: (err && err.message) || String(err || ''),
+        wukongStatus: err && err.statusCode || 0,
+        wukongResponse: err && err.response || null,
       };
     }
   }
