@@ -10,6 +10,7 @@ const partnerReviews = require('./swipe/comments');
 const plugin = {};
 const API_PREFIXES = ['/api/peipe-partners', '/api/peipe-swipe'];
 const API_ROUTE_PREFIXES = ['/peipe-partners', '/peipe-swipe'];
+const GREET_DAILY_LIMIT = 8;
 function asyncRoute(fn) {
   return function routeHandler(req, res, next) {
     Promise.resolve(fn(req, res, next)).catch(next);
@@ -125,6 +126,127 @@ async function markChatted(fromUid, toUid) {
   }
 }
 
+function dayKey(ts) {
+  const d = new Date(ts || Date.now());
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}${m}${day}`;
+}
+
+function pairValue(a, b) {
+  a = Number(a || 0);
+  b = Number(b || 0);
+  return a < b ? `${a}:${b}` : `${b}:${a}`;
+}
+
+function dailyGreetKey(uid, ts) {
+  return `peipePartners:greet:daily:${Number(uid || 0)}:${dayKey(ts)}`;
+}
+
+async function getSortedScore(key, value) {
+  value = String(value);
+  if (db && typeof db.sortedSetScore === 'function') {
+    return db.sortedSetScore(key, value).catch(() => null);
+  }
+  if (db && typeof db.getSortedSetScore === 'function') {
+    return db.getSortedSetScore(key, value).catch(() => null);
+  }
+  if (db && typeof db.isSortedSetMember === 'function') {
+    const ok = await db.isSortedSetMember(key, value).catch(() => false);
+    return ok ? 1 : null;
+  }
+  return null;
+}
+
+async function getSortedCard(key) {
+  if (db && typeof db.sortedSetCard === 'function') {
+    return Number(await db.sortedSetCard(key).catch(() => 0) || 0);
+  }
+  if (db && typeof db.getSortedSetCard === 'function') {
+    return Number(await db.getSortedSetCard(key).catch(() => 0) || 0);
+  }
+  if (db && typeof db.getSortedSetRange === 'function') {
+    const rows = await db.getSortedSetRange(key, 0, -1).catch(() => []);
+    return Array.isArray(rows) ? rows.length : 0;
+  }
+  return 0;
+}
+
+async function expireKey(key, seconds) {
+  if (db && typeof db.expire === 'function') return db.expire(key, seconds).catch(() => {});
+  if (db && typeof db.pexpire === 'function') return db.pexpire(key, seconds * 1000).catch(() => {});
+}
+
+function relationLooksTrue(result) {
+  if (result === true) return true;
+  if (!result || typeof result !== 'object') return false;
+  return !!(result.already || result.chatted || result.exists || result.has || result.ok === true && result.uid);
+}
+
+async function hasExistingPartnerRelation(fromUid, toUid) {
+  if (!partner) return false;
+  const names = ['hasChatted', 'hasGreeted', 'isChatted', 'alreadyChatted', 'hasRelationship'];
+  for (const name of names) {
+    if (typeof partner[name] !== 'function') continue;
+    const byObject = await partner[name](fromUid, { uid: toUid, toUid }).catch(() => null);
+    if (relationLooksTrue(byObject)) return true;
+    const byUid = await partner[name](fromUid, toUid).catch(() => null);
+    if (relationLooksTrue(byUid)) return true;
+  }
+  return false;
+}
+
+async function reserveWukongGreeting(fromUid, toUid, body) {
+  const now = Date.now();
+  const pair = pairValue(fromUid, toUid);
+  const pairKey = 'peipePartners:greet:pairs';
+  const dailyKey = dailyGreetKey(fromUid, now);
+  const previous = await getSortedScore(pairKey, pair);
+  const already = (previous !== null && previous !== undefined) || await hasExistingPartnerRelation(fromUid, toUid);
+
+  if (already) {
+    return {
+      ok: true,
+      already: true,
+      limit: GREET_DAILY_LIMIT,
+      remaining: Math.max(0, GREET_DAILY_LIMIT - await getSortedCard(dailyKey)),
+      uid: toUid,
+      text: body && body.text || '',
+      chatUrl: wukongChatUrl(toUid),
+    };
+  }
+
+  const count = await getSortedCard(dailyKey);
+  if (count >= GREET_DAILY_LIMIT) {
+    return {
+      ok: false,
+      error: 'daily-limit',
+      message: `今天陌生人打招呼次数已用完（${GREET_DAILY_LIMIT} 次）`,
+      limit: GREET_DAILY_LIMIT,
+      remaining: 0,
+      uid: toUid,
+      chatUrl: wukongChatUrl(toUid),
+    };
+  }
+
+  await db.sortedSetAdd(dailyKey, now, String(toUid)).catch(() => {});
+  await db.sortedSetAdd(pairKey, now, pair).catch(() => {});
+  await expireKey(dailyKey, 3 * 24 * 60 * 60);
+
+  await markChatted(fromUid, toUid);
+
+  return {
+    ok: true,
+    already: false,
+    limit: GREET_DAILY_LIMIT,
+    remaining: Math.max(0, GREET_DAILY_LIMIT - count - 1),
+    uid: toUid,
+    text: body && body.text || '',
+    chatUrl: wukongChatUrl(toUid),
+  };
+}
+
 
 function wukongChatUrl(toUid) {
   return `/wukong/${encodeURIComponent(String(toUid))}`;
@@ -135,8 +257,6 @@ async function prepareWukongChatRoute(req) {
   const toUid = Number(req.body && (req.body.uid || req.body.toUid || req.body.targetUid));
   if (!fromUid) return { ok: false, error: 'login-required' };
   if (!toUid || toUid === fromUid) return { ok: false, error: 'invalid-user' };
-
-  await markChatted(fromUid, toUid);
 
   return {
     ok: true,
@@ -152,15 +272,20 @@ async function sendPrivateGreeting(req) {
   if (!fromUid) return { ok: false, error: 'login-required' };
   if (!toUid || toUid === fromUid) return { ok: false, error: 'invalid-user' };
 
-  // 悟空独立版前端已经通过 SDK 发送消息，这里只保留后端关系记录，绝不创建 NodeBB 私聊房间。
-  await markChatted(fromUid, toUid);
+  // 悟空独立版前端通过 SDK 发送贴纸消息；后端只做全站限额、陌生人去重和关系记录。
+  const reserved = await reserveWukongGreeting(fromUid, toUid, req.body || {});
+  if (!reserved.ok) return reserved;
 
   return {
     ok: true,
     mode: 'wukong-standalone',
+    already: !!reserved.already,
+    limit: reserved.limit,
+    remaining: reserved.remaining,
     uid: toUid,
-    content: req.body && req.body.text || '',
-    chatUrl: wukongChatUrl(toUid),
+    content: reserved.text || '',
+    text: reserved.text || '',
+    chatUrl: reserved.chatUrl,
   };
 }
 
@@ -175,6 +300,10 @@ function registerJsonRoutes(router, middleware) {
     }));
 
     router.post(`${apiPrefix}/me/greet`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
+      json(res, await sendPrivateGreeting(req));
+    }));
+
+    router.post(`${apiPrefix}/me/wukong-greet`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
       json(res, await sendPrivateGreeting(req));
     }));
 
@@ -251,6 +380,10 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
     });
 
     routeHelpers.setupApiRoute(router, 'post', `${apiRoutePrefix}/me/greet`, [middleware.ensureLoggedIn], async (req, res) => {
+      helpers.formatApiResponse(200, res, await sendPrivateGreeting(req));
+    });
+
+    routeHelpers.setupApiRoute(router, 'post', `${apiRoutePrefix}/me/wukong-greet`, [middleware.ensureLoggedIn], async (req, res) => {
       helpers.formatApiResponse(200, res, await sendPrivateGreeting(req));
     });
 
