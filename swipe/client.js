@@ -581,7 +581,7 @@
         'content-type': 'application/json; charset=utf-8',
         'x-csrf-token': csrfToken()
       },
-      body: jsonBody({ uid: toUid, text: text, source: 'swipe-client' })
+      body: jsonBody({ uid: toUid, text: text, source: 'swipe-client', forceSend: !hasLocalWukongGreetSent(toUid) })
     }).then(function (json) {
       if (json && json.ok === false) {
         throw new Error(json.error || json.message || '发送失败');
@@ -1472,29 +1472,21 @@
     if (label) label.textContent = TEXT.greeting;
 
     reserveWukongGreet(uid, text).then(function (reserved) {
-      if (reserved && reserved.already && hasLocalWukongGreetSent(uid)) {
-        btn.dataset.ppsWukongSent = '1';
-        btn.classList.add('pps-greet-sent');
-        if (label) label.textContent = TEXT.greeted;
-        toast(TEXT.greetAlready || '你已经打过招呼了');
-        return null;
+      btn.dataset.ppsWukongSent = '1';
+      btn.classList.add('pps-greet-sent');
+      if (label) label.textContent = TEXT.greeted;
+
+      if (reserved && (reserved.wukongSent || reserved.wukongSkipped || reserved.already)) {
+        markLocalWukongGreetSent(uid);
       }
 
-      // 后端可能已经记录过 old NodeBB greet，或上次记录成功但悟空发送失败。
-      // 这种 already 只是不再扣次数；本地没成功发过悟空贴纸时，仍补发一次。
-      return sendWukongGreet(uid, text).then(function () {
-        markLocalWukongGreetSent(uid);
-        btn.dataset.ppsWukongSent = '1';
-        btn.classList.add('pps-greet-sent');
+      // 后端已经直接调用悟空 /message/send；前端不再用 SDK 二次发送，避免“显示成功但对方看不到”。
+      syncWukongConversation(uid, reserved && reserved.text || text);
 
-        if (label) label.textContent = TEXT.greeted;
-
-        toast(reserved && reserved.already ? '已补发打招呼图片' : TEXT.greetOk);
-
-        // 同步到悟空独立版会话列表，text 是贴纸 shortcode，聊天页会渲染成打招呼图片/动图
-        syncWukongConversation(uid, text);
-        return true;
-      });
+      if (reserved && reserved.already && reserved.wukongSkipped) toast(TEXT.greetAlready || '你已经打过招呼了');
+      else if (reserved && reserved.already) toast('已补发打招呼图片');
+      else toast(TEXT.greetOk || '已发送打招呼图片');
+      return true;
     }).catch(function (err) {
       console.warn('[peipe-swipe] wukong greet failed', err);
 
