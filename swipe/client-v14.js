@@ -26,6 +26,7 @@
       'https://cdn.jsdelivr.net/npm/wukongimjssdk@latest/lib/wukongimjssdk.umd.js'
     ],
     wkTokenPath: '/api/wukong/token',
+    wkGreetPath: '/api/peipe-swipe/me/wukong-greet',
     wkConversationUpsertPath: '/api/wukong/conversations/upsert',
     wkWsPath: '/wkws/',
     greetOpenChatAfterSend: false,
@@ -473,7 +474,15 @@
       cur = cur.parentNode;
     }
     var slide = slideFrom(el);
-    return uidFromName(slide) || uidFromSlideOrder(slide) || 0;
+    var found = uidFromName(slide) || uidFromSlideOrder(slide) || 0;
+    if (found) return found;
+
+    var data = window.ajaxify && window.ajaxify.data || window.app && window.app.data || {};
+    var pageUid = Number(data.uid || data.user && data.user.uid || data.profile && data.profile.uid || 0);
+    var viewerUid = Number(window.app && window.app.user && window.app.user.uid || 0);
+    if (pageUid && pageUid !== viewerUid) return pageUid;
+
+    return 0;
   }
 
   function findNameFrom(el) {
@@ -720,6 +729,25 @@
     return '[peipe-greet:hello-' + (idx < 10 ? '0' + idx : String(idx)) + ']';
   }
 
+  function greetErrorText(err) {
+    var raw = String((err && (err.message || err.error || err.reason)) || err || '');
+    if (/daily-limit/.test(raw)) return '今天陌生人打招呼次数已用完（8 次）';
+    if (/login-required/.test(raw)) return '请先登录';
+    if (/invalid-user/.test(raw)) return '没有找到用户';
+    return raw || '发送失败';
+  }
+
+  function reserveWukongGreet(toUid, text) {
+    return apiFetch(CONFIG.wkGreetPath, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'x-csrf-token': csrfToken()
+      },
+      body: JSON.stringify({ uid: toUid, text: text, source: 'swipe-overlay' })
+    });
+  }
+
   function sendWukongText(toUid, text) {
     return ensureWukongReady().then(function () {
       if (!window.wk || !window.wk.WKSDK || !window.wk.Channel || !window.wk.MessageText) {
@@ -821,38 +849,62 @@
 
     var text = randomGreetingShortcode();
 
-    sendWukongText(uid, text).then(function () {
-      btn.dataset.ppstSentAt = String(Date.now());
-      btn.classList.add('ppst-greet-sent');
-
-      // 同步悟空独立版会话列表
-      syncWukongConversation(uid, text);
-
-      toast('已发送，继续刷不会打断；再点一次打开聊天');
-
-      return markChatRoute(uid);
-    }).then(function (route) {
+    reserveWukongGreet(uid, text).then(function (reserved) {
       btn.dataset.chatUrl = rel(
-        route && route.chatUrl
-          ? route.chatUrl
+        reserved && reserved.chatUrl
+          ? reserved.chatUrl
           : '/wukong/' + encodeURIComponent(String(uid))
       );
+
+      if (reserved && reserved.already) {
+        btn.dataset.ppstSentAt = String(Date.now());
+        btn.classList.add('ppst-greet-sent');
+        toast('你已经打过招呼了；再点一次打开聊天');
+        return null;
+      }
+
+      return sendWukongText(uid, text).then(function () {
+        btn.dataset.ppstSentAt = String(Date.now());
+        btn.classList.add('ppst-greet-sent');
+
+        // 同步悟空独立版会话列表，text 是贴纸 shortcode，聊天页会渲染成打招呼图片/动图
+        syncWukongConversation(uid, text);
+
+        toast('已发送打招呼图片；再点一次打开聊天');
+
+        return markChatRoute(uid);
+      });
+    }).then(function (route) {
+      if (route && route.chatUrl) btn.dataset.chatUrl = rel(route.chatUrl);
 
       if (CONFIG.greetOpenChatAfterSend && btn.dataset.chatUrl) {
         location.href = btn.dataset.chatUrl;
       }
     }).catch(function (err) {
-      error((err && err.message) || '发送失败');
+      error(greetErrorText(err));
     }).finally(function () {
       btn.dataset.ppstSending = '0';
       btn.classList.remove('ppst-greet-sending');
     });
   }
 
+  function findGreetButtonTarget(target) {
+    if (!target || !target.closest) return null;
+    var btn = target.closest('.pps-greet-btn,.ppst-greet-btn,.peipe-greet-btn,[data-peipe-greet],[data-pps-greet],[data-action="greet"],[data-action="peipe-greet"],[data-action="wukong-greet"]');
+    if (btn) return btn;
+
+    btn = target.closest('button,a');
+    if (!btn || btn.closest('.composer,.write,.chat-composer,[contenteditable="true"]')) return null;
+
+    var text = norm(btn.textContent || btn.getAttribute('aria-label') || btn.getAttribute('title') || '');
+    if (!/(打招呼|已打招呼|👋|Hi)/i.test(text)) return null;
+    return findUidFrom(btn) ? btn : null;
+  }
+
   function bindGlobal() {
     document.addEventListener('click', function (e) {
       var btn;
-      if ((btn = e.target.closest('.pps-greet-btn'))) {
+      if ((btn = findGreetButtonTarget(e.target))) {
         e.preventDefault();
         e.stopImmediatePropagation();
         handleWukongGreet(btn, e);
@@ -903,6 +955,18 @@
     }, true);
   }
 
+
+  function ensureGreetStickerStyle() {
+    if (document.getElementById('peipe-greet-sticker-style')) return;
+    var style = document.createElement('style');
+    style.id = 'peipe-greet-sticker-style';
+    style.textContent = [
+      '.peipe-greet-sticker-wrap{display:inline-flex;align-items:center;vertical-align:middle;max-width:132px}',
+      '.peipe-greet-sticker{display:block;width:96px;max-width:32vw;height:auto;border-radius:12px;object-fit:contain}',
+      '.message .peipe-greet-sticker,.chat-message .peipe-greet-sticker,.wk-message .peipe-greet-sticker{width:112px}'
+    ].join('');
+    document.head.appendChild(style);
+  }
 
   function greetStickerUrl(name) {
     name = String(name || '').toLowerCase();
@@ -988,6 +1052,7 @@
     bindGlobal();
     bindDelegatedLongPress();
     requestDailyLocation();
+    ensureGreetStickerStyle();
     renderGreetStickers(document.body);
     loadOverlayFeedOnce();
     var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) { enhance(node); renderGreetStickers(node); } }); }); });
