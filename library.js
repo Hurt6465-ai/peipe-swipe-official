@@ -7,21 +7,9 @@ const partner = require('./lib/partner');
 const swipe = require('./swipe');
 const partnerReviews = require('./swipe/comments');
 
-let messaging = null;
-try {
-  messaging = require.main.require('./src/messaging');
-} catch (err) {
-  messaging = null;
-}
-
 const plugin = {};
 const API_PREFIXES = ['/api/peipe-partners', '/api/peipe-swipe'];
 const API_ROUTE_PREFIXES = ['/peipe-partners', '/peipe-swipe'];
-const GREET_STICKERS = [
-  'hello-01', 'hello-02', 'hello-03', 'hello-04', 'hello-05',
-  'hello-06', 'hello-07', 'hello-08', 'hello-09', 'hello-10',
-];
-
 function asyncRoute(fn) {
   return function routeHandler(req, res, next) {
     Promise.resolve(fn(req, res, next)).catch(next);
@@ -131,15 +119,15 @@ async function saveLocation(uid, body) {
   return { ok: true, lat, lng, accuracy, updatedAt: now, expiresAt };
 }
 
-function randomWaveMessage() {
-  const name = GREET_STICKERS[Math.floor(Math.random() * GREET_STICKERS.length)];
-  return name ? `[peipe-greet:${name}]` : '';
-}
-
 async function markChatted(fromUid, toUid) {
   if (partner && typeof partner.markChatted === 'function') {
     await partner.markChatted(fromUid, { uid: toUid, toUid }).catch(() => {});
   }
+}
+
+
+function wukongChatUrl(toUid) {
+  return `/wukong/${encodeURIComponent(String(toUid))}`;
 }
 
 async function prepareWukongChatRoute(req) {
@@ -148,24 +136,14 @@ async function prepareWukongChatRoute(req) {
   if (!fromUid) return { ok: false, error: 'login-required' };
   if (!toUid || toUid === fromUid) return { ok: false, error: 'invalid-user' };
 
-  let roomId = '';
-  if (messaging && typeof messaging.hasPrivateChat === 'function') {
-    await messaging.canMessageUser(fromUid, toUid).catch(() => {});
-    roomId = await messaging.hasPrivateChat(fromUid, toUid).catch(() => '') || '';
-    if (!roomId && typeof messaging.newRoom === 'function') {
-      roomId = await messaging.newRoom(fromUid, { uids: [String(toUid)] }).catch(() => '') || '';
-    }
-  }
-
-  let userslug = '';
-  try {
-    const row = await user.getUserFields(toUid, ['userslug', 'username']);
-    userslug = row && (row.userslug || row.username) || '';
-  } catch (err) {}
-
   await markChatted(fromUid, toUid);
-  const chatUrl = userslug ? (`/user/${encodeURIComponent(userslug)}/chats${roomId ? `/${encodeURIComponent(roomId)}` : ''}`) : '';
-  return { ok: true, mode: 'wukong', roomId, uid: toUid, userslug, chatUrl };
+
+  return {
+    ok: true,
+    mode: 'wukong-standalone',
+    uid: toUid,
+    chatUrl: wukongChatUrl(toUid),
+  };
 }
 
 async function sendPrivateGreeting(req) {
@@ -174,23 +152,16 @@ async function sendPrivateGreeting(req) {
   if (!fromUid) return { ok: false, error: 'login-required' };
   if (!toUid || toUid === fromUid) return { ok: false, error: 'invalid-user' };
 
-  if (!messaging || typeof messaging.hasPrivateChat !== 'function') {
-    if (partner && typeof partner.greet === 'function') return partner.greet(fromUid, req.body || {});
-    await markChatted(fromUid, toUid);
-    return { ok: true, mode: 'mark-only', uid: toUid };
-  }
-
-  await messaging.canMessageUser(fromUid, toUid);
-  let roomId = await messaging.hasPrivateChat(fromUid, toUid);
-  if (!roomId) roomId = await messaging.newRoom(fromUid, { uids: [String(toUid)] });
-
-  const content = randomWaveMessage();
-  const message = await messaging.sendMessage({ uid: fromUid, roomId, content });
-  if (message && typeof messaging.notifyUsersInRoom === 'function') {
-    await messaging.notifyUsersInRoom(fromUid, roomId, message).catch(() => {});
-  }
+  // 悟空独立版前端已经通过 SDK 发送消息，这里只保留后端关系记录，绝不创建 NodeBB 私聊房间。
   await markChatted(fromUid, toUid);
-  return { ok: true, mode: 'chat', roomId, message, content };
+
+  return {
+    ok: true,
+    mode: 'wukong-standalone',
+    uid: toUid,
+    content: req.body && req.body.text || '',
+    chatUrl: wukongChatUrl(toUid),
+  };
 }
 
 function registerJsonRoutes(router, middleware) {
