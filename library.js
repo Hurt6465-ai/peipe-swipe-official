@@ -3,6 +3,8 @@
 const routeHelpers = require.main.require('./src/routes/helpers');
 const user = require.main.require('./src/user');
 const db = require.main.require('./src/database');
+const http = require('http');
+const https = require('https');
 
 let groups = null;
 try {
@@ -33,6 +35,16 @@ const VIP_GREET_LIMIT = 30;
 
 // 现在先不强制个人主页打招呼 VIP 专属。要做会员权益时改成 true，前端再配合弹付费引导。
 const PROFILE_GREET_REQUIRES_VIP = false;
+
+// 悟空服务端 REST API。当前默认按悟空官方默认内网端口 5001 调用，
+// 后期可以用环境变量覆盖：PEIPE_WUKONG_API_BASE=http://127.0.0.1:5001
+const WUKONG_API_BASE = String(
+  process.env.PEIPE_WUKONG_API_BASE ||
+  process.env.WUKONG_API_BASE ||
+  process.env.WUKONG_API_URL ||
+  'http://127.0.0.1:5001'
+).replace(/\/+$/, '');
+const WUKONG_SERVER_SEND_ENABLED = String(process.env.PEIPE_WUKONG_SERVER_SEND || '1') !== '0';
 
 function asyncRoute(fn) {
   return function routeHandler(req, res, next) {
@@ -335,11 +347,133 @@ async function markGreeted(fromUid, toUid, ts, body) {
   }
 }
 
+
+function randomGreetText() {
+  const idx = Math.floor(Math.random() * 10) + 1;
+  return `[peipe-greet:hello-${idx < 10 ? `0${idx}` : String(idx)}]`;
+}
+
+function safeText(value, fallback) {
+  const text = String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  return text || fallback || randomGreetText();
+}
+
+function makeClientMsgNo(fromUid, toUid) {
+  return `pps_greet_${fromUid}_${toUid}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function postJson(url, payload, timeoutMs) {
+  timeoutMs = Number(timeoutMs || 5000);
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (err) {
+      reject(new Error(`invalid-url: ${url}`));
+      return;
+    }
+
+    const body = Buffer.from(JSON.stringify(payload || {}));
+    const client = parsed.protocol === 'https:' ? https : http;
+    const req = client.request({
+      protocol: parsed.protocol,
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: `${parsed.pathname || '/'}${parsed.search || ''}`,
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        accept: 'application/json',
+        'content-length': body.length,
+      },
+      timeout: timeoutMs,
+    }, (res) => {
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        let data = {};
+        if (raw) {
+          try { data = JSON.parse(raw); } catch (err) { data = { raw }; }
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          const msg = (data && (data.msg || data.error || data.message)) || `wukong-http-${res.statusCode}`;
+          reject(new Error(msg));
+          return;
+        }
+        resolve(data);
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy(new Error('wukong-send-timeout'));
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+function wukongPayloadBase64(text, clientMsgNo) {
+  // 悟空官方 /message/send 要求 payload 为 base64。payload 内容按文本消息格式：type=1，content/text 都带上。
+  const payload = {
+    type: 1,
+    content: text,
+    text,
+    client_msg_no: clientMsgNo,
+    clientMsgNo,
+    peipe_greet: true,
+  };
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
+}
+
+async function sendWukongServerMessage(fromUid, toUid, text) {
+  if (!WUKONG_SERVER_SEND_ENABLED) {
+    return { ok: false, skipped: true, error: 'wukong-server-send-disabled' };
+  }
+  if (!WUKONG_API_BASE) {
+    return { ok: false, skipped: true, error: 'wukong-api-base-missing' };
+  }
+
+  const clientMsgNo = makeClientMsgNo(fromUid, toUid);
+  const url = `${WUKONG_API_BASE}/message/send`;
+  const payload = {
+    header: {
+      no_persist: 0,
+      red_dot: 1,
+      sync_once: 0,
+    },
+    from_uid: String(fromUid),
+    stream_no: '',
+    channel_id: String(toUid),
+    channel_type: 1,
+    payload: wukongPayloadBase64(text, clientMsgNo),
+  };
+
+  const data = await postJson(url, payload, 6000);
+  return { ok: true, clientMsgNo, response: data };
+}
+
+async function rollbackGreetingReservation(fromUid, toUid, ts) {
+  const dailyKey = dailyGreetKey(fromUid, ts);
+  const value = String(toUid);
+  const tasks = [];
+  if (db && typeof db.sortedSetRemove === 'function') {
+    tasks.push(db.sortedSetRemove(dailyKey, value).catch(() => {}));
+    tasks.push(db.sortedSetRemove(greetedKey(fromUid), value).catch(() => {}));
+    tasks.push(db.sortedSetRemove(greetedByKey(toUid), String(fromUid)).catch(() => {}));
+  } else if (db && typeof db.sortedSetRemoveRangeByScore === 'function') {
+    // 没有按 member 删除时不强行清理，避免误删。
+  }
+  await Promise.all(tasks);
+}
+
 async function reserveWukongGreeting(req) {
   const fromUid = Number(req.uid || 0);
   const toUid = targetUidFromReq(req);
   const source = greetSource(req);
   const body = Object.assign({}, req.body || {}, { uid: toUid });
+  body.text = safeText(body.text || body.message || body.content);
 
   if (!fromUid) return { ok: false, error: 'login-required', message: '请先登录' };
   if (!toUid || toUid === fromUid) return { ok: false, error: 'invalid-user', message: '无效用户' };
@@ -373,7 +507,7 @@ async function reserveWukongGreeting(req) {
       remaining: Math.max(0, limit - count),
       uid: toUid,
       chatUrl: wukongChatUrl(toUid),
-      text: body.text || body.message || body.content || '',
+      text: body.text,
       mode: 'wukong-standalone',
     };
   }
@@ -404,14 +538,44 @@ async function reserveWukongGreeting(req) {
     remaining: Math.max(0, limit - count - 1),
     uid: toUid,
     chatUrl: wukongChatUrl(toUid),
-    text: body.text || body.message || body.content || '',
+    text: body.text,
     mode: 'wukong-standalone',
+    reserved: true,
+    reservedAt: now,
   };
 }
 
 async function sendPrivateGreeting(req) {
+  const fromUid = Number(req.uid || 0);
   const result = await reserveWukongGreeting(req);
   if (!result.ok) return result;
+
+  const toUid = Number(result.uid || targetUidFromReq(req));
+  const text = safeText(result.text || (req.body && (req.body.text || req.body.message || req.body.content)));
+  const forceSend = !!(req.body && (req.body.forceSend || req.body.force_send || req.body.resend));
+  const shouldSend = !result.already || forceSend;
+  let wukong = { ok: false, skipped: true, reason: 'already' };
+
+  if (shouldSend) {
+    try {
+      wukong = await sendWukongServerMessage(fromUid, toUid, text);
+    } catch (err) {
+      // 如果这次是新扣次数，但悟空服务端发送失败，尽量回滚，避免“已扣次数但对方看不到”。
+      if (result.reserved && result.reservedAt) {
+        await rollbackGreetingReservation(fromUid, toUid, result.reservedAt).catch(() => {});
+      }
+      return {
+        ok: false,
+        error: 'wukong-send-failed',
+        message: `悟空消息发送失败：${(err && err.message) || err || 'unknown'}`,
+        uid: toUid,
+        chatUrl: result.chatUrl || wukongChatUrl(toUid),
+        text,
+        wukongSent: false,
+        wukongError: (err && err.message) || String(err || ''),
+      };
+    }
+  }
 
   return {
     ok: true,
@@ -422,10 +586,13 @@ async function sendPrivateGreeting(req) {
     vip: !!result.vip,
     limit: result.limit,
     remaining: result.remaining,
-    uid: result.uid,
-    content: result.text || '',
-    text: result.text || '',
-    chatUrl: result.chatUrl,
+    uid: toUid,
+    content: text,
+    text,
+    chatUrl: result.chatUrl || wukongChatUrl(toUid),
+    wukongSent: !!(wukong && wukong.ok),
+    wukongSkipped: !!(wukong && wukong.skipped),
+    clientMsgNo: wukong && wukong.clientMsgNo || '',
   };
 }
 
