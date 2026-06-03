@@ -21,8 +21,12 @@
     geoMaxAge: 24 * 60 * 60 * 1000,
     translateSettingsKey: 'x-topic-translate-settings',
     translateCacheMs: 3 * 24 * 60 * 60 * 1000,
-    wkSdkUrl: 'https://cdn.jsdelivr.net/npm/wukongimjssdk@latest/lib/wukongimjssdk.umd.js',
-    wkTokenPath: '/bridge/token',
+    wkSdkUrls: [
+      '/plugins/nodebb-plugin-wukong-chat/static/vendor/wukongimjssdk.umd.js',
+      'https://cdn.jsdelivr.net/npm/wukongimjssdk@latest/lib/wukongimjssdk.umd.js'
+    ],
+    wkTokenPath: '/api/wukong/token',
+    wkConversationUpsertPath: '/api/wukong/conversations/upsert',
     wkWsPath: '/wkws/',
     greetOpenChatAfterSend: false,
     defaultPrompt: '你是专业论坛翻译助手。请把用户提供的内容从 {{sourceLang}} 翻译为 {{targetLang}}。保留原有语气、换行、链接、Markdown、代码块、用户名、表情和列表结构。只输出译文，不要解释。'
@@ -55,7 +59,8 @@
     delegatedLongPressBound: false,
     translateSuppressClickUntil: 0,
     wkReadyPromise: null,
-    wkUid: ''
+    wkUid: '',
+    wkConnectedStarted: false
   };
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -614,42 +619,99 @@
 
 
   function loadScriptOnce(url, key) {
-    if (window[key]) return Promise.resolve();
+    if (window.wk && window.wk.WKSDK) return Promise.resolve();
+
+    key = key || String(url || '');
+
     return new Promise(function (resolve, reject) {
       var existing = document.querySelector('script[data-ppst-key="' + key + '"]');
+
       if (existing) {
+        if (existing.dataset.loaded === '1') return resolve();
+        if (existing.dataset.error === '1') return reject(new Error('悟空 SDK 加载失败'));
         existing.addEventListener('load', resolve, { once: true });
         existing.addEventListener('error', reject, { once: true });
         return;
       }
+
       var s = document.createElement('script');
-      s.src = url;
+      s.src = rel(url);
       s.async = true;
       s.dataset.ppstKey = key;
-      s.onload = resolve;
-      s.onerror = reject;
+      s.onload = function () { s.dataset.loaded = '1'; resolve(); };
+      s.onerror = function () {
+        s.dataset.error = '1';
+        reject(new Error('悟空 SDK 加载失败：' + url));
+      };
       document.head.appendChild(s);
     });
   }
 
+  function loadWukongSdk() {
+    if (window.wk && window.wk.WKSDK) return Promise.resolve();
+
+    var urls = CONFIG.wkSdkUrls || [];
+    var index = 0;
+
+    function next() {
+      var url = urls[index++];
+
+      if (!url) return Promise.reject(new Error('悟空 SDK 未加载'));
+
+      return loadScriptOnce(url, 'ppst-wukong-sdk-' + index).then(function () {
+        if (window.wk && window.wk.WKSDK) return true;
+        throw new Error('悟空 SDK 格式不正确');
+      }).catch(function () {
+        return next();
+      });
+    }
+
+    return next();
+  }
+
   function ensureWukongReady() {
     if (state.wkReadyPromise) return state.wkReadyPromise;
+
     state.wkReadyPromise = apiFetch(CONFIG.wkTokenPath).then(function (token) {
-      if (!token || !token.token || !token.uid) throw new Error('悟空 token 获取失败');
+      if (!token || !token.token || !token.uid) {
+        throw new Error('悟空 token 获取失败');
+      }
+
       state.wkUid = String(token.uid);
-      return loadScriptOnce(CONFIG.wkSdkUrl, 'ppst-wukong-sdk').then(function () {
+
+      return loadWukongSdk().then(function () {
         var wk = window.wk;
-        if (!wk || !wk.WKSDK) throw new Error('悟空 SDK 未加载');
+
+        if (!wk || !wk.WKSDK) {
+          throw new Error('悟空 SDK 未加载');
+        }
+
         wk.WKSDK.shared().config.uid = String(token.uid);
         wk.WKSDK.shared().config.token = String(token.token);
-        wk.WKSDK.shared().config.addr = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + CONFIG.wkWsPath;
-        try { wk.WKSDK.shared().connectManager.connect(); } catch (err) {}
+
+        // 使用悟空独立版 /api/wukong/token 返回的 WS 地址
+        wk.WKSDK.shared().config.addr = String(
+          token.addr ||
+          token.wsAddr ||
+          token.wkws ||
+          ((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + CONFIG.wkWsPath)
+        );
+
+        if (!state.wkConnectedStarted) {
+          state.wkConnectedStarted = true;
+          try {
+            wk.WKSDK.shared().connectManager.connect();
+          } catch (err) {}
+        }
+
         return token;
       });
     }).catch(function (err) {
       state.wkReadyPromise = null;
+      state.wkConnectedStarted = false;
       throw err;
     });
+
     return state.wkReadyPromise;
   }
 
@@ -660,7 +722,9 @@
 
   function sendWukongText(toUid, text) {
     return ensureWukongReady().then(function () {
-      if (!window.wk || !window.wk.WKSDK) throw new Error('悟空 SDK 不可用');
+      if (!window.wk || !window.wk.WKSDK || !window.wk.Channel || !window.wk.MessageText) {
+        throw new Error('悟空 SDK 不可用');
+      }
       var clientMsgNo = 'pps_greet_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
       var channel = new window.wk.Channel(String(toUid), 1);
       var msgContent = new window.wk.MessageText(text);
@@ -691,35 +755,92 @@
     });
   }
 
-  function markChatRoute(toUid) {
-    return apiFetch(CONFIG.apiBase + '/me/chat-route', {
+
+  function syncWukongConversation(toUid, text) {
+    return apiFetch(CONFIG.wkConversationUpsertPath, {
       method: 'POST',
-      headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-      body: JSON.stringify({ uid: toUid })
-    }).catch(function () { return {}; });
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'x-csrf-token': csrfToken()
+      },
+      body: JSON.stringify({
+        channel_id: String(toUid),
+        channel_type: 1,
+        ts: Date.now(),
+        text: text,
+        incoming: false,
+        is_self: true,
+        last_from_uid: state.wkUid || String(window.app && window.app.user && window.app.user.uid || ''),
+        last_from_name: '我'
+      })
+    }).catch(function () {
+      // 会话列表同步失败不影响打招呼发送
+    });
+  }
+
+  function markChatRoute(toUid) {
+    // 悟空独立版聊天页，不再创建 NodeBB 私聊房间
+    return Promise.resolve({
+      ok: true,
+      mode: 'wukong-standalone',
+      uid: toUid,
+      chatUrl: '/wukong/' + encodeURIComponent(String(toUid))
+    });
   }
 
   function handleWukongGreet(btn, e) {
-    if (!isLoggedIn()) { error('请先登录'); return; }
-    var uid = findUidFrom(btn);
-    if (!uid) { error('没有找到用户'); return; }
-    var now = Date.now();
-    if (btn.dataset.ppstSentAt && Number(btn.dataset.ppstSentAt || 0) + 5000 > now && btn.dataset.chatUrl) {
-      location.href = btn.dataset.chatUrl;
+    if (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+
+    if (!isLoggedIn()) {
+      error('请先登录');
       return;
     }
+
+    var uid = findUidFrom(btn);
+
+    if (!uid) {
+      error('没有找到用户');
+      return;
+    }
+
+    var now = Date.now();
+
+    // 发送后 5 秒内再点一次，直接进入悟空独立聊天页
+    if (btn.dataset.ppstSentAt && Number(btn.dataset.ppstSentAt || 0) + 5000 > now) {
+      location.href = btn.dataset.chatUrl || rel('/wukong/' + encodeURIComponent(String(uid)));
+      return;
+    }
+
     if (btn.dataset.ppstSending === '1') return;
+
     btn.dataset.ppstSending = '1';
     btn.classList.add('ppst-greet-sending');
+
     var text = randomGreetingShortcode();
+
     sendWukongText(uid, text).then(function () {
       btn.dataset.ppstSentAt = String(Date.now());
       btn.classList.add('ppst-greet-sent');
+
+      // 同步悟空独立版会话列表
+      syncWukongConversation(uid, text);
+
       toast('已发送，继续刷不会打断；再点一次打开聊天');
+
       return markChatRoute(uid);
     }).then(function (route) {
-      if (route && route.chatUrl) btn.dataset.chatUrl = rel(route.chatUrl);
-      if (CONFIG.greetOpenChatAfterSend && btn.dataset.chatUrl) location.href = btn.dataset.chatUrl;
+      btn.dataset.chatUrl = rel(
+        route && route.chatUrl
+          ? route.chatUrl
+          : '/wukong/' + encodeURIComponent(String(uid))
+      );
+
+      if (CONFIG.greetOpenChatAfterSend && btn.dataset.chatUrl) {
+        location.href = btn.dataset.chatUrl;
+      }
     }).catch(function (err) {
       error((err && err.message) || '发送失败');
     }).finally(function () {
