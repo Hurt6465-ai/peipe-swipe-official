@@ -318,8 +318,8 @@
         text.textContent = original;
         var btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'ppst-inline-translate';
-        btn.innerHTML = '<i class="fa-solid fa-language"></i>';
+        btn.className = 'ppst-inline-translate cp-quick-trans';
+        btn.innerHTML = '<span class="cp-trans-wa"><b>文</b><b>A</b></span>';
         btn.title = '翻译 / 长按设置';
         el.appendChild(text);
         el.appendChild(btn);
@@ -435,15 +435,9 @@
     else host.appendChild(line);
   }
   function patchDistance(root) {
-    // Remove every old location/distance bubble first. We only keep one clean line under the intro.
-    $$('.ppst-distance-chip,.ppst-distance-line,.pps-distance,.pps-location-distance,.pps-location,.pps-meta-distance', root).forEach(function (el) {
-      var slide = el.closest && el.closest('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item');
-      if (slide) el.remove();
-    });
-    $$('.swiper-slide,.pps-slide,.pps-card,.pps-slide-item', root).forEach(function (slide) {
-      var u = findUserDataFrom(slide);
-      var txt = u && (u.distanceText || formatDistance(u.distanceKm));
-      if (txt) ensureDistanceChip(slide, txt);
+    // v14.2: card no longer displays location/distance. Remove old and injected distance nodes only.
+    $$('.ppst-distance-chip,.ppst-distance-line,.ppst-location-icon,.pps-distance,.pps-location-distance,.pps-location,.pps-meta-distance,.pps-location-icon', root).forEach(function (el) {
+      if (el && el.parentNode) el.parentNode.removeChild(el);
     });
   }
 
@@ -536,7 +530,7 @@
     var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml((item.authorName || '匿').slice(0, 1)) + '</span>';
     return '<div class="ppst-review-item" data-id="' + escapeHtml(item.id || '') + '">' +
       '<div class="ppst-review-avatar">' + avatar + '</div><div class="ppst-review-main"><div class="ppst-review-top"><b>' + escapeHtml(item.authorName || '匿名用户') + '</b><span>🌟' + Number(item.overall || 0).toFixed(1) + '</span></div>' +
-      '<div class="ppst-review-content">' + escapeHtml(item.content || '') + '</div><button type="button" class="ppst-review-translate"><i class="fa-solid fa-language"></i></button></div></div>';
+      '<div class="ppst-review-content">' + escapeHtml(item.content || '') + '</div><button type="button" class="ppst-review-translate"><span class="cp-trans-wa"><b>文</b><b>A</b></span></button></div></div>';
   }
   function renderReviewSheet(loading) {
     var sheet = $('.ppst-review-sheet');
@@ -549,7 +543,7 @@
       '<div class="ppst-review-list"></div>' +
       '<div class="ppst-review-editor"><div class="ppst-rating-box">' + METRICS.map(function (m) { return starRow(m.key, m.label, 0); }).join('') + '</div>' +
       '<label class="ppst-anon"><input type="checkbox" class="ppst-anonymous"> 匿名发布</label>' +
-      '<div class="ppst-input-wrap"><textarea class="ppst-review-input" maxlength="240" placeholder="写一下真实感受，最多240字"></textarea><button type="button" class="ppst-input-translate"><i class="fa-solid fa-language"></i></button></div>' +
+      '<div class="ppst-input-wrap"><textarea class="ppst-review-input" maxlength="240" placeholder="写一下真实感受，最多240字"></textarea><button type="button" class="ppst-input-translate"><span class="cp-trans-wa"><b>文</b><b>A</b></span></button></div>' +
       '<div class="ppst-review-actions"><button type="button" class="ppst-review-submit">发布评价</button></div></div>';
   }
   function setRating(key, value) {
