@@ -24,6 +24,7 @@ function safeRequire(path, fallback) {
 const partner = safeRequire('./lib/partner', {});
 const swipe = safeRequire('./swipe', {});
 const partnerReviews = safeRequire('./swipe/comments', {});
+const recRedis = safeRequire('./lib/redis-lite', null);
 
 const plugin = {};
 const API_PREFIXES = ['/api/peipe-partners', '/api/peipe-swipe'];
@@ -35,6 +36,17 @@ const VIP_GREET_LIMIT = 30;
 
 // 现在先不强制个人主页打招呼 VIP 专属。要做会员权益时改成 true，前端再配合弹付费引导。
 const PROFILE_GREET_REQUIRES_VIP = false;
+
+const REC_CACHE = {
+  queueSize: Math.max(30, Number(process.env.PEIPE_REC_QUEUE_SIZE || 300) || 300),
+  queueTtlSec: Math.max(60, Number(process.env.PEIPE_REC_QUEUE_TTL_SEC || 6 * 60 * 60) || 6 * 60 * 60),
+  cardTtlSec: Math.max(60, Number(process.env.PEIPE_REC_CARD_TTL_SEC || 30 * 60) || 30 * 60),
+  shownTtlSec: Math.max(60, Number(process.env.PEIPE_REC_SHOWN_TTL_SEC || 60 * 60) || 60 * 60),
+  rerankWindow: Math.max(18, Number(process.env.PEIPE_REC_RERANK_WINDOW || 80) || 80),
+  maxLimit: Math.max(1, Number(process.env.PEIPE_MAX_LIMIT || 30) || 30),
+  rateWindowSec: Math.max(10, Number(process.env.PEIPE_RATE_WINDOW_SEC || 30) || 30),
+  rateMax: Math.max(1, Number(process.env.PEIPE_RATE_MAX || 12) || 12),
+};
 
 // 悟空服务端 REST API。当前默认按悟空官方默认内网端口 5001 调用，
 // 后期可以用环境变量覆盖：PEIPE_WUKONG_API_BASE=http://127.0.0.1:5001
@@ -685,8 +697,8 @@ async function decorateFeedWithRecommendationSignals(req, payload) {
     const vipBoost = vip ? 25 : 0;
     const rb = reviewBoost(summary);
     const dbs = distanceBoost(item, mode);
-    const randomJitter = Math.random() * 4;
-    const score = baseOrder + vipBoost + rb + dbs + randomJitter;
+    const stableJitter = stableJitterScore(viewerUid, uid, 'review') * 4;
+    const score = baseOrder + vipBoost + rb + dbs + stableJitter;
 
     item.isVip = !!vip;
     item.vipBoost = vipBoost;
@@ -700,7 +712,265 @@ async function decorateFeedWithRecommendationSignals(req, payload) {
   return payload;
 }
 
+
+function recMode(req) {
+  const raw = String((req && req.query && req.query.mode) || 'recommend').toLowerCase();
+  return raw === 'nearby' ? 'nearby' : 'recommend';
+}
+
+function recLimit(req) {
+  return Math.min(REC_CACHE.maxLimit, Math.max(1, Number(req && req.query && req.query.limit) || 18));
+}
+
+function redisReady() {
+  return !!(recRedis && typeof recRedis.configured === 'function' && recRedis.configured());
+}
+
+function recKey(name, mode, uid) {
+  return `peipe:rec:${name}:${mode}:${uid}`;
+}
+
+function stableHash(text) {
+  text = String(text || '');
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function stableJitterScore(viewerUid, targetUid, salt) {
+  const bucket = new Date().toISOString().slice(0, 10);
+  const n = stableHash(`${viewerUid}:${targetUid}:${salt || ''}:${bucket}`) % 1000;
+  return n / 1000;
+}
+
+function activityBoost(row) {
+  const online = row && row.status === 'online';
+  if (online) return 25;
+  const last = Number(row && row.lastonline || 0);
+  if (!last) return 0;
+  const ageMs = Date.now() - last;
+  if (ageMs <= 5 * 60 * 1000) return 20;
+  if (ageMs <= 30 * 60 * 1000) return 15;
+  if (ageMs <= 24 * 60 * 60 * 1000) return 8;
+  if (ageMs <= 7 * 24 * 60 * 60 * 1000) return 4;
+  if (ageMs > 30 * 24 * 60 * 60 * 1000) return -50;
+  return -10;
+}
+
+function exposurePenalty(count1m, count10m) {
+  count1m = Number(count1m || 0);
+  count10m = Number(count10m || 0);
+  if (count1m > 30) return 35;
+  if (count1m > 15) return 20;
+  if (count10m > 80) return 30;
+  if (count10m > 50) return 25;
+  if (count10m > 20) return 10;
+  return 0;
+}
+
+async function redisRateLimit(req) {
+  if (!redisReady()) return null;
+  const uid = Number(req && req.uid || 0);
+  if (!uid) return { ok: false, error: 'login-required', message: '请先登录' };
+  const key = `peipe:rate:feed:user:${uid}`;
+  const n = await recRedis.incrExpire(key, REC_CACHE.rateWindowSec);
+  if (n > REC_CACHE.rateMax) {
+    return { ok: false, error: 'rate-limit', message: '请求太快，请稍后再试', retryAfter: REC_CACHE.rateWindowSec };
+  }
+  return null;
+}
+
+async function cacheCards(users) {
+  if (!redisReady() || !Array.isArray(users) || !users.length) return;
+  await Promise.all(users.map((item) => {
+    const uid = Number(item && item.uid || 0);
+    if (!uid) return null;
+    return recRedis.setJson(`peipe:rec:card:${uid}`, item, REC_CACHE.cardTtlSec);
+  }));
+}
+
+async function getCardsByUids(uids) {
+  uids = (uids || []).map(Number).filter(Boolean);
+  if (!uids.length) return [];
+  const keys = uids.map(uid => `peipe:rec:card:${uid}`);
+  const cached = redisReady() ? await recRedis.getManyJson(keys) : keys.map(() => null);
+  const byUid = new Map();
+  const missing = [];
+  cached.forEach((item, index) => {
+    const uid = uids[index];
+    if (item && Number(item.uid)) byUid.set(Number(item.uid), item);
+    else missing.push(uid);
+  });
+
+  if (missing.length && partner && typeof partner.getUsersByUids === 'function') {
+    const fresh = await partner.getUsersByUids(missing).catch(() => []);
+    (fresh || []).forEach((item) => {
+      if (item && item.uid) byUid.set(Number(item.uid), item);
+    });
+    await cacheCards(fresh || []);
+  }
+
+  return uids.map(uid => byUid.get(Number(uid))).filter(Boolean);
+}
+
+async function refreshActivityFor(users) {
+  const ids = (users || []).map(item => Number(item && item.uid)).filter(Boolean);
+  if (!ids.length) return users || [];
+  const rows = await user.getUsersFields(ids, ['uid', 'status', 'lastonline']).catch(() => []);
+  const map = new Map();
+  (rows || []).forEach(row => map.set(Number(row.uid), row));
+  return (users || []).map((item) => {
+    const row = map.get(Number(item.uid));
+    if (row) {
+      item.status = row.status || item.status || '';
+      item.isOnline = row.status === 'online';
+      item.lastonline = Number(row.lastonline || item.lastonline || 0) || 0;
+      item._onlineBoost = activityBoost(row);
+    } else {
+      item._onlineBoost = activityBoost(item);
+    }
+    return item;
+  });
+}
+
+async function getExposureFor(uids) {
+  if (!redisReady() || !uids.length) return new Map();
+  const keys = [];
+  uids.forEach((uid) => {
+    keys.push(`peipe:rec:exposure:1m:${uid}`);
+    keys.push(`peipe:rec:exposure:10m:${uid}`);
+  });
+  const vals = await recRedis.safe(async c => c.mget(keys), keys.map(() => null));
+  const map = new Map();
+  uids.forEach((uid, index) => {
+    map.set(Number(uid), {
+      oneMinute: Number(vals[index * 2] || 0) || 0,
+      tenMinutes: Number(vals[index * 2 + 1] || 0) || 0,
+    });
+  });
+  return map;
+}
+
+async function touchExposure(uids) {
+  if (!redisReady()) return;
+  await Promise.all((uids || []).map(async (uid) => {
+    uid = Number(uid || 0);
+    if (!uid) return;
+    await recRedis.incrExpire(`peipe:rec:exposure:1m:${uid}`, 60);
+    await recRedis.incrExpire(`peipe:rec:exposure:10m:${uid}`, 10 * 60);
+  }));
+}
+
+function cloneReqForQueue(req, mode) {
+  const child = Object.create(req || {});
+  child.query = Object.assign({}, req && req.query || {}, { mode, limit: REC_CACHE.queueSize });
+  child._peipeInternalQueue = true;
+  child._peipeSkipMarkSeen = true;
+  return child;
+}
+
+async function generateRedisQueue(req, mode) {
+  if (!redisReady()) return [];
+  const uid = Number(req && req.uid || 0);
+  if (!uid) return [];
+  const lockKey = recKey('lock', mode, uid);
+  const queueKey = recKey('queue', mode, uid);
+  const gotLock = await recRedis.setLock(lockKey, 30);
+  if (!gotLock) return [];
+
+  const payload = await getSwipeFeed(cloneReqForQueue(req, mode));
+  const users = Array.isArray(payload && payload.users) ? payload.users : [];
+  const uids = Array.from(new Set(users.map(item => Number(item && item.uid)).filter(Boolean))).slice(0, REC_CACHE.queueSize);
+  await recRedis.setJson(queueKey, uids, REC_CACHE.queueTtlSec);
+  await cacheCards(users);
+  return uids;
+}
+
+async function buildRedisFeedPayload(req) {
+  if (!redisReady()) return null;
+  const uid = Number(req && req.uid || 0);
+  if (!uid) return { ok: false, error: 'login-required', message: '请先登录', users: [] };
+
+  const limited = await redisRateLimit(req);
+  if (limited) return Object.assign({ users: [] }, limited);
+
+  const mode = recMode(req);
+  const limit = recLimit(req);
+  const queueKey = recKey('queue', mode, uid);
+  const shownKey = recKey('shown', mode, uid);
+
+  let queue = await recRedis.getJson(queueKey, null);
+  if (!Array.isArray(queue) || !queue.length) {
+    queue = await generateRedisQueue(req, mode);
+  }
+  if (!Array.isArray(queue) || !queue.length) return null;
+
+  const shown = await recRedis.getSet(shownKey);
+  const candidates = [];
+  for (let i = 0; i < queue.length; i += 1) {
+    const targetUid = Number(queue[i] || 0);
+    if (!targetUid || targetUid === uid) continue;
+    if (shown.has(String(targetUid))) continue;
+    candidates.push(targetUid);
+    if (candidates.length >= REC_CACHE.rerankWindow) break;
+  }
+
+  if (candidates.length < limit) {
+    const freshQueue = await generateRedisQueue(req, mode);
+    if (freshQueue && freshQueue.length) {
+      freshQueue.forEach((targetUid) => {
+        targetUid = Number(targetUid || 0);
+        if (!targetUid || targetUid === uid) return;
+        if (shown.has(String(targetUid))) return;
+        if (candidates.includes(targetUid)) return;
+        candidates.push(targetUid);
+      });
+    }
+  }
+
+  if (!candidates.length) return null;
+  let users = await getCardsByUids(candidates.slice(0, REC_CACHE.rerankWindow));
+  users = await refreshActivityFor(users);
+  const exposure = await getExposureFor(users.map(item => Number(item.uid)));
+  const order = new Map();
+  candidates.forEach((candidateUid, index) => order.set(Number(candidateUid), index));
+
+  users.forEach((item) => {
+    const uidNum = Number(item.uid || 0);
+    const exp = exposure.get(uidNum) || {};
+    const queueOrderScore = Math.max(0, REC_CACHE.rerankWindow - (order.get(uidNum) || 0));
+    const online = Number(item._onlineBoost || 0);
+    const fatigue = exposurePenalty(exp.oneMinute, exp.tenMinutes);
+    const jitter = stableJitterScore(req.uid, uidNum, mode) * 3;
+    item.recommendScore = Math.round((queueOrderScore + online - fatigue + jitter) * 100) / 100;
+    delete item._onlineBoost;
+  });
+
+  users = users.sort((a, b) => Number(b.recommendScore || 0) - Number(a.recommendScore || 0)).slice(0, limit);
+  const selectedUids = users.map(item => String(item.uid)).filter(Boolean);
+  if (selectedUids.length) {
+    await recRedis.addShown(shownKey, selectedUids, REC_CACHE.shownTtlSec);
+    await touchExposure(selectedUids);
+  }
+
+  return { ok: true, users, hasMore: candidates.length > limit, mode, limit, source: 'redis-cache' };
+}
+
 async function buildFeedPayload(req) {
+  const cached = await buildRedisFeedPayload(req).catch((err) => {
+    console.error('[peipe-rec-cache] fallback:', err.message);
+    return null;
+  });
+  if (cached) {
+    if (cached.ok === false) return cached;
+    let payload = await decorateFeedWithDistance(req, cached);
+    payload = await decorateFeedWithRecommendationSignals(req, payload);
+    return payload;
+  }
+
   let payload = await getSwipeFeed(req);
   payload = await decorateFeedWithDistance(req, payload);
   payload = await decorateFeedWithRecommendationSignals(req, payload);
@@ -765,7 +1035,7 @@ function registerJsonRoutes(router, middleware) {
       json(res, await prepareWukongChatRoute(req));
     }));
 
-    router.get(`${apiPrefix}/swipe/feed`, asyncRoute(async (req, res) => {
+    router.get(`${apiPrefix}/swipe/feed`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
       json(res, await buildFeedPayload(req));
     }));
 
@@ -849,7 +1119,7 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
       apiResponse(helpers, res, await prepareWukongChatRoute(req));
     });
 
-    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/swipe/feed`, [], async (req, res) => {
+    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/swipe/feed`, [middleware.ensureLoggedIn], async (req, res) => {
       apiResponse(helpers, res, await buildFeedPayload(req));
     });
 
