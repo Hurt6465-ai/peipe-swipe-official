@@ -79,10 +79,37 @@ swipe/static/vendor/swiper-bundle.min.css
 推送至 GitHub 后，在 NodeBB 所在服务器执行：
 
 ```bash
+docker update --restart=no nodebb
+
+if docker exec nodebb sh -lc '
+set -e
 cd /usr/src/app
-npm install --legacy-peer-deps --force https://github.com/Hurt6465-ai/nodebb-plugin-peipe-partners/archive/refs/heads/main.tar.gz
-./nodebb build
-./nodebb restart
+
+if [ -f /opt/config/config.json ]; then
+  CFG=/opt/config/config.json
+elif [ -f /usr/src/app/config.json ]; then
+  CFG=/usr/src/app/config.json
+else
+  echo "找不到 NodeBB config.json，停止执行，避免启动 web installer。"
+  exit 1
+fi
+
+echo "使用配置文件: $CFG"
+
+npm uninstall peipe-swipe-official || true
+npm cache clean --force
+
+npm install --legacy-peer-deps --force https://github.com/Hurt6465-ai/peipe-swipe-official/archive/refs/heads/main.tar.gz
+
+./nodebb build --config="$CFG"
+'; then
+  docker restart nodebb
+  docker update --restart=always nodebb
+  docker logs --tail 120 -f nodebb
+else
+  echo "插件安装或 NodeBB build 失败，未重启 nodebb。"
+  docker update --restart=always nodebb
+fi
 ```
 
 然后访问：
