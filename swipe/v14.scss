@@ -48,7 +48,7 @@ justify-content: flex-end !important;
 position: absolute !important;
 left: max(18px, env(safe-area-inset-left)) !important;
 right: 94px !important;
-bottom: calc(24px + env(safe-area-inset-bottom)) !important;
+bottom: calc(32px + env(safe-area-inset-bottom)) !important;
 z-index: 6 !important;
 max-height: 48vh !important;
 padding: 0 !important;
@@ -247,17 +247,17 @@ display: -webkit-box !important;
 position: relative !important;
 z-index: 7 !important;
 margin: 8px 0 0 0 !important;
-padding: 0 !important;
-max-height: 6.32em !important;
+padding: 0 0 .2em 0 !important;
+max-height: calc(1.72em * 4 + .28em) !important;
 overflow: hidden !important;
 -webkit-line-clamp: 4 !important;
 -webkit-box-orient: vertical !important;
 font-size: 14.5px !important;
-line-height: 1.58 !important;
+line-height: 1.72 !important;
 font-weight: 620 !important;
 color: rgba(255,255,255,.98) !important;
 -webkit-text-fill-color: rgba(255,255,255,.98) !important;
-word-break: break-word !important;
+word-break: normal !important;
 overflow-wrap: anywhere !important;
 background: transparent !important;
 background-image: none !important;
@@ -323,22 +323,55 @@ border: 1px solid rgba(255,255,255,.96) !important;
 box-shadow: 0 0 0 .5px rgba(0,0,0,.16), 0 1px 5px rgba(0,0,0,.25) !important;
 }
 
-/* Flag: move slightly right and upward. */
-body.pps-v14-overlay #peipe-swipe-app :is(
+/* Flag: pin to avatar lower-left only. */
+body.pps-v14-overlay #peipe-swipe-app .pps-avatar-wrap {
+position: relative !important;
+overflow: visible !important;
+}
+
+body.pps-v14-overlay #peipe-swipe-app .pps-avatar-wrap > :is(
 .pps-avatar-flag,
 .pps-country-flag,
 .pps-flag
 ) {
-display: inline-block !important;
-position: relative !important;
-transform: translate(3px, -2px) !important;
-font-size: 15px !important;
+position: absolute !important;
+left: 2px !important;
+right: auto !important;
+top: auto !important;
+bottom: 2px !important;
+z-index: 8 !important;
+display: block !important;
+width: auto !important;
+height: auto !important;
+min-width: 0 !important;
+min-height: 0 !important;
+padding: 0 !important;
+margin: 0 !important;
+transform: none !important;
+font-size: 14px !important;
 line-height: 1 !important;
 background: transparent !important;
+background-color: transparent !important;
+background-image: none !important;
 box-shadow: none !important;
 border: 0 !important;
+border-radius: 0 !important;
 text-shadow: none !important;
-filter: none !important;
+filter: drop-shadow(0 1px 3px rgba(0,0,0,.38)) !important;
+pointer-events: none !important;
+}
+
+body.pps-v14-overlay #peipe-swipe-app :is(
+.pps-user-main,
+.pps-name-row,
+.pps-lang-row,
+.pps-lang-side
+) > :is(
+.pps-avatar-flag,
+.pps-country-flag,
+.pps-flag
+) {
+display: none !important;
 }
 
 /* Greet action. */
@@ -349,7 +382,7 @@ align-items: center !important;
 gap: 0 !important;
 position: absolute !important;
 right: max(16px, env(safe-area-inset-right)) !important;
-bottom: calc(116px + env(safe-area-inset-bottom)) !important;
+bottom: calc(92px + env(safe-area-inset-bottom)) !important;
 z-index: 8 !important;
 pointer-events: auto !important;
 }
@@ -358,18 +391,18 @@ body.pps-v14-overlay #peipe-swipe-app .pps-greet-btn {
 display: inline-flex !important;
 align-items: center !important;
 justify-content: center !important;
-width: 54px !important;
-min-width: 54px !important;
-height: 54px !important;
-min-height: 54px !important;
+width: 60px !important;
+min-width: 60px !important;
+height: 60px !important;
+min-height: 60px !important;
 padding: 0 !important;
-border-radius: 21px !important;
-color: #fff !important;
-background: rgba(255,255,255,.13) !important;
-border: 1px solid rgba(255,255,255,.30) !important;
--webkit-backdrop-filter: blur(9px) saturate(120%) !important;
-backdrop-filter: blur(9px) saturate(120%) !important;
-box-shadow: 0 8px 20px rgba(0,0,0,.12) !important;
+border-radius: 23px !important;
+color: #f59e0b !important;
+background: rgba(255,255,255,.94) !important;
+border: 1px solid rgba(255,255,255,.88) !important;
+-webkit-backdrop-filter: blur(12px) saturate(130%) !important;
+backdrop-filter: blur(12px) saturate(130%) !important;
+box-shadow: 0 12px 30px rgba(15,23,42,.28), inset 0 0 0 1px rgba(255,255,255,.56) !important;
 }
 
 body.pps-v14-overlay #peipe-swipe-app :is(
@@ -383,10 +416,10 @@ body.pps-v14-overlay #peipe-swipe-app :is(
 .pps-greet-wave,
 .ppst-action-icon
 ) {
-font-size: 24px !important;
+font-size: 29px !important;
 line-height: 1 !important;
 color: inherit !important;
-text-shadow: 0 1px 3px rgba(0,0,0,.34) !important;
+text-shadow: 0 1px 2px rgba(255,255,255,.55), 0 2px 5px rgba(15,23,42,.22) !important;
 }
 
 body.pps-v14-overlay #peipe-swipe-app .pps-floating-settings {
@@ -537,100 +570,149 @@ word-break: break-word;
 padding-bottom: .12em;
 }
 
-/* Translation buttons: use chat quick translate style. */
-.cp-quick-trans,
-.ppst-review-translate,
-.ppst-input-translate {
-position: absolute;
-width: 22px;
-height: 22px;
-border-radius: 999px;
-background: rgba(255,255,255,.94);
-box-shadow: 0 3px 10px rgba(15,23,42,.14);
-border: 1px solid rgba(226,232,240,.9);
-display: flex;
-align-items: center;
-justify-content: center;
-cursor: pointer;
-z-index: 14;
-color: #64748b;
-font-size: 10px;
-transition: transform .18s, box-shadow .18s;
-pointer-events: auto;
-padding: 0;
-outline: 0;
+/* Translation buttons: v14 scoped only. */
+body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro {
+display: block !important;
+overflow: hidden !important;
+-webkit-line-clamp: unset !important;
+-webkit-box-orient: unset !important;
 }
 
-.cp-quick-trans,
-.ppst-review-translate {
-right: -28px;
-top: 50%;
-transform: translateY(-50%);
+body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro .ppst-card-text {
+display: inline !important;
+font: inherit !important;
+color: inherit !important;
+-webkit-text-fill-color: inherit !important;
+white-space: normal !important;
 }
 
-.ppst-input-translate {
-right: 8px;
-top: 8px;
-transform: none;
+body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate {
+position: static !important;
+display: inline-flex !important;
+align-items: center !important;
+justify-content: center !important;
+vertical-align: -2px !important;
+width: 21px !important;
+min-width: 21px !important;
+height: 21px !important;
+min-height: 21px !important;
+margin-left: 5px !important;
+margin-right: 0 !important;
+padding: 0 !important;
+border-radius: 999px !important;
+border: 1px solid rgba(255,255,255,.95) !important;
+background: rgba(255,255,255,.98) !important;
+background-image: none !important;
+box-shadow: 0 3px 10px rgba(15,23,42,.18) !important;
+-webkit-backdrop-filter: none !important;
+backdrop-filter: none !important;
+color: rgb(177,151,252) !important;
+cursor: pointer !important;
+outline: 0 !important;
+font-size: 0 !important;
+line-height: 1 !important;
+transform: none !important;
 }
 
-.cp-quick-trans:active,
-.ppst-review-translate:active {
-transform: translateY(-50%) scale(.92);
+body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate:active {
+transform: scale(.92) !important;
 }
 
-.ppst-input-translate:active {
-transform: scale(.92);
+body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i.fa-solid.fa-language,
+body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i.fa-language {
+display: block !important;
+width: auto !important;
+height: auto !important;
+margin: 0 !important;
+padding: 0 !important;
+color: rgb(177,151,252) !important;
+font-size: 11px !important;
+line-height: 1 !important;
+background: transparent !important;
+box-shadow: none !important;
+border: 0 !important;
+text-shadow: none !important;
 }
 
-/* Icon container: “文A” stacked glyph. */
+body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate :is(
 .cp-trans-wa,
 .cp-trans-stack,
-.cp-ai-glyph,
-.ppst-review-translate .cp-trans-wa,
-.ppst-review-translate .cp-trans-stack,
-.ppst-review-translate .cp-ai-glyph,
-.ppst-input-translate .cp-trans-wa,
-.ppst-input-translate .cp-trans-stack,
-.ppst-input-translate .cp-ai-glyph {
-display: inline-flex;
-align-items: center;
-justify-content: center;
-width: 16px;
-height: 14px;
-transform: translateX(-0.5px) rotate(-12deg) scale(.9);
-transform-origin: center center;
-color: #a78bfa;
-font-weight: 900;
-line-height: 1;
+.cp-ai-glyph
+) {
+display: none !important;
 }
 
-.cp-trans-wa b,
-.cp-trans-stack b,
-.ppst-review-translate .cp-trans-wa b,
-.ppst-review-translate .cp-trans-stack b,
-.ppst-input-translate .cp-trans-wa b,
-.ppst-input-translate .cp-trans-stack b {
-display: inline-block;
-font-size: 9px;
-font-weight: 900;
-line-height: 1;
-color: #a78bfa;
-text-shadow: 0 1px 0 rgba(255,255,255,.75);
+body.pps-v14-overlay #peipe-swipe-app .ppst-review-translate,
+body.pps-v14-overlay #peipe-swipe-app .ppst-input-translate {
+position: absolute !important;
+width: 22px !important;
+min-width: 22px !important;
+height: 22px !important;
+min-height: 22px !important;
+padding: 0 !important;
+border-radius: 999px !important;
+border: 1px solid rgba(226,232,240,.9) !important;
+background: rgba(255,255,255,.96) !important;
+box-shadow: 0 3px 10px rgba(15,23,42,.14) !important;
+display: inline-flex !important;
+align-items: center !important;
+justify-content: center !important;
+cursor: pointer !important;
+z-index: 14 !important;
+color: #64748b !important;
+font-size: 10px !important;
+outline: 0 !important;
 }
 
-.cp-trans-wa b:first-child,
-.ppst-review-translate .cp-trans-wa b:first-child,
-.ppst-input-translate .cp-trans-wa b:first-child {
-transform: translate(0.4px, -0.9px);
+body.pps-v14-overlay #peipe-swipe-app .ppst-review-translate {
+right: -28px !important;
+top: 50% !important;
+transform: translateY(-50%) !important;
 }
 
-.cp-trans-wa b:last-child,
-.ppst-review-translate .cp-trans-wa b:last-child,
-.ppst-input-translate .cp-trans-wa b:last-child {
-margin-left: -1.5px;
-font-size: 8px;
-transform: translate(-0.2px, 1.1px);
+body.pps-v14-overlay #peipe-swipe-app .ppst-review-translate:active {
+transform: translateY(-50%) scale(.92) !important;
+}
+
+body.pps-v14-overlay #peipe-swipe-app .ppst-input-translate {
+right: 8px !important;
+top: 8px !important;
+transform: none !important;
+}
+
+body.pps-v14-overlay #peipe-swipe-app .ppst-input-translate:active {
+transform: scale(.92) !important;
+}
+
+body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate,.ppst-input-translate) .cp-trans-wa,
+body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate,.ppst-input-translate) .cp-trans-stack {
+display: inline-flex !important;
+align-items: center !important;
+justify-content: center !important;
+width: 16px !important;
+height: 14px !important;
+transform: translateX(-0.5px) rotate(-12deg) scale(.9) !important;
+transform-origin: center center !important;
+color: #a78bfa !important;
+font-weight: 900 !important;
+line-height: 1 !important;
+}
+
+body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate,.ppst-input-translate) .cp-trans-wa b,
+body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate,.ppst-input-translate) .cp-trans-stack b {
+display: inline-block !important;
+font-size: 9px !important;
+font-weight: 900 !important;
+line-height: 1 !important;
+color: #a78bfa !important;
+text-shadow: 0 1px 0 rgba(255,255,255,.75) !important;
+}
+
+body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate,.ppst-input-translate) .cp-trans-wa b:last-child,
+body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate,.ppst-input-translate) .cp-trans-stack b:last-child {
+margin-left: -2px !important;
+font-size: 8px !important;
+transform: translate(-0.2px, 1px) !important;
 }
 
 .ppst-empty-review {
@@ -928,7 +1010,7 @@ user-drag: none;
 body.pps-v14-overlay #peipe-swipe-app .pps-info {
 left: max(16px, env(safe-area-inset-left)) !important;
 right: 86px !important;
-bottom: calc(22px + env(safe-area-inset-bottom)) !important;
+bottom: calc(28px + env(safe-area-inset-bottom)) !important;
 }
 
 body.pps-v14-overlay #peipe-swipe-app .pps-name {
@@ -954,170 +1036,17 @@ border-radius: 26px 26px 0 0;
 padding-left: 14px;
 padding-right: 14px;
 }
-}
-
-/* =========================================================
-   v14.3 UI hotfix
-   - card translate button follows the intro text instead of being fixed on screen
-   - stronger colored 文A icon
-   - intro block slightly higher
-   - Burmese / complex-script text avoids bottom clipping
-   - greet button moved lower
-   ========================================================= */
-
-body.pps-v14-overlay #peipe-swipe-app {
-  --ppst-trans-text1: #8b5cf6;
-  --ppst-trans-text2: #22c55e;
-}
-
-/* Move the whole info area slightly upward. */
-body.pps-v14-overlay #peipe-swipe-app .pps-info {
-  bottom: calc(34px + env(safe-area-inset-bottom)) !important;
-}
-
-/* The greet action should sit a bit lower. */
-body.pps-v14-overlay #peipe-swipe-app .pps-side-actions {
-  bottom: calc(88px + env(safe-area-inset-bottom)) !important;
-}
-
-/* Intro text: safer for Burmese / Thai / complex scripts, and keep some bottom breathing room. */
-body.pps-v14-overlay #peipe-swipe-app :is(
-  .pps-bio,
-  .ppst-card-intro,
-  .pps-about,
-  .pps-intro,
-  .pps-description,
-  .pps-profile-intro,
-  .pps-text
-) {
-  margin-top: 6px !important;
-  line-height: 1.72 !important;
-  max-height: calc(1.72em * 4 + .24em) !important;
-  padding-bottom: .18em !important;
-  word-break: normal !important;
-  overflow-wrap: anywhere !important;
-}
-
-/* For translated/introduction blocks containing a text span + translate button,
-   avoid -webkit-box clamping because it clips inline controls and complex-script descenders. */
-body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro {
-  display: block !important;
-  overflow: hidden !important;
-  -webkit-line-clamp: unset !important;
-  -webkit-box-orient: unset !important;
-}
-
-body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro .ppst-card-text {
-  display: inline !important;
-  font: inherit !important;
-  color: inherit !important;
-  -webkit-text-fill-color: inherit !important;
-  white-space: normal !important;
-}
-
-/* Inline translate button: put it right after the text, not fixed on the far right. */
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate {
-  position: static !important;
-  display: inline-flex !important;
-  vertical-align: baseline !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 20px !important;
-  min-width: 20px !important;
-  height: 20px !important;
-  min-height: 20px !important;
-  margin-left: 4px !important;
-  margin-top: 0 !important;
-  padding: 0 !important;
-  border-radius: 999px !important;
-  border: 1px solid rgba(255,255,255,.26) !important;
-  background: rgba(15,23,42,.28) !important;
-  box-shadow: 0 4px 14px rgba(15,23,42,.16) !important;
-  -webkit-backdrop-filter: blur(10px) saturate(130%) !important;
-  backdrop-filter: blur(10px) saturate(130%) !important;
-  color: transparent !important;
-  cursor: pointer !important;
-  transform: translateY(1px) !important;
-  outline: 0 !important;
-}
-
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate:active {
-  transform: translateY(1px) scale(.92) !important;
-}
-
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i {
-  display: none !important;
-}
-
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate .cp-trans-wa,
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate .cp-trans-stack,
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate .cp-ai-glyph {
-  display: inline-block !important;
-  position: relative !important;
-  width: 14px !important;
-  min-width: 14px !important;
-  height: 12px !important;
-  line-height: 1 !important;
-  background: none !important;
-  transform: translateX(-0.2px) rotate(-12deg) !important;
-  transform-origin: center center !important;
-}
-
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate .cp-trans-wa b,
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate .cp-trans-stack b {
-  position: absolute !important;
-  display: block !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  font-weight: 900 !important;
-  line-height: 1 !important;
-  text-shadow: 0 1px 0 rgba(255,255,255,.22) !important;
-}
-
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate .cp-trans-wa b:first-child,
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate .cp-trans-stack b:first-child {
-  left: 0 !important;
-  top: 0 !important;
-  font-size: 8px !important;
-  color: var(--ppst-trans-text1) !important;
-}
-
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate .cp-trans-wa b:last-child,
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate .cp-trans-stack b:last-child {
-  right: 0 !important;
-  bottom: 0 !important;
-  font-size: 8px !important;
-  color: var(--ppst-trans-text2) !important;
-}
-
-@media (max-width: 390px) {
-  body.pps-v14-overlay #peipe-swipe-app .pps-info {
-    bottom: calc(30px + env(safe-area-inset-bottom)) !important;
-  }
 
   body.pps-v14-overlay #peipe-swipe-app .pps-side-actions {
-    bottom: calc(82px + env(safe-area-inset-bottom)) !important;
-  }
-
-  body.pps-v14-overlay #peipe-swipe-app :is(
-    .pps-bio,
-    .ppst-card-intro,
-    .pps-about,
-    .pps-intro,
-    .pps-description,
-    .pps-profile-intro,
-    .pps-text
-  ) {
-    line-height: 1.76 !important;
-    max-height: calc(1.76em * 4 + .28em) !important;
-    padding-bottom: .2em !important;
+    bottom: calc(84px + env(safe-area-inset-bottom)) !important;
   }
 
   body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate {
-    width: 19px !important;
-    min-width: 19px !important;
-    height: 19px !important;
-    min-height: 19px !important;
-    margin-left: 3px !important;
+    width: 20px !important;
+    min-width: 20px !important;
+    height: 20px !important;
+    min-height: 20px !important;
+    margin-left: 4px !important;
   }
+
 }
