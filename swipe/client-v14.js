@@ -318,9 +318,10 @@
         text.textContent = original;
         var btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'ppst-inline-translate cp-quick-trans';
-        btn.innerHTML = '<span class="cp-trans-wa"><b>文</b><b>A</b></span>';
+        btn.className = 'ppst-inline-translate';
+        btn.innerHTML = '<i class="fa-solid fa-language" style="color: rgb(177, 151, 252);"></i>';
         btn.title = '翻译 / 长按设置';
+        btn.setAttribute('aria-label', 'Translate');
         el.appendChild(text);
         el.appendChild(btn);
         // Click and long-press are handled by delegated global handlers.
