@@ -46,6 +46,7 @@ const REC_CACHE = {
   maxLimit: Math.max(1, Number(process.env.PEIPE_MAX_LIMIT || 30) || 30),
   rateWindowSec: Math.max(10, Number(process.env.PEIPE_RATE_WINDOW_SEC || 30) || 30),
   rateMax: Math.max(1, Number(process.env.PEIPE_RATE_MAX || 12) || 12),
+  locationTtlSec: Math.max(24 * 60 * 60, Number(process.env.PEIPE_LOCATION_TTL_SEC || 7 * 24 * 60 * 60) || 7 * 24 * 60 * 60),
 };
 
 // 悟空服务端 REST API。当前默认按悟空官方默认内网端口 5001 调用，
@@ -197,40 +198,82 @@ async function getSwipeMe(uid) {
   return fn(uid).catch(err => ({ ok: false, error: (err && err.message) || 'profile-load-failed', complete: true, profile: {}, missing: [] }));
 }
 
+async function invalidateRecCache(uid, mode) {
+  if (!redisReady()) return;
+  uid = Number(uid || 0);
+  if (!uid) return;
+  const modes = mode ? [mode] : ['recommend', 'nearby'];
+  await Promise.all(modes.map(async (m) => {
+    await recRedis.delKey(recKey('queue', m, uid));
+    await recRedis.delKey(recKey('shown', m, uid));
+  }));
+}
+
+async function cacheGeoLocation(uid, payload) {
+  if (!redisReady()) return;
+  uid = Number(uid || 0);
+  const lat = Number(payload && payload.lat);
+  const lng = Number(payload && payload.lng);
+  if (!uid || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  const ttl = REC_CACHE.locationTtlSec;
+  await recRedis.setJson(`peipe:geo:location:${uid}`, {
+    uid,
+    lat,
+    lng,
+    accuracy: Number(payload.accuracy || 0) || 0,
+    updatedAt: Number(payload.updatedAt || Date.now()) || Date.now(),
+    expiresAt: Number(payload.expiresAt || (Date.now() + ttl * 1000)) || (Date.now() + ttl * 1000),
+  }, ttl);
+  // Redis GEO 没有单个成员 TTL，所以用 peipe:geo:location:{uid} 判断是否过期。
+  await recRedis.command(['GEOADD', 'peipe:geo:users', String(lng), String(lat), String(uid)], null);
+}
+
 async function saveSwipeMe(uid, body) {
   const fn = getSwipeApiFunction('saveMe', 'saveProfile');
   if (!fn) return { ok: false, error: 'swipe-save-missing' };
-  return fn(uid, body || {}).catch(err => ({ ok: false, error: (err && err.message) || 'profile-save-failed' }));
+  const payload = await fn(uid, body || {}).catch(err => ({ ok: false, error: (err && err.message) || 'profile-save-failed' }));
+  if (payload && payload.ok !== false) {
+    // 语言、头像、标签、资料完整度变化后，不能等 6 小时 TTL，直接让下次访问重算队列。
+    await invalidateRecCache(uid);
+  }
+  return payload;
 }
 
 async function saveLocation(uid, body) {
+  let payload;
   if (partner && typeof partner.saveLocation === 'function') {
-    return partner.saveLocation(uid, body || {}).catch(err => ({ ok: false, error: (err && err.message) || 'location-save-failed' }));
+    payload = await partner.saveLocation(uid, body || {}).catch(err => ({ ok: false, error: (err && err.message) || 'location-save-failed' }));
+  } else {
+    uid = Number(uid || 0);
+    const lat = Number(body && (body.lat || body.latitude));
+    const lng = Number(body && (body.lng || body.longitude));
+    const accuracy = Number(body && body.accuracy) || 0;
+    if (!uid || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      return { ok: false, error: 'invalid-location' };
+    }
+
+    const ts = Date.now();
+    const expiresAt = ts + REC_CACHE.locationTtlSec * 1000;
+    await user.setUserFields(uid, {
+      lat,
+      lng,
+      peipe_partner_lat: lat,
+      peipe_partner_lng: lng,
+      peipe_partner_location_accuracy: accuracy,
+      peipe_partner_location_updated_at: ts,
+      peipe_partner_location_expires_at: expiresAt,
+      languagePartnerGeoUpdatedAt: ts,
+      languagePartnerGeoExpiresAt: expiresAt,
+    });
+    await db.sortedSetAdd('peipePartners:location:updated', ts, String(uid)).catch(() => {});
+    payload = { ok: true, lat, lng, accuracy, updatedAt: ts, expiresAt };
   }
 
-  uid = Number(uid || 0);
-  const lat = Number(body && (body.lat || body.latitude));
-  const lng = Number(body && (body.lng || body.longitude));
-  const accuracy = Number(body && body.accuracy) || 0;
-  if (!uid || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-    return { ok: false, error: 'invalid-location' };
+  if (payload && payload.ok !== false) {
+    await cacheGeoLocation(uid, payload);
+    await invalidateRecCache(uid, 'nearby');
   }
-
-  const ts = Date.now();
-  const expiresAt = ts + 7 * 24 * 60 * 60 * 1000;
-  await user.setUserFields(uid, {
-    lat,
-    lng,
-    peipe_partner_lat: lat,
-    peipe_partner_lng: lng,
-    peipe_partner_location_accuracy: accuracy,
-    peipe_partner_location_updated_at: ts,
-    peipe_partner_location_expires_at: expiresAt,
-    languagePartnerGeoUpdatedAt: ts,
-    languagePartnerGeoExpiresAt: expiresAt,
-  });
-  await db.sortedSetAdd('peipePartners:location:updated', ts, String(uid)).catch(() => {});
-  return { ok: true, lat, lng, accuracy, updatedAt: ts, expiresAt };
+  return payload;
 }
 
 function dateKey(ts) {
@@ -903,35 +946,43 @@ async function buildRedisFeedPayload(req) {
   const shownKey = recKey('shown', mode, uid);
 
   let queue = await recRedis.getJson(queueKey, null);
-  if (!Array.isArray(queue) || !queue.length) {
+  let hadQueue = Array.isArray(queue) && queue.length > 0;
+  if (!hadQueue) {
     queue = await generateRedisQueue(req, mode);
+    hadQueue = Array.isArray(queue) && queue.length > 0;
   }
   if (!Array.isArray(queue) || !queue.length) return null;
 
   const shown = await recRedis.getSet(shownKey);
   const candidates = [];
-  for (let i = 0; i < queue.length; i += 1) {
-    const targetUid = Number(queue[i] || 0);
-    if (!targetUid || targetUid === uid) continue;
-    if (shown.has(String(targetUid))) continue;
+  const seenCandidate = new Set();
+  const pushCandidate = (targetUid) => {
+    targetUid = Number(targetUid || 0);
+    if (!targetUid || targetUid === uid) return;
+    if (shown.has(String(targetUid))) return;
+    if (seenCandidate.has(targetUid)) return;
+    seenCandidate.add(targetUid);
     candidates.push(targetUid);
-    if (candidates.length >= REC_CACHE.rerankWindow) break;
+  };
+
+  for (let i = 0; i < queue.length && candidates.length < REC_CACHE.rerankWindow; i += 1) {
+    pushCandidate(queue[i]);
   }
 
   if (candidates.length < limit) {
     const freshQueue = await generateRedisQueue(req, mode);
     if (freshQueue && freshQueue.length) {
       freshQueue.forEach((targetUid) => {
-        targetUid = Number(targetUid || 0);
-        if (!targetUid || targetUid === uid) return;
-        if (shown.has(String(targetUid))) return;
-        if (candidates.includes(targetUid)) return;
-        candidates.push(targetUid);
+        if (candidates.length < REC_CACHE.rerankWindow) pushCandidate(targetUid);
       });
     }
   }
 
-  if (!candidates.length) return null;
+  if (!candidates.length) {
+    // 稳定推荐队列版：队列存在但本会话已展示完时，不再回退旧实时 feed，避免又返回同一批人。
+    // 前端可根据 exhausted/hasMore=false 展示“今天推荐看得差不多了”。
+    return { ok: true, users: [], hasMore: false, exhausted: true, mode, limit, source: 'redis-cache' };
+  }
   let users = await getCardsByUids(candidates.slice(0, REC_CACHE.rerankWindow));
   users = await refreshActivityFor(users);
   const exposure = await getExposureFor(users.map(item => Number(item.uid)));
