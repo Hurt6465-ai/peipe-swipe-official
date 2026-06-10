@@ -843,18 +843,10 @@ padding-right: 14px;
 }
 
 /* =========================================================
-   v14.4 final clean UI fixes
-   - no stacked old translate patches
-   - inline FontAwesome language icon with solid white circle
-   - avatar flag pinned to avatar, moved slightly left
-   - stronger greet button
+   v14 final clean: no-white translate icon, avatar flag, greet button
    ========================================================= */
 
-body.pps-v14-overlay #peipe-swipe-app {
-  --ppst-language-purple: rgb(177, 151, 252);
-}
-
-/* Card info position and complex-script safe intro text. */
+/* Info area / intro text. */
 body.pps-v14-overlay #peipe-swipe-app .pps-info {
   bottom: calc(32px + env(safe-area-inset-bottom)) !important;
 }
@@ -891,43 +883,43 @@ body.pps-v14-overlay #peipe-swipe-app .ppst-card-intro .ppst-card-text {
   white-space: normal !important;
 }
 
-/* Inline card translate button: after text, solid white circle, purple FontAwesome icon. */
+/* Card translate button: no white circle. Keep the FontAwesome language icon visible. */
 body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate {
   position: static !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   vertical-align: -3px !important;
-  width: 24px !important;
-  min-width: 24px !important;
-  height: 24px !important;
-  min-height: 24px !important;
-  margin-left: 6px !important;
+  width: 21px !important;
+  min-width: 21px !important;
+  height: 21px !important;
+  min-height: 21px !important;
+  margin-left: 4px !important;
   margin-right: 0 !important;
-  margin-top: 0 !important;
   padding: 0 !important;
   border-radius: 999px !important;
-  border: 1px solid rgba(255,255,255,.98) !important;
-  background: #fff !important;
+  border: 1px solid rgba(177,151,252,.72) !important;
+  background: rgba(17,24,39,.46) !important;
   background-image: none !important;
-  box-shadow: 0 4px 13px rgba(15,23,42,.24), 0 0 0 1px rgba(15,23,42,.04) !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  color: var(--ppst-language-purple) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,.26) !important;
+  -webkit-backdrop-filter: blur(6px) saturate(130%) !important;
+  backdrop-filter: blur(6px) saturate(130%) !important;
+  color: rgb(177,151,252) !important;
   cursor: pointer !important;
-  transform: none !important;
   outline: 0 !important;
-  font-size: 14px !important;
+  font-size: 0 !important;
   line-height: 1 !important;
-  opacity: 1 !important;
+  transform: none !important;
 }
 
 body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate:active {
   transform: scale(.92) !important;
 }
 
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i.fa-language,
-body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i.fa-solid.fa-language {
+body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i,
+body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i.fa,
+body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i.fa-solid,
+body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i.fa-language {
   display: inline-block !important;
   visibility: visible !important;
   opacity: 1 !important;
@@ -935,15 +927,16 @@ body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i.fa-solid.fa-lan
   height: auto !important;
   margin: 0 !important;
   padding: 0 !important;
-  color: var(--ppst-language-purple) !important;
-  font-size: 14px !important;
+  color: rgb(177,151,252) !important;
+  font-size: 13px !important;
   line-height: 1 !important;
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
-  text-shadow: none !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,.28) !important;
 }
 
+/* Hide old custom 文A markup only if an old cached node remains. */
 body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate :is(
   .cp-trans-wa,
   .cp-trans-stack,
@@ -952,8 +945,9 @@ body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate :is(
   display: none !important;
 }
 
-/* Review/input translate buttons keep the compact 文A glyph, scoped only to v14. */
-body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate, .ppst-input-translate) {
+/* Review/input translate buttons remain separate from card inline translate. */
+body.pps-v14-overlay #peipe-swipe-app .ppst-review-translate,
+body.pps-v14-overlay #peipe-swipe-app .ppst-input-translate {
   position: absolute !important;
   width: 22px !important;
   min-width: 22px !important;
@@ -962,14 +956,14 @@ body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate, .ppst-input-tr
   padding: 0 !important;
   border-radius: 999px !important;
   border: 1px solid rgba(226,232,240,.9) !important;
-  background: #fff !important;
+  background: rgba(255,255,255,.94) !important;
   box-shadow: 0 3px 10px rgba(15,23,42,.14) !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
   z-index: 14 !important;
-  color: #64748b !important;
+  color: #a78bfa !important;
   font-size: 10px !important;
   outline: 0 !important;
 }
@@ -980,67 +974,25 @@ body.pps-v14-overlay #peipe-swipe-app .ppst-review-translate {
   transform: translateY(-50%) !important;
 }
 
-body.pps-v14-overlay #peipe-swipe-app .ppst-review-translate:active {
-  transform: translateY(-50%) scale(.92) !important;
-}
-
 body.pps-v14-overlay #peipe-swipe-app .ppst-input-translate {
   right: 8px !important;
   top: 8px !important;
   transform: none !important;
 }
 
-body.pps-v14-overlay #peipe-swipe-app .ppst-input-translate:active {
-  transform: scale(.92) !important;
-}
-
-body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate, .ppst-input-translate) :is(
-  .cp-trans-wa,
-  .cp-trans-stack,
-  .cp-ai-glyph
-) {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 16px !important;
-  height: 14px !important;
-  transform: translateX(-.5px) rotate(-12deg) scale(.9) !important;
-  transform-origin: center center !important;
-  color: var(--ppst-language-purple) !important;
-  font-weight: 900 !important;
-  line-height: 1 !important;
-}
-
-body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate, .ppst-input-translate) :is(.cp-trans-wa, .cp-trans-stack) b {
-  display: inline-block !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  font-size: 9px !important;
-  font-weight: 900 !important;
-  line-height: 1 !important;
-  color: var(--ppst-language-purple) !important;
-  text-shadow: 0 1px 0 rgba(255,255,255,.75) !important;
-}
-
-body.pps-v14-overlay #peipe-swipe-app :is(.ppst-review-translate, .ppst-input-translate) :is(.cp-trans-wa, .cp-trans-stack) b:last-child {
-  margin-left: -2px !important;
-  font-size: 8px !important;
-  transform: translateY(1px) !important;
-}
-
-/* Avatar flag: pin to avatar corner and move slightly left. */
+/* Country flag: pin to avatar left-bottom, move slightly left. */
 body.pps-v14-overlay #peipe-swipe-app .pps-avatar-wrap {
   position: relative !important;
   overflow: visible !important;
+  flex: 0 0 auto !important;
 }
 
 body.pps-v14-overlay #peipe-swipe-app .pps-avatar-wrap > :is(
   .pps-avatar-flag,
-  .pps-country-flag,
-  .pps-flag
+  .pps-country-flag
 ) {
   position: absolute !important;
-  left: -5px !important;
+  left: -7px !important;
   right: auto !important;
   top: auto !important;
   bottom: 2px !important;
@@ -1062,7 +1014,7 @@ body.pps-v14-overlay #peipe-swipe-app .pps-avatar-wrap > :is(
   border-radius: 0 !important;
   box-shadow: none !important;
   text-shadow: none !important;
-  filter: drop-shadow(0 1px 3px rgba(0,0,0,.38)) !important;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.42)) !important;
   pointer-events: none !important;
 }
 
@@ -1079,28 +1031,33 @@ body.pps-v14-overlay #peipe-swipe-app :is(
   display: none !important;
 }
 
-/* Make the greet button more visible against bright photos. */
+/* Make greet button more obvious. */
 body.pps-v14-overlay #peipe-swipe-app .pps-side-actions {
-  bottom: calc(84px + env(safe-area-inset-bottom)) !important;
+  right: max(16px, env(safe-area-inset-right)) !important;
+  bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+  z-index: 9 !important;
 }
 
 body.pps-v14-overlay #peipe-swipe-app .pps-greet-btn {
-  width: 64px !important;
-  min-width: 64px !important;
-  height: 64px !important;
-  min-height: 64px !important;
-  border-radius: 22px !important;
+  width: 66px !important;
+  min-width: 66px !important;
+  height: 66px !important;
+  min-height: 66px !important;
+  border-radius: 24px !important;
   background: rgba(255,255,255,.94) !important;
   border: 1px solid rgba(255,255,255,.98) !important;
-  color: #111827 !important;
-  box-shadow: 0 12px 32px rgba(15,23,42,.28), 0 0 0 1px rgba(15,23,42,.04) !important;
-  -webkit-backdrop-filter: blur(10px) saturate(130%) !important;
-  backdrop-filter: blur(10px) saturate(130%) !important;
+  box-shadow: 0 12px 34px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.78) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(140%) !important;
+  backdrop-filter: blur(10px) saturate(140%) !important;
 }
 
-body.pps-v14-overlay #peipe-swipe-app :is(.pps-greet-wave, .ppst-action-icon) {
-  font-size: 28px !important;
-  text-shadow: none !important;
+body.pps-v14-overlay #peipe-swipe-app :is(
+  .pps-greet-wave,
+  .ppst-action-icon
+) {
+  font-size: 31px !important;
+  line-height: 1 !important;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.24)) !important;
 }
 
 @media (max-width: 390px) {
@@ -1109,33 +1066,15 @@ body.pps-v14-overlay #peipe-swipe-app :is(.pps-greet-wave, .ppst-action-icon) {
   }
 
   body.pps-v14-overlay #peipe-swipe-app .pps-side-actions {
-    bottom: calc(80px + env(safe-area-inset-bottom)) !important;
+    bottom: calc(82px + env(safe-area-inset-bottom)) !important;
   }
 
   body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate {
-    width: 23px !important;
-    min-width: 23px !important;
-    height: 23px !important;
-    min-height: 23px !important;
-    margin-left: 5px !important;
-  }
-
-  body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i.fa-language,
-  body.pps-v14-overlay #peipe-swipe-app .ppst-inline-translate > i.fa-solid.fa-language {
-    font-size: 13px !important;
-  }
-
-  body.pps-v14-overlay #peipe-swipe-app :is(
-    .pps-bio,
-    .ppst-card-intro,
-    .pps-about,
-    .pps-intro,
-    .pps-description,
-    .pps-profile-intro,
-    .pps-text
-  ) {
-    line-height: 1.76 !important;
-    max-height: calc(1.76em * 4 + .28em) !important;
-    padding-bottom: .2em !important;
+    width: 20px !important;
+    min-width: 20px !important;
+    height: 20px !important;
+    min-height: 20px !important;
+    margin-left: 4px !important;
   }
 }
+
