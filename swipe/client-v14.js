@@ -319,7 +319,7 @@
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'ppst-inline-translate';
-        btn.innerHTML = '<i class="fa fa-language fa-solid" style="color: rgb(177, 151, 252);"></i>';
+        btn.innerHTML = '<i class="fa-solid fa-language" style="color: rgb(177, 151, 252);"></i>';
         btn.title = '翻译 / 长按设置';
         btn.setAttribute('aria-label', '翻译');
         el.appendChild(text);
@@ -1109,11 +1109,33 @@
     enhance(document);
     bindGlobal();
     bindDelegatedLongPress();
-    requestDailyLocation();
+    // v14 overlay no longer displays distance/location, so do not request geolocation or refetch feed here.
+    // The main swipe client already loads the card feed; duplicating it adds DB/API pressure.
     ensureGreetStickerStyle();
     renderGreetStickers(document.body);
-    loadOverlayFeedOnce();
-    var obs = new MutationObserver(function (mutations) { mutations.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes || [], function (node) { if (node && node.nodeType === 1) { enhance(node); renderGreetStickers(node); } }); }); });
+
+    var pendingNodes = [];
+    var pendingTimer = 0;
+    function flushEnhanceQueue() {
+      pendingTimer = 0;
+      var nodes = pendingNodes.splice(0, pendingNodes.length);
+      nodes.forEach(function (node) {
+        if (node && node.nodeType === 1) {
+          enhance(node);
+          renderGreetStickers(node);
+        }
+      });
+    }
+    var obs = new MutationObserver(function (mutations) {
+      mutations.forEach(function (m) {
+        Array.prototype.forEach.call(m.addedNodes || [], function (node) {
+          if (node && node.nodeType === 1) pendingNodes.push(node);
+        });
+      });
+      if (!pendingTimer && pendingNodes.length) {
+        pendingTimer = window.requestAnimationFrame ? window.requestAnimationFrame(flushEnhanceQueue) : window.setTimeout(flushEnhanceQueue, 16);
+      }
+    });
     obs.observe(document.body, { childList: true, subtree: true });
   }
 
