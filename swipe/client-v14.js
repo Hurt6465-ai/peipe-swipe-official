@@ -319,7 +319,7 @@
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'ppst-inline-translate';
-        btn.innerHTML = '<i class="fa-solid fa-language" style="color: rgb(177, 151, 252);"></i>';
+        btn.innerHTML = '<i class="fa fa-language fa-solid" style="color: rgb(177, 151, 252);"></i>';
         btn.title = '翻译 / 长按设置';
         btn.setAttribute('aria-label', '翻译');
         el.appendChild(text);
