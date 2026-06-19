@@ -756,6 +756,36 @@ body.peipe-swipe-mode [component="container"] {
   color: rgba(255,255,255,.94);
 }
 
+.pps-distance-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 96px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: rgba(255,255,255,.96);
+  background: rgba(15, 23, 42, .34);
+  border: 1px solid rgba(255,255,255,.20);
+  -webkit-backdrop-filter: blur(14px) saturate(1.12);
+  backdrop-filter: blur(14px) saturate(1.12);
+  box-shadow: 0 4px 14px rgba(0,0,0,.20);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 5px rgba(0,0,0,.35);
+}
+
+.pps-distance-pin {
+  flex: 0 0 auto;
+  line-height: 1;
+  font-size: 12px;
+}
+
 .pps-gender-icon {
   border-radius: 999px;
   display: inline-flex;
@@ -848,6 +878,13 @@ body.peipe-swipe-mode [component="container"] {
   .pps-name {
     max-width: 38vw;
     font-size: clamp(19px, 5.2vw, 24px);
+  }
+
+  .pps-distance-badge {
+    max-width: 78px;
+    height: 22px;
+    padding: 0 7px;
+    font-size: 11px;
   }
 
   .pps-side-actions {
