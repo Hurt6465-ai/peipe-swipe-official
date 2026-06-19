@@ -47,8 +47,8 @@
       qualities: [0.58, 0.50, 0.42, 0.34, 0.28, 0.22]
     },
     preloadAhead: 2,
-    swiperCss: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.css',
-    swiperJs: '/plugins/nodebb-plugin-peipe-partners/swipe/vendor/swiper-bundle.min.js',
+    swiperCss: '/plugins/nodebb-plugin-peipe-swipe-official/swipe/vendor/swiper-bundle.min.css',
+    swiperJs: '/plugins/nodebb-plugin-peipe-swipe-official/swipe/vendor/swiper-bundle.min.js',
     swiperFallbackCss: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css',
     swiperFallbackJs: 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js',
 
@@ -65,7 +65,7 @@
 
   var TEXT = {
     loading: '语伴加载中...',
-    empty: '暂时没有可推荐的语伴',
+    empty: '新的语伴暂时看完了，正在随机回看可能合适的人',
     login: '请先登录',
     profileTitle: '完善语伴资料',
     profileSubtitle: '第一次打开语伴前，需要先填写这些资料。',
@@ -118,21 +118,6 @@
     greetAlready: '你已经打过招呼了',
     greetLimit: '今天打招呼次数已用完',
     greetFail: '打招呼失败',
-    comments: '评论',
-    commentAction: '评价',
-    commentTitle: '语伴印象',
-    commentPlaceholder: '写一句真实印象，最多80字',
-    commentSubmit: '发布',
-    commentSaving: '发布中...',
-    commentEmpty: '还没有语伴印象',
-    commentLogin: '请先登录后评论',
-    commentTooShort: '至少写2个字',
-    commentSaved: '评论已保存',
-    commentFail: '评论失败',
-    commentRatingRequired: '请先选择评分',
-    commentChat24h: '聊天超过24小时后才能评价',
-    commentNoPrivilege: '暂时不能评价',
-    commentSummary: '综合评分',
     tagTitle: '选择标签',
     tagDone: '保存',
     tagClear: '清空',
@@ -263,9 +248,6 @@
     photoSwipers: new Map(),
     tagDraft: [],
     toastTimer: 0,
-    commentTargetUid: 0,
-    commentViewerItemId: '',
-    commentRating: 5,
     nativeMode: false,
     nativeFeedBound: false,
     settingsVisible: true,
@@ -912,201 +894,15 @@
       '<div class="pps-toast" hidden></div>' +
       '<div class="pps-sheet-backdrop"></div>' +
       '<section class="pps-profile-sheet" role="dialog" aria-modal="true"></section>' +
-      '<div class="pps-comment-backdrop"></div>' +
-      '<section class="pps-comment-sheet" role="dialog" aria-modal="true"></section>' +
       '<div class="pps-tag-backdrop"></div>' +
       '<section class="pps-tag-sheet" role="dialog" aria-modal="true"></section>';
   }
 
 
-  function ensureCommentStyles() {
-    if (document.getElementById('pps-comment-rating-style')) return;
-    var style = document.createElement('style');
-    style.id = 'pps-comment-rating-style';
-    style.textContent = [
-      '.pps-comment-summary{display:flex;align-items:center;gap:8px;padding:10px 16px;color:#111827}',
-      '.pps-comment-score{font-size:28px;line-height:1;font-weight:900}',
-      '.pps-comment-summary-stars,.pps-comment-stars{color:#f59e0b;letter-spacing:1px}',
-      '.pps-comment-summary em{font-style:normal;color:#6b7280;font-size:13px}',
-      '.pps-rating-row{display:flex;gap:8px;padding:2px 0 10px}',
-      '.pps-rating-star{border:0;background:transparent;color:#f59e0b;font-size:30px;line-height:1;padding:0 2px}',
-      '.pps-comment-editor.is-disabled textarea,.pps-comment-editor.is-disabled .pps-rating-star{opacity:.45;pointer-events:none}',
-      '.pps-comment-locked{margin:0 0 10px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.65);color:#6b7280;font-size:13px}'
-    ].join('');
-    document.head.appendChild(style);
-  }
-
-
   function renderFloatComments(user) {
-    // Floating comments add extra DOM and are hidden in the v14 visual layer.
-    // Keep this empty so first-card render is faster and safer.
     return '';
   }
 
-  function starText(value) {
-    value = Math.max(0, Math.min(5, Number(value || 0)));
-    var full = Math.round(value);
-    var out = '';
-    for (var i = 1; i <= 5; i += 1) out += i <= full ? '★' : '☆';
-    return out;
-  }
-
-  function ratingPayload(value) {
-    value = Math.max(1, Math.min(5, Number(value || 0)));
-    return { language: value, reply: value, friendly: value, patient: value };
-  }
-
-  function commentErrorText(err) {
-    var raw = String((err && (err.message || err.error || err.reason)) || err || '');
-    if (/chat-under-24h/.test(raw)) return TEXT.commentChat24h;
-    if (/rating-required/.test(raw)) return TEXT.commentRatingRequired;
-    if (/login-required/.test(raw)) return TEXT.commentLogin;
-    if (/empty-comment/.test(raw)) return TEXT.commentTooShort;
-    if (/no-privileges|invalid-target/.test(raw)) return TEXT.commentNoPrivilege;
-    return raw || TEXT.commentFail;
-  }
-
-  function setCommentRating(value) {
-    state.commentRating = Math.max(1, Math.min(5, Number(value || 0)));
-    $$('.pps-rating-star', state.root).forEach(function (node) {
-      var v = Number(node.dataset.value || 0);
-      node.classList.toggle('is-active', v <= state.commentRating);
-      node.textContent = v <= state.commentRating ? '★' : '☆';
-    });
-  }
-
-  function commentHtml(item) {
-    item = item || {};
-    var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml(String(item.authorName || 'U').slice(0, 1).toUpperCase()) + '</span>';
-    var mine = item.mine ? ' is-mine' : '';
-    var overall = Number(item.overall || 0);
-    return '<div class="pps-comment-item' + mine + '" data-id="' + escapeHtml(item.id || '') + '">' +
-      '<div class="pps-comment-avatar">' + avatar + '</div>' +
-      '<div class="pps-comment-body"><div class="pps-comment-name">' + escapeHtml(item.authorName || 'User') + (overall ? '<span class="pps-comment-stars">' + escapeHtml(starText(overall)) + '</span>' : '') + '</div><div class="pps-comment-content">' + escapeHtml(item.content || '') + '</div></div>' +
-    '</div>';
-  }
-
-  function getUserByUid(uid) {
-    uid = Number(uid || 0);
-    return state.users.filter(function (item) { return Number(item.uid) === uid; })[0] || null;
-  }
-
-  function renderCommentSheet(targetUid, loading) {
-    var user = getUserByUid(targetUid) || {};
-    var sheet = $('.pps-comment-sheet', state.root);
-    if (!sheet) return;
-    state.commentRating = 5;
-    sheet.innerHTML = '' +
-      '<div class="pps-comment-head"><div><strong>' + escapeHtml(TEXT.commentTitle) + '</strong><span>' + escapeHtml(user.displayName || user.username || '') + '</span></div><button type="button" class="pps-comment-close">×</button></div>' +
-      '<div class="pps-comment-summary"><b class="pps-comment-score">0.0</b><span class="pps-comment-summary-stars">☆☆☆☆☆</span><em>0 人评价</em></div>' +
-      '<div class="pps-comment-list">' + (loading ? '<div class="pps-comment-muted">' + escapeHtml(TEXT.loading) + '</div>' : '') + '</div>' +
-      '<div class="pps-comment-editor">' +
-        '<div class="pps-rating-row" aria-label="' + escapeHtml(TEXT.commentSummary) + '">' +
-          [1, 2, 3, 4, 5].map(function (v) { return '<button type="button" class="pps-rating-star is-active" data-value="' + v + '">★</button>'; }).join('') +
-        '</div>' +
-        '<textarea class="pps-comment-input" maxlength="80" placeholder="' + escapeHtml(TEXT.commentPlaceholder) + '"></textarea>' +
-        '<button type="button" class="pps-comment-submit">' + escapeHtml(TEXT.commentSubmit) + '</button>' +
-      '</div>';
-  }
-
-  function openComments(targetUid) {
-    if (!targetUid) return;
-    state.commentTargetUid = Number(targetUid);
-    renderCommentSheet(targetUid, true);
-    $('.pps-comment-backdrop', state.root).classList.add('is-open');
-    $('.pps-comment-sheet', state.root).classList.add('is-open');
-    loadComments(targetUid);
-  }
-
-  function closeComments() {
-    state.commentTargetUid = 0;
-    $('.pps-comment-backdrop', state.root).classList.remove('is-open');
-    $('.pps-comment-sheet', state.root).classList.remove('is-open');
-  }
-
-  function updateCommentSummary(summary) {
-    summary = summary || {};
-    var score = Number(summary.overall || 0);
-    var count = Number(summary.count || 0);
-    var scoreEl = $('.pps-comment-score', state.root);
-    var starEl = $('.pps-comment-summary-stars', state.root);
-    var countEl = $('.pps-comment-summary em', state.root);
-    if (scoreEl) scoreEl.textContent = score ? score.toFixed(1) : '0.0';
-    if (starEl) starEl.textContent = starText(score);
-    if (countEl) countEl.textContent = count + ' 人评价';
-  }
-
-  function applyCommentEligibility(canReview) {
-    var editor = $('.pps-comment-editor', state.root);
-    var submit = $('.pps-comment-submit', state.root);
-    if (!editor) return;
-    if (!canReview || canReview.eligible) {
-      editor.classList.remove('is-disabled');
-      if (submit) submit.disabled = false;
-      return;
-    }
-    var reason = canReview.reasonText || commentErrorText(canReview.reason || canReview.error);
-    editor.classList.add('is-disabled');
-    if (submit) submit.disabled = true;
-    var old = $('.pps-comment-locked', editor);
-    if (!old) {
-      old = document.createElement('div');
-      old.className = 'pps-comment-locked';
-      editor.insertBefore(old, editor.firstChild);
-    }
-    old.textContent = reason || TEXT.commentNoPrivilege;
-  }
-
-  function loadComments(targetUid) {
-    var list = $('.pps-comment-list', state.root);
-    if (!list) return;
-    apiFetch('/api/peipe-partners/comments/' + encodeURIComponent(targetUid) + '?limit=30').then(function (json) {
-      var comments = Array.isArray(json.comments) ? json.comments : [];
-      var viewer = json.viewerComment || null;
-      updateCommentSummary(json.summary || {});
-      applyCommentEligibility(json.canReview);
-      list.innerHTML = comments.length ? comments.map(commentHtml).join('') : '<div class="pps-comment-muted">' + escapeHtml(TEXT.commentEmpty) + '</div>';
-      var input = $('.pps-comment-input', state.root);
-      if (input && viewer && viewer.content) {
-        input.value = viewer.content;
-        state.commentViewerItemId = viewer.id || '';
-        setCommentRating(viewer.overall || 5);
-      } else {
-        state.commentViewerItemId = '';
-        setCommentRating(5);
-      }
-    }).catch(function (err) {
-      list.innerHTML = '<div class="pps-comment-muted">' + escapeHtml(commentErrorText(err)) + '</div>';
-    });
-  }
-
-  function submitComment() {
-    if (!isLoggedIn()) { toast(TEXT.commentLogin); return; }
-    var targetUid = Number(state.commentTargetUid || 0);
-    var input = $('.pps-comment-input', state.root);
-    var btn = $('.pps-comment-submit', state.root);
-    var content = norm(input && input.value);
-    var rating = Number(state.commentRating || 0);
-    if (!targetUid) return;
-    if (!rating) { toast(TEXT.commentRatingRequired); return; }
-    if (!content || content.length < 2) { toast(TEXT.commentTooShort); return; }
-    if (btn && btn.disabled) return;
-    if (btn) { btn.disabled = true; btn.textContent = TEXT.commentSaving; }
-    apiFetch('/api/peipe-partners/comments/' + encodeURIComponent(targetUid), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-      body: jsonBody({ content: content, rating: rating, ratings: ratingPayload(rating) })
-    }).then(function (json) {
-      if (!json || json.ok === false) throw new Error((json && (json.message || json.error || json.reasonText || json.reason)) || TEXT.commentFail);
-      toast(TEXT.commentSaved);
-      loadComments(targetUid);
-      // Refresh the current card later so the new floating comment can enter the feed cache on the next pull.
-    }).catch(function (err) {
-      toast(commentErrorText(err));
-    }).finally(function () {
-      if (btn) { btn.disabled = false; btn.textContent = TEXT.commentSubmit; }
-    });
-  }
 
   function renderSlide(user, index) {
     var photos = normalisePhotos(user.photos);
@@ -1143,7 +939,7 @@
           '<div class="pps-bio">' + escapeHtml(bio) + '</div>' +
           (tags ? '<div class="pps-tags">' + tags + '</div>' : '') +
         '</div>' +
-        '<div class="pps-side-actions"><button type="button" class="pps-comment-btn" data-uid="' + Number(user.uid || 0) + '"><span>💬</span><b>' + escapeHtml(TEXT.commentAction) + '</b></button><button type="button" class="pps-greet-btn" data-uid="' + Number(user.uid || 0) + '"><span class="pps-greet-wave">👋</span><span class="pps-greet-label">Hi</span></button></div>' +
+        '<div class="pps-side-actions"><button type="button" class="pps-greet-btn" data-uid="' + Number(user.uid || 0) + '"><span class="pps-greet-wave">👋</span><span class="pps-greet-label">Hi</span></button></div>' +
       '</section>';
   }
 
@@ -1334,7 +1130,7 @@
     });
   }
 
-  function appendUniqueUsers(users, refresh) {
+  function appendUniqueUsers(users, refresh, allowRepeats) {
     var input = Array.isArray(users) ? users : [];
     var out = [];
 
@@ -1342,7 +1138,8 @@
 
     input.forEach(function (u) {
       var uid = String(u && u.uid || '');
-      if (!uid || uid === '0' || state.seenUids[uid]) return;
+      if (!uid || uid === '0') return;
+      if (!allowRepeats && state.seenUids[uid]) return;
       state.seenUids[uid] = true;
       out.push(u);
     });
@@ -1371,8 +1168,9 @@
         if (requestId !== state.feedRequestId) return;
 
         var rawUsers = Array.isArray(json.users) ? json.users : [];
-        var added = appendUniqueUsers(rawUsers, refresh);
-        state.done = json.hasMore === false || rawUsers.length === 0 || (!refresh && added.length === 0);
+        var allowRepeats = !!(json.recycled || json.allowRepeats);
+        var added = appendUniqueUsers(rawUsers, refresh, allowRepeats);
+        state.done = (json.hasMore === false && !allowRepeats && rawUsers.length === 0) || (!allowRepeats && !refresh && added.length === 0);
 
         if (!state.users.length) showEmpty(TEXT.empty);
         else showFeed();
@@ -2298,32 +2096,10 @@
   function bindEvents() {
     state.root.addEventListener('click', function (e) {
       var btn;
-      if ((btn = e.target.closest('.pps-comment-btn'))) {
-        e.preventDefault();
-        e.stopPropagation();
-        openComments(Number(btn.dataset.uid || 0));
-        return;
-      }
       if ((btn = e.target.closest('.pps-greet-btn'))) {
         e.preventDefault();
         e.stopPropagation();
         greet(Number(btn.dataset.uid || 0), btn);
-        return;
-      }
-      if (e.target.closest('.pps-comment-close') || e.target.closest('.pps-comment-backdrop')) {
-        e.preventDefault();
-        closeComments();
-        return;
-      }
-      if ((btn = e.target.closest('.pps-rating-star'))) {
-        e.preventDefault();
-        e.stopPropagation();
-        setCommentRating(Number(btn.dataset.value || 0));
-        return;
-      }
-      if (e.target.closest('.pps-comment-submit')) {
-        e.preventDefault();
-        submitComment();
         return;
       }
       if (e.target.closest('.pps-edit-profile')) {
@@ -2527,7 +2303,6 @@
 
     // First paint and first feed request must not wait for translator/options/profile/Swiper.
     buildChrome();
-    ensureCommentStyles();
     bindEvents();
     bindMobileSelectionGuard();
     loadFeed(true);
