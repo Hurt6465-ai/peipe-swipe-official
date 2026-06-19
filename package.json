@@ -5,7 +5,7 @@
   "main": "library.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Hurt6465-ai/nodebb-plugin-peipe-partners"
+    "url": "https://github.com/Hurt6465-ai/peipe-swipe-official"
   },
   "keywords": [
     "nodebb",
@@ -18,14 +18,13 @@
   ],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Hurt6465-ai/nodebb-plugin-peipe-partners/issues"
+    "url": "https://github.com/Hurt6465-ai/peipe-swipe-official/issues"
   },
   "readmeFilename": "README.md",
   "nbbpm": {
     "compatibility": "^3.2.0 || ^4.0.0"
   },
   "scripts": {
-    "syntax": "node -c library.js && node -c lib/partner.js && node -c public/lib/peipe-partners.js && node -c swipe/index.js && node -c swipe/tags.js && node -c swipe/client.js"
+    "syntax": "node -c library.js && node -c lib/partner.js && node -c public/lib/peipe-partners.js && node -c public/lib/peipe-chat-stickers.js && node -c swipe/index.js && node -c swipe/tags.js && node -c swipe/client.js && node -c swipe/client-v14.js"
   }
 }
-
