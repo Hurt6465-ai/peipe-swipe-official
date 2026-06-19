@@ -1052,3 +1052,21 @@ body.pps-v14-overlay #peipe-swipe-app :is(
   }
 }
 
+
+/* Keep the official top mode tabs and profile entry above the v14 visual overlay. */
+body.pps-v14-overlay #peipe-swipe-app .pps-mode-switcher {
+  z-index: 100006 !important;
+}
+
+body.pps-v14-overlay #peipe-swipe-app .pps-mode-tab {
+  pointer-events: auto !important;
+}
+
+body.pps-v14-overlay #peipe-swipe-app .pps-floating-settings,
+body.pps-v14-overlay #peipe-swipe-app .pps-floating-settings.is-hidden {
+  display: inline-flex !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: none !important;
+  z-index: 100007 !important;
+}
