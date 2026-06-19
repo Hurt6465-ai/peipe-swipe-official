@@ -16,7 +16,7 @@
   }
   function esc(s) { return String(s || '').replace(/[&<>"']/g, function (ch) { return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[ch]; }); }
   function byId(id) { return document.getElementById(id); }
-  function stickerUrl(name) { return rel('/plugins/nodebb-plugin-peipe-partners/swipe/greet/' + name + '.webm'); }
+  function stickerUrl(name) { return rel('/plugins/nodebb-plugin-peipe-swipe-official/swipe/greet/' + name + '.webm'); }
 
   function ensureStyle() {
     if (byId('peipe-chat-sticker-style')) return;
