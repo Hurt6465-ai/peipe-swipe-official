@@ -515,88 +515,13 @@
     var u = uid && state.userMap[String(uid)];
     return norm(u && (u.displayName || u.username || u.userslug)) || 'TA';
   }
-  function starRow(key, label, value) {
-    value = Number(value || 0);
-    var stars = '';
-    for (var i = 1; i <= 5; i += 1) stars += '<button type="button" class="ppst-star ' + (i <= value ? 'active' : '') + '" data-key="' + key + '" data-value="' + i + '">★</button>';
-    return '<div class="ppst-rating-row" data-key="' + key + '"><span>' + escapeHtml(label) + '</span><div class="ppst-stars">' + stars + '</div></div>';
+  function closeReview() {
+    var a = $('.ppst-review-mask'), b = $('.ppst-review-sheet');
+    if (a) a.classList.remove('show');
+    if (b) b.classList.remove('show');
+    state.targetUid = 0;
   }
-  function progressRow(label, avg) {
-    avg = Number(avg || 0);
-    var pct = Math.max(0, Math.min(100, avg / 5 * 100));
-    return '<div class="ppst-progress-row"><div><span>' + escapeHtml(label) + '</span><b>' + (avg ? avg.toFixed(1) : '0.0') + '</b></div><i><em style="width:' + pct + '%"></em></i></div>';
-  }
-  function renderReviewItem(item) {
-    item = item || {};
-    var avatar = item.authorAvatar ? '<img src="' + escapeHtml(item.authorAvatar) + '" alt="">' : '<span>' + escapeHtml((item.authorName || '匿').slice(0, 1)) + '</span>';
-    return '<div class="ppst-review-item" data-id="' + escapeHtml(item.id || '') + '">' +
-      '<div class="ppst-review-avatar">' + avatar + '</div><div class="ppst-review-main"><div class="ppst-review-top"><b>' + escapeHtml(item.authorName || '匿名用户') + '</b><span>🌟' + Number(item.overall || 0).toFixed(1) + '</span></div>' +
-      '<div class="ppst-review-content">' + escapeHtml(item.content || '') + '</div><button type="button" class="ppst-review-translate"><span class="cp-trans-wa"><b>文</b><b>A</b></span></button></div></div>';
-  }
-  function renderReviewSheet(loading) {
-    var sheet = $('.ppst-review-sheet');
-    if (!sheet) {
-      document.body.insertAdjacentHTML('beforeend', '<div class="ppst-mask ppst-review-mask"></div><section class="ppst-review-sheet" role="dialog"></section>');
-      sheet = $('.ppst-review-sheet');
-    }
-    sheet.innerHTML = '<div class="ppst-review-head"><div><strong>语伴评价</strong><span>' + escapeHtml(state.targetName || '') + '</span></div><button type="button" class="ppst-review-close">×</button></div>' +
-      '<div class="ppst-review-summary">' + (loading ? '加载中...' : '') + '</div>' +
-      '<div class="ppst-review-list"></div>' +
-      '<div class="ppst-review-editor"><div class="ppst-rating-box">' + METRICS.map(function (m) { return starRow(m.key, m.label, 0); }).join('') + '</div>' +
-      '<label class="ppst-anon"><input type="checkbox" class="ppst-anonymous"> 匿名发布</label>' +
-      '<div class="ppst-input-wrap"><textarea class="ppst-review-input" maxlength="240" placeholder="写一下真实感受，最多240字"></textarea><button type="button" class="ppst-input-translate"><span class="cp-trans-wa"><b>文</b><b>A</b></span></button></div>' +
-      '<div class="ppst-review-actions"><button type="button" class="ppst-review-submit">发布评价</button></div></div>';
-  }
-  function setRating(key, value) {
-    $$('.ppst-star[data-key="' + key + '"]').forEach(function (btn) { btn.classList.toggle('active', Number(btn.dataset.value) <= Number(value)); });
-  }
-  function getRatings() {
-    var out = {};
-    METRICS.forEach(function (m) { out[m.key] = $$('.ppst-star.active[data-key="' + m.key + '"]').length; });
-    return out;
-  }
-  function setRatings(ratings) { ratings = ratings || {}; METRICS.forEach(function (m) { setRating(m.key, Number(ratings[m.key] || 0)); }); }
-  function openReview(uid, name) {
-    if (!uid) return;
-    state.targetUid = uid; state.targetName = name || 'TA'; state.viewerReviewId = '';
-    renderReviewSheet(true);
-    $('.ppst-review-mask').classList.add('show'); $('.ppst-review-sheet').classList.add('show');
-    loadReviews(uid);
-  }
-  function closeReview() { var a = $('.ppst-review-mask'), b = $('.ppst-review-sheet'); if (a) a.classList.remove('show'); if (b) b.classList.remove('show'); state.targetUid = 0; }
-  function loadReviews(uid) {
-    apiFetch(CONFIG.apiBase + '/comments/' + encodeURIComponent(uid) + '?limit=40').then(function (json) {
-      var reviews = json.reviews || json.comments || [];
-      var summary = json.summary || { count: reviews.length, overall: 0, metrics: {} };
-      var can = json.canReview || {};
-      var summaryBox = $('.ppst-review-summary');
-      var title = escapeHtml(state.targetName || 'TA') + ' 🌟' + Number(summary.overall || 0).toFixed(1) + '（' + Number(summary.count || 0) + ' 条）';
-      summaryBox.innerHTML = '<div class="ppst-summary-title">' + title + '</div>' + METRICS.map(function (m) { var row = summary.metrics && summary.metrics[m.key] || {}; return progressRow(m.label, row.avg || 0); }).join('');
-      $('.ppst-review-list').innerHTML = reviews.length ? reviews.map(renderReviewItem).join('') : '<div class="ppst-empty-review">还没有评价</div>';
-      if (json.viewerComment) {
-        state.viewerReviewId = json.viewerComment.id || '';
-        $('.ppst-review-input').value = json.viewerComment.content || '';
-        $('.ppst-anonymous').checked = !!json.viewerComment.anonymous;
-        setRatings(json.viewerComment.ratings || {});
-      }
-      var editor = $('.ppst-review-editor');
-      if (!isLoggedIn()) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">请先登录后评价</div>'); return; }
-      if (!can.eligible) { editor.classList.add('disabled'); editor.insertAdjacentHTML('afterbegin', '<div class="ppst-review-lock">聊天超过 24 小时后才可以评价</div>'); }
-    }).catch(function (err) { $('.ppst-review-summary').textContent = err.message || '加载失败'; });
-  }
-  function submitReview() {
-    var input = $('.ppst-review-input');
-    var content = norm(input && input.value);
-    var ratings = getRatings();
-    if (!content || content.length < 2) return error('至少写 2 个字');
-    var hasRating = Object.keys(ratings).some(function (k) { return Number(ratings[k]) > 0; });
-    if (!hasRating) return error('请至少选择一个评分');
-    var btn = $('.ppst-review-submit'); btn.disabled = true; btn.textContent = '发布中...';
-    apiFetch(CONFIG.apiBase + '/comments/' + encodeURIComponent(state.targetUid), {
-      method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-      body: JSON.stringify({ content: content, ratings: ratings, anonymous: !!($('.ppst-anonymous') && $('.ppst-anonymous').checked) })
-    }).then(function () { toast('评价已保存'); loadReviews(state.targetUid); }).catch(function (err) { error(err.message === 'chat-under-24h' ? '聊天超过 24 小时后才可以评价' : (err.message || '评价失败')); }).finally(function () { btn.disabled = false; btn.textContent = '发布评价'; });
-  }
+
 
   function enhance(root) {
     root = root || document;
@@ -968,11 +893,6 @@
         handleWukongGreet(btn, e);
         return;
       }
-      if ((btn = e.target.closest('.pps-comment-btn,.ppst-open-review'))) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        return;
-      }
       if (e.target.closest('.pps-tags,.pps-tag-list,.pps-profile-tags')) {
         var tags = e.target.closest('.pps-tags,.pps-tag-list,.pps-profile-tags');
         tags.classList.toggle('is-expanded');
@@ -982,11 +902,6 @@
         e.target.closest('.ppst-card-intro').classList.toggle('is-expanded');
         return;
       }
-      if (e.target.closest('.ppst-review-close') || e.target.closest('.ppst-review-mask')) { e.preventDefault(); closeReview(); return; }
-      if ((btn = e.target.closest('.ppst-star'))) { e.preventDefault(); setRating(btn.dataset.key, btn.dataset.value); return; }
-      if (e.target.closest('.ppst-review-submit')) { e.preventDefault(); submitReview(); return; }
-      if ((btn = e.target.closest('.ppst-review-translate'))) { e.preventDefault(); var item = btn.closest('.ppst-review-item'); translateInto(btn, $('.ppst-review-content', item)); return; }
-      if ((btn = e.target.closest('.ppst-input-translate'))) { e.preventDefault(); translateInto(btn, $('.ppst-review-input')); return; }
       if (e.target.closest('.ppst-settings-close,.ppst-settings-cancel,.ppst-settings-mask')) { e.preventDefault(); closeTranslateSettings(); return; }
       if ((btn = e.target.closest('.ppst-provider-tabs button'))) { e.preventDefault(); $$('.ppst-provider-tabs button').forEach(function (b) { b.classList.toggle('active', b === btn); }); $('.ppst-provider').value = btn.dataset.provider || 'google'; $('.ppst-ai').classList.toggle('show', btn.dataset.provider === 'ai'); return; }
       if ((btn = e.target.closest('.ppst-lang-trigger'))) { e.preventDefault(); openLangPicker(btn.dataset.role); return; }
