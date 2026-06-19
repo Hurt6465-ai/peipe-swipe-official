@@ -1,7 +1,7 @@
 {
   "id": "nodebb-plugin-peipe-swipe-official",
   "name": "Peipe Swipe Official",
-  "description": "Full-screen swipe discovery pages for Peipe. Safe to install alongside nodebb-plugin-peipe-partners.",
+  "description": "Full-screen swipe discovery pages for Peipe with Redis-backed recommendation and nearby feeds.",
   "url": "https://github.com/Hurt6465-ai/peipe-swipe-official",
   "library": "./library.js",
   "hooks": [
