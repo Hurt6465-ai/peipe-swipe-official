@@ -23,7 +23,6 @@ function safeRequire(path, fallback) {
 
 const partner = safeRequire('./lib/partner', {});
 const swipe = safeRequire('./swipe', {});
-const partnerReviews = safeRequire('./swipe/comments', {});
 const recRedis = safeRequire('./lib/redis-lite', null);
 
 const plugin = {};
@@ -104,10 +103,24 @@ function distanceKm(a, b) {
 function formatDistance(km) {
   km = Number(km || 0);
   if (!Number.isFinite(km) || km <= 0) return '';
-  if (km < 0.5) return '500米内';
-  if (km < 1) return `${Math.round(km * 1000)}米`;
-  if (km > 1000) return '1000km外';
+  if (km < 1) return '1km 内';
+  if (km < 5) return '5km 内';
+  if (km < 20) return '20km 内';
+  if (km < 50) return '50km 内';
+  if (km < 100) return '100km 内';
   return `${Math.round(km)}km`;
+}
+
+function scrubFeedCard(item) {
+  item = Object.assign({}, item || {});
+  delete item.lat;
+  delete item.lng;
+  delete item.peipe_partner_lat;
+  delete item.peipe_partner_lng;
+  delete item.birthday;
+  delete item.birthdate;
+  delete item.peipe_partner_birthday;
+  return item;
 }
 
 function parseGeoRow(row) {
@@ -132,7 +145,7 @@ async function getViewerGeo(uid) {
 async function decorateFeedWithDistance(req, payload) {
   payload = payload || {};
   const users = Array.isArray(payload.users) ? payload.users : [];
-  payload.users = users;
+  payload.users = users.map(scrubFeedCard);
   if (!users.length) return payload;
 
   const viewerGeo = await getViewerGeo(req.uid).catch(() => null);
@@ -147,7 +160,7 @@ async function decorateFeedWithDistance(req, payload) {
     if (point) geo.set(Number(row.uid), point);
   });
 
-  payload.users = users.map((item) => {
+  payload.users = payload.users.map((item) => {
     const targetGeo = geo.get(Number(item && item.uid));
     const km = distanceKm(viewerGeo, targetGeo);
     if (km > 0) {
@@ -689,27 +702,6 @@ async function mapLimit(items, limit, iterator) {
   return ret;
 }
 
-function reviewSummaryFromPayload(payload) {
-  const summary = payload && payload.summary || {};
-  const overall = Number(summary.overall || summary.score || summary.avg || 0) || 0;
-  const count = Number(summary.count || summary.total || 0) || 0;
-  return { overall, count };
-}
-
-async function getReviewSummaryFor(uid, viewerUid) {
-  if (!partnerReviews || typeof partnerReviews.listForTarget !== 'function') return { overall: 0, count: 0 };
-  const payload = await partnerReviews.listForTarget(uid, viewerUid, 1).catch(() => null);
-  return reviewSummaryFromPayload(payload);
-}
-
-function reviewBoost(summary) {
-  summary = summary || {};
-  const overall = Math.max(0, Math.min(5, Number(summary.overall || 0)));
-  const count = Math.max(0, Number(summary.count || 0));
-  if (!overall || !count) return 0;
-  return Math.min(25, overall * 4 + Math.min(5, count));
-}
-
 function distanceBoost(item, mode) {
   if (String(mode || '').toLowerCase() !== 'nearby') return 0;
   const km = Number(item && item.distanceKm || 0);
@@ -725,7 +717,7 @@ function distanceBoost(item, mode) {
 async function decorateFeedWithRecommendationSignals(req, payload) {
   payload = payload || {};
   const users = Array.isArray(payload.users) ? payload.users : [];
-  payload.users = users;
+  payload.users = users.map(scrubFeedCard);
   if (!users.length) return payload;
 
   const mode = String((req.query && req.query.mode) || payload.mode || 'recommend');
@@ -735,26 +727,24 @@ async function decorateFeedWithRecommendationSignals(req, payload) {
     item = item || {};
     const uid = Number(item.uid || 0);
     const vip = uid ? await isVip(uid) : false;
-    const summary = uid ? await getReviewSummaryFor(uid, viewerUid) : { overall: 0, count: 0 };
     const baseOrder = Math.max(0, users.length - index) * 2;
     const vipBoost = vip ? 25 : 0;
-    const rb = reviewBoost(summary);
     const dbs = distanceBoost(item, mode);
-    const stableJitter = stableJitterScore(viewerUid, uid, 'review') * 4;
-    const score = baseOrder + vipBoost + rb + dbs + stableJitter;
+    const recyclePenalty = item.recycled ? -10 : 0;
+    const stableJitter = stableJitterScore(viewerUid, uid, item.recycled ? 'recycle-rank' : 'rank') * 4;
+    const score = baseOrder + vipBoost + dbs + recyclePenalty + stableJitter;
 
     item.isVip = !!vip;
     item.vipBoost = vipBoost;
-    item.reviewScore = summary.overall;
-    item.reviewCount = summary.count;
     item.recommendScore = Math.round(score * 100) / 100;
+    delete item.reviewScore;
+    delete item.reviewCount;
     return item;
   });
 
   payload.users = decorated.filter(Boolean).sort((a, b) => Number(b.recommendScore || 0) - Number(a.recommendScore || 0));
   return payload;
 }
-
 
 function recMode(req) {
   const raw = String((req && req.query && req.query.mode) || 'recommend').toLowerCase();
@@ -915,6 +905,79 @@ function cloneReqForQueue(req, mode) {
   return child;
 }
 
+async function redisNearbyCandidates(req) {
+  if (!redisReady()) return [];
+  const uid = Number(req && req.uid || 0);
+  if (!uid) return [];
+  const viewerGeo = await getViewerGeo(uid).catch(() => null);
+  if (!viewerGeo) return [];
+
+  const radiuses = String(process.env.PEIPE_NEARBY_RADII_KM || '5,20,50,100,300')
+    .split(',')
+    .map(item => Number(item.trim()))
+    .filter(item => Number.isFinite(item) && item > 0)
+    .slice(0, 8);
+  const wanted = Math.max(REC_CACHE.queueSize, recLimit(req) * 4);
+  const map = new Map();
+
+  for (const radiusKm of radiuses.length ? radiuses : [5, 20, 50, 100, 300]) {
+    const rows = await recRedis.command([
+      'GEOSEARCH',
+      'peipe:geo:users',
+      'FROMLONLAT', String(viewerGeo.lng), String(viewerGeo.lat),
+      'BYRADIUS', String(radiusKm), 'km',
+      'WITHDIST',
+      'ASC',
+      'COUNT', String(wanted * 2)
+    ], []).catch(() => []);
+
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const member = Array.isArray(row) ? row[0] : row;
+      const dist = Array.isArray(row) ? Number(row[1]) : 0;
+      const targetUid = Number(member || 0);
+      if (!targetUid || targetUid === uid || map.has(targetUid)) return;
+      map.set(targetUid, { uid: targetUid, distanceKm: Number.isFinite(dist) ? dist : 0, radiusKm });
+    });
+    if (map.size >= wanted) break;
+  }
+
+  const candidates = Array.from(map.values()).slice(0, wanted * 2);
+  if (!candidates.length) return [];
+
+  const locationKeys = candidates.map(item => `peipe:geo:location:${item.uid}`);
+  const locations = await recRedis.getManyJson(locationKeys).catch(() => []);
+  const nowMs = Date.now();
+  return candidates.filter((item, index) => {
+    const loc = locations[index];
+    if (!loc || Number(loc.uid) !== item.uid) return false;
+    const expiresAt = Number(loc.expiresAt || 0);
+    return !expiresAt || expiresAt > nowMs;
+  }).slice(0, wanted);
+}
+
+async function generateNearbyRedisQueue(req, mode) {
+  if (mode !== 'nearby' || !partner || typeof partner.getUsersByUids !== 'function') return [];
+  const candidates = await redisNearbyCandidates(req).catch(() => []);
+  const uids = candidates.map(item => Number(item.uid)).filter(Boolean).slice(0, REC_CACHE.queueSize);
+  if (!uids.length) return [];
+  const users = await partner.getUsersByUids(uids).catch(() => []);
+  await cacheCards(users || []);
+  return uids;
+}
+
+function recycleSalt(mode) {
+  return `${mode || 'recommend'}:recycle:${Math.floor(Date.now() / 60000)}`;
+}
+
+function markRecycled(users) {
+  return (users || []).map((item) => {
+    if (!item) return item;
+    item.recycled = true;
+    item.recommendReason = item.recommendReason || '之前看过，随机回看';
+    return item;
+  });
+}
+
 async function generateRedisQueue(req, mode) {
   if (!redisReady()) return [];
   const uid = Number(req && req.uid || 0);
@@ -924,11 +987,17 @@ async function generateRedisQueue(req, mode) {
   const gotLock = await recRedis.setLock(lockKey, 30);
   if (!gotLock) return [];
 
-  const payload = await getSwipeFeed(cloneReqForQueue(req, mode));
-  const users = Array.isArray(payload && payload.users) ? payload.users : [];
-  const uids = Array.from(new Set(users.map(item => Number(item && item.uid)).filter(Boolean))).slice(0, REC_CACHE.queueSize);
+  let uids = await generateNearbyRedisQueue(req, mode);
+  let users = [];
+
+  if (!uids.length) {
+    const payload = await getSwipeFeed(cloneReqForQueue(req, mode));
+    users = Array.isArray(payload && payload.users) ? payload.users : [];
+    uids = Array.from(new Set(users.map(item => Number(item && item.uid)).filter(Boolean))).slice(0, REC_CACHE.queueSize);
+    await cacheCards(users);
+  }
+
   await recRedis.setJson(queueKey, uids, REC_CACHE.queueTtlSec);
-  await cacheCards(users);
   return uids;
 }
 
@@ -955,17 +1024,26 @@ async function buildRedisFeedPayload(req) {
 
   const shown = await recRedis.getSet(shownKey);
   const candidates = [];
+  const recycled = [];
   const seenCandidate = new Set();
+  const seenRecycled = new Set();
+
   const pushCandidate = (targetUid) => {
     targetUid = Number(targetUid || 0);
     if (!targetUid || targetUid === uid) return;
-    if (shown.has(String(targetUid))) return;
+    if (shown.has(String(targetUid))) {
+      if (!seenRecycled.has(targetUid)) {
+        seenRecycled.add(targetUid);
+        recycled.push(targetUid);
+      }
+      return;
+    }
     if (seenCandidate.has(targetUid)) return;
     seenCandidate.add(targetUid);
     candidates.push(targetUid);
   };
 
-  for (let i = 0; i < queue.length && candidates.length < REC_CACHE.rerankWindow; i += 1) {
+  for (let i = 0; i < queue.length && (candidates.length + recycled.length) < REC_CACHE.rerankWindow * 2; i += 1) {
     pushCandidate(queue[i]);
   }
 
@@ -973,30 +1051,59 @@ async function buildRedisFeedPayload(req) {
     const freshQueue = await generateRedisQueue(req, mode);
     if (freshQueue && freshQueue.length) {
       freshQueue.forEach((targetUid) => {
-        if (candidates.length < REC_CACHE.rerankWindow) pushCandidate(targetUid);
+        if ((candidates.length + recycled.length) < REC_CACHE.rerankWindow * 2) pushCandidate(targetUid);
       });
     }
   }
 
-  if (!candidates.length) {
-    // 稳定推荐队列版：队列存在但本会话已展示完时，不再回退旧实时 feed，避免又返回同一批人。
-    // 前端可根据 exhausted/hasMore=false 展示“今天推荐看得差不多了”。
-    return { ok: true, users: [], hasMore: false, exhausted: true, mode, limit, source: 'redis-cache' };
+  const newTargetCount = Math.min(candidates.length, Math.max(1, Math.ceil(limit * 0.8)));
+  const recycleNeeded = Math.max(0, limit - newTargetCount);
+  const recycleOrdered = recycled
+    .map(targetUid => ({ uid: targetUid, sort: stableJitterScore(uid, targetUid, recycleSalt(mode)) }))
+    .sort((a, b) => b.sort - a.sort)
+    .map(item => item.uid);
+  const selectedCandidates = candidates.slice(0, Math.max(limit, newTargetCount));
+  const candidateWindow = selectedCandidates.concat(recycleOrdered.slice(0, Math.max(recycleNeeded, limit - selectedCandidates.length)));
+
+  if (!candidateWindow.length) {
+    const fallbackRecycled = (Array.isArray(queue) ? queue : [])
+      .map(Number)
+      .filter(targetUid => targetUid && targetUid !== uid)
+      .map(targetUid => ({ uid: targetUid, sort: stableJitterScore(uid, targetUid, recycleSalt(mode)) }))
+      .sort((a, b) => b.sort - a.sort)
+      .map(item => item.uid)
+      .slice(0, limit);
+
+    if (!fallbackRecycled.length) {
+      return { ok: true, users: [], hasMore: false, exhausted: true, mode, limit, source: 'redis-cache' };
+    }
+
+    let users = await getCardsByUids(fallbackRecycled);
+    users = markRecycled(await refreshActivityFor(users));
+    const selectedUids = users.map(item => String(item.uid)).filter(Boolean);
+    if (selectedUids.length) await touchExposure(selectedUids);
+    return { ok: true, users, hasMore: true, recycled: true, allowRepeats: true, exhausted: false, mode, limit, source: 'redis-cache' };
   }
-  let users = await getCardsByUids(candidates.slice(0, REC_CACHE.rerankWindow));
+
+  let users = await getCardsByUids(candidateWindow.slice(0, REC_CACHE.rerankWindow));
   users = await refreshActivityFor(users);
   const exposure = await getExposureFor(users.map(item => Number(item.uid)));
   const order = new Map();
-  candidates.forEach((candidateUid, index) => order.set(Number(candidateUid), index));
+  candidateWindow.forEach((candidateUid, index) => order.set(Number(candidateUid), index));
+  const recycledSet = new Set(recycleOrdered.map(Number));
 
   users.forEach((item) => {
     const uidNum = Number(item.uid || 0);
     const exp = exposure.get(uidNum) || {};
+    const isRecycled = recycledSet.has(uidNum) || shown.has(String(uidNum));
     const queueOrderScore = Math.max(0, REC_CACHE.rerankWindow - (order.get(uidNum) || 0));
     const online = Number(item._onlineBoost || 0);
     const fatigue = exposurePenalty(exp.oneMinute, exp.tenMinutes);
-    const jitter = stableJitterScore(req.uid, uidNum, mode) * 3;
-    item.recommendScore = Math.round((queueOrderScore + online - fatigue + jitter) * 100) / 100;
+    const recyclePenalty = isRecycled ? 12 : 0;
+    const jitter = stableJitterScore(req.uid, uidNum, isRecycled ? recycleSalt(mode) : mode) * 3;
+    item.recycled = !!isRecycled;
+    if (isRecycled) item.recommendReason = item.recommendReason || '之前看过，随机回看';
+    item.recommendScore = Math.round((queueOrderScore + online - fatigue - recyclePenalty + jitter) * 100) / 100;
     delete item._onlineBoost;
   });
 
@@ -1007,7 +1114,7 @@ async function buildRedisFeedPayload(req) {
     await touchExposure(selectedUids);
   }
 
-  return { ok: true, users, hasMore: candidates.length > limit, mode, limit, source: 'redis-cache' };
+  return { ok: true, users, hasMore: true, recycled: users.some(item => item && item.recycled), allowRepeats: users.some(item => item && item.recycled), mode, limit, source: 'redis-cache' };
 }
 
 async function buildFeedPayload(req) {
@@ -1028,32 +1135,7 @@ async function buildFeedPayload(req) {
   return payload;
 }
 
-async function listCommentsForTarget(targetUid, viewerUid, limit) {
-  if (!partnerReviews || typeof partnerReviews.listForTarget !== 'function') {
-    return { ok: true, comments: [], reviews: [], summary: { count: 0, overall: 0 }, canReview: { eligible: false, reason: 'comments-unavailable' } };
-  }
-  return partnerReviews.listForTarget(targetUid, viewerUid, limit).catch(err => ({ ok: false, error: (err && err.message) || 'comments-load-failed', comments: [], reviews: [] }));
-}
 
-async function commentEligibility(viewerUid, targetUid) {
-  if (!partnerReviews || typeof partnerReviews.eligibility !== 'function') return { ok: true, eligible: false, reason: 'comments-unavailable' };
-  return partnerReviews.eligibility(viewerUid, targetUid).catch(err => ({ ok: false, eligible: false, error: (err && err.message) || 'comments-eligibility-failed' }));
-}
-
-async function upsertComment(req) {
-  if (!partnerReviews || typeof partnerReviews.upsert !== 'function') return { ok: false, error: 'comments-unavailable' };
-  return partnerReviews.upsert(req).catch(err => ({ ok: false, error: (err && err.message) || 'comments-save-failed' }));
-}
-
-async function updateComment(req) {
-  if (!partnerReviews || typeof partnerReviews.update !== 'function') return { ok: false, error: 'comments-unavailable' };
-  return partnerReviews.update(req).catch(err => ({ ok: false, error: (err && err.message) || 'comments-update-failed' }));
-}
-
-async function removeComment(req) {
-  if (!partnerReviews || typeof partnerReviews.remove !== 'function') return { ok: false, error: 'comments-unavailable' };
-  return partnerReviews.remove(req).catch(err => ({ ok: false, error: (err && err.message) || 'comments-remove-failed' }));
-}
 
 function withParamUid(req, uid, source) {
   req.body = Object.assign({}, req.body || {}, { uid, targetUid: uid, source: source || (req.body && req.body.source) || '' });
@@ -1100,34 +1182,6 @@ function registerJsonRoutes(router, middleware) {
 
     router.put(`${apiPrefix}/swipe/me`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
       json(res, await saveSwipeMe(req.uid, req.body || {}));
-    }));
-
-    router.get(`${apiPrefix}/comments/:uid`, asyncRoute(async (req, res) => {
-      json(res, await listCommentsForTarget(req.params.uid, req.uid, req.query.limit));
-    }));
-
-    router.get(`${apiPrefix}/profile/:uid/comments`, asyncRoute(async (req, res) => {
-      json(res, await listCommentsForTarget(req.params.uid, req.uid, req.query.limit));
-    }));
-
-    router.get(`${apiPrefix}/comments/:uid/eligibility`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-      json(res, await commentEligibility(req.uid, req.params.uid));
-    }));
-
-    router.post(`${apiPrefix}/comments/:uid`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-      json(res, await upsertComment(req));
-    }));
-
-    router.post(`${apiPrefix}/profile/:uid/comments`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-      json(res, await upsertComment(req));
-    }));
-
-    router.put(`${apiPrefix}/comments/item/:id`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-      json(res, await updateComment(req));
-    }));
-
-    router.delete(`${apiPrefix}/comments/item/:id`, middleware.ensureLoggedIn, asyncRoute(async (req, res) => {
-      json(res, await removeComment(req));
     }));
   });
 }
@@ -1184,34 +1238,6 @@ plugin.addRoutes = async ({ router, middleware, helpers }) => {
 
     routeHelpers.setupApiRoute(router, 'put', `${apiRoutePrefix}/swipe/me`, [middleware.ensureLoggedIn], async (req, res) => {
       apiResponse(helpers, res, await saveSwipeMe(req.uid, req.body || {}));
-    });
-
-    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/comments/:uid`, [], async (req, res) => {
-      apiResponse(helpers, res, await listCommentsForTarget(req.params.uid, req.uid, req.query.limit));
-    });
-
-    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/profile/:uid/comments`, [], async (req, res) => {
-      apiResponse(helpers, res, await listCommentsForTarget(req.params.uid, req.uid, req.query.limit));
-    });
-
-    routeHelpers.setupApiRoute(router, 'get', `${apiRoutePrefix}/comments/:uid/eligibility`, [middleware.ensureLoggedIn], async (req, res) => {
-      apiResponse(helpers, res, await commentEligibility(req.uid, req.params.uid));
-    });
-
-    routeHelpers.setupApiRoute(router, 'post', `${apiRoutePrefix}/comments/:uid`, [middleware.ensureLoggedIn], async (req, res) => {
-      apiResponse(helpers, res, await upsertComment(req));
-    });
-
-    routeHelpers.setupApiRoute(router, 'post', `${apiRoutePrefix}/profile/:uid/comments`, [middleware.ensureLoggedIn], async (req, res) => {
-      apiResponse(helpers, res, await upsertComment(req));
-    });
-
-    routeHelpers.setupApiRoute(router, 'put', `${apiRoutePrefix}/comments/item/:id`, [middleware.ensureLoggedIn], async (req, res) => {
-      apiResponse(helpers, res, await updateComment(req));
-    });
-
-    routeHelpers.setupApiRoute(router, 'delete', `${apiRoutePrefix}/comments/item/:id`, [middleware.ensureLoggedIn], async (req, res) => {
-      apiResponse(helpers, res, await removeComment(req));
     });
   });
 };
