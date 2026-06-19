@@ -129,6 +129,10 @@
     selectPlaceholder: '请选择',
     missingPrefix: '请先补全：',
     settings: '资料',
+    recommendTab: '推荐',
+    nearbyTab: '附近的人',
+    switchToRecommend: '已切换到推荐',
+    switchToNearby: '已切换到附近的人',
     back: '返回',
     chooseOption: '请选择',
     doneOption: '保存',
@@ -254,6 +258,7 @@
     seenUids: {},
     feedRequestId: 0,
     selectionGuardBound: false,
+    modeGesture: null,
 
     // 悟空 SDK 状态
     wkReadyPromise: null,
@@ -885,10 +890,30 @@
     document.body.classList.remove('peipe-swipe-mode');
   }
 
+  function renderModeTabs() {
+    var mode = state.mode || currentMode();
+    return '' +
+      '<nav class="pps-mode-switcher" aria-label="语伴推荐模式">' +
+        '<button type="button" class="pps-mode-tab' + (mode === 'recommend' ? ' is-active' : '') + '" data-mode="recommend" aria-pressed="' + (mode === 'recommend' ? 'true' : 'false') + '">' + escapeHtml(TEXT.recommendTab) + '</button>' +
+        '<button type="button" class="pps-mode-tab' + (mode === 'nearby' ? ' is-active' : '') + '" data-mode="nearby" aria-pressed="' + (mode === 'nearby' ? 'true' : 'false') + '">' + escapeHtml(TEXT.nearbyTab) + '</button>' +
+      '</nav>';
+  }
+
+  function syncModeTabs() {
+    if (!state.root) return;
+    state.root.setAttribute('data-mode', state.mode || 'recommend');
+    $$('.pps-mode-tab', state.root).forEach(function (tab) {
+      var active = tab.dataset.mode === state.mode;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
   function buildChrome() {
     state.root.innerHTML = '' +
       '<div class="pps-native-feed" hidden></div>' +
       '<div class="pps-swiper swiper" hidden><div class="swiper-wrapper"></div></div>' +
+      renderModeTabs() +
       '<button type="button" class="pps-floating-settings pps-edit-profile" aria-label="' + escapeHtml(TEXT.settings) + '">' + iconSettings() + '</button>' +
       '<div class="pps-loading">' + escapeHtml(TEXT.loading) + '</div>' +
       '<div class="pps-toast" hidden></div>' +
@@ -896,6 +921,7 @@
       '<section class="pps-profile-sheet" role="dialog" aria-modal="true"></section>' +
       '<div class="pps-tag-backdrop"></div>' +
       '<section class="pps-tag-sheet" role="dialog" aria-modal="true"></section>';
+    syncModeTabs();
   }
 
 
@@ -960,10 +986,10 @@
 
 
   function hideSettingsButton() {
-    if (!state.settingsVisible) return;
-    state.settingsVisible = false;
+    // The profile/settings entry is a primary action. Keep it visible while users swipe cards or switch modes.
+    state.settingsVisible = true;
     var btn = $('.pps-floating-settings', state.root);
-    if (btn) btn.classList.add('is-hidden');
+    if (btn) btn.classList.remove('is-hidden');
   }
 
   function initMainSwiper() {
@@ -1059,9 +1085,60 @@
     });
   }
 
+  function showLoading(text) {
+    if (!state.root) return;
+    var empty = $('.pps-empty', state.root);
+    if (empty) empty.remove();
+    var loading = $('.pps-loading', state.root);
+    if (!loading) {
+      loading = document.createElement('div');
+      loading.className = 'pps-loading';
+      state.root.appendChild(loading);
+    }
+    loading.textContent = text || TEXT.loading;
+    loading.hidden = false;
+  }
+
+  function modePath(mode) {
+    return mode === 'nearby' ? '/nearby/swipe' : '/partners/swipe';
+  }
+
+  function switchMode(mode, pushHistory) {
+    mode = mode === 'nearby' ? 'nearby' : 'recommend';
+    if (mode === state.mode) return Promise.resolve(false);
+
+    state.mode = mode;
+    state.done = false;
+    state.index = 0;
+    state.users = [];
+    state.seenUids = {};
+    state.loading = false;
+    state.feedRequestId += 1;
+    syncModeTabs();
+    showLoading(mode === 'nearby' ? '正在查找附近的人...' : TEXT.loading);
+
+    if (window.history && pushHistory !== false) {
+      try { window.history.pushState({ peipeMode: mode }, '', rel(modePath(mode))); } catch (err) {}
+    }
+
+    updateSlides(true);
+
+    var ready = mode === 'nearby' ? syncLocationIfPossible(true) : Promise.resolve(false);
+    return ready.then(function () {
+      if (!state.root || !isSwipeRoute() || state.mode !== mode) return false;
+      return loadFeed(true);
+    }).then(function () {
+      toast(mode === 'nearby' ? TEXT.switchToNearby : TEXT.switchToRecommend);
+      return true;
+    });
+  }
+
   function showFeed() {
     var loading = $('.pps-loading', state.root);
+    var empty = $('.pps-empty', state.root);
+    if (empty) empty.remove();
     if (loading) loading.hidden = true;
+    hideSettingsButton();
 
     if (window.Swiper) {
       var swiperEl = $('.pps-swiper', state.root);
@@ -1078,7 +1155,14 @@
 
   function showEmpty(text) {
     var loading = $('.pps-loading', state.root);
-    if (loading) loading.outerHTML = '<div class="pps-empty">' + escapeHtml(text || TEXT.empty) + '</div>';
+    var empty = $('.pps-empty', state.root);
+    if (empty) empty.remove();
+    var node = document.createElement('div');
+    node.className = 'pps-empty';
+    node.textContent = text || TEXT.empty;
+    if (loading) loading.replaceWith(node);
+    else state.root.appendChild(node);
+    hideSettingsButton();
   }
 
   function preloadImage(src) {
@@ -1101,12 +1185,12 @@
     }
   }
 
-  function syncLocationIfPossible() {
+  function syncLocationIfPossible(force) {
     if (!isLoggedIn() || !navigator.geolocation) return Promise.resolve(false);
     var uid = String(currentUser() && currentUser().uid || '0');
     var key = 'pps-location-sync:' + uid;
     var last = Number(localStorage.getItem(key) || 0) || 0;
-    if (Date.now() - last < 6 * 60 * 60 * 1000) return Promise.resolve(false);
+    if (!force && Date.now() - last < 6 * 60 * 60 * 1000) return Promise.resolve(false);
     localStorage.setItem(key, String(Date.now()));
     return new Promise(function (resolve) {
       navigator.geolocation.getCurrentPosition(function (pos) {
@@ -1155,6 +1239,8 @@
     var requestId = ++state.feedRequestId;
 
     if (refresh) {
+      showLoading(state.mode === 'nearby' ? '正在查找附近的人...' : TEXT.loading);
+      syncModeTabs();
       state.done = false;
       state.users = [];
       state.seenUids = {};
@@ -2096,6 +2182,12 @@
   function bindEvents() {
     state.root.addEventListener('click', function (e) {
       var btn;
+      if ((btn = e.target.closest('.pps-mode-tab'))) {
+        e.preventDefault();
+        e.stopPropagation();
+        switchMode(btn.dataset.mode, true);
+        return;
+      }
       if ((btn = e.target.closest('.pps-greet-btn'))) {
         e.preventDefault();
         e.stopPropagation();
@@ -2239,6 +2331,38 @@
     });
 
     state.root.addEventListener('pointerdown', function (e) {
+      if (!e.target.closest || !e.target.closest('.pps-mode-switcher')) return;
+      state.modeGesture = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        active: true
+      };
+      try { e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+
+    state.root.addEventListener('pointermove', function (e) {
+      if (!state.modeGesture || !state.modeGesture.active || state.modeGesture.pointerId !== e.pointerId) return;
+      var dx = e.clientX - state.modeGesture.startX;
+      var dy = e.clientY - state.modeGesture.startY;
+      if (Math.abs(dx) > 18 && Math.abs(dx) > Math.abs(dy) * 1.35) e.preventDefault();
+    });
+
+    function finishModeGesture(e) {
+      if (!state.modeGesture || state.modeGesture.pointerId !== e.pointerId) return;
+      var g = state.modeGesture;
+      state.modeGesture = null;
+      var dx = e.clientX - g.startX;
+      var dy = e.clientY - g.startY;
+      if (Math.abs(dx) < 42 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+      switchMode(dx < 0 ? 'nearby' : 'recommend', true);
+    }
+
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (name) {
+      state.root.addEventListener(name, finishModeGesture);
+    });
+
+    state.root.addEventListener('pointerdown', function (e) {
       if (!e.target.closest || !e.target.closest('.pps-crop-box') || !state.avatarCrop) return;
       state.avatarCrop.dragging = true;
       state.avatarCrop.startX = e.clientX;
@@ -2291,6 +2415,7 @@
 
     state.root.dataset.ppsReady = '1';
     state.mode = currentMode();
+    state.root.setAttribute('data-mode', state.mode);
     state.settingsVisible = true;
     state.nativeFeedBound = false;
     state.swiper = null;
@@ -2327,7 +2452,7 @@
     });
 
     setTimeout(function () {
-      syncLocationIfPossible().then(function (updated) {
+      syncLocationIfPossible(state.mode === 'nearby').then(function (updated) {
         if (updated && state.root && isSwipeRoute()) loadFeed(true);
       });
     }, 1200);
@@ -2335,6 +2460,12 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
+
+  window.addEventListener('popstate', function () {
+    if (!state.root || !isSwipeRoute()) return;
+    var nextMode = currentMode();
+    if (nextMode !== state.mode) switchMode(nextMode, false);
+  });
 
   if (window.ajaxify && window.ajaxify.on) {
     window.ajaxify.on('action:ajaxify.start', function () {
