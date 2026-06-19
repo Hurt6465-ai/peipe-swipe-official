@@ -92,6 +92,14 @@
     occupation: '职业',
     relationship: '感情状况',
     location: '距离',
+    nearbyLoading: '正在查找附近的人...',
+    distanceNearby: '附近',
+    distanceWithin1km: '1km 内',
+    distanceWithin5km: '5km 内',
+    distanceWithin20km: '20km 内',
+    distanceWithin50km: '50km 内',
+    distanceWithin100km: '100km 内',
+    distanceKmAway: '约 {km}km',
     heightPlaceholder: '170',
     weightPlaceholder: '60',
     occupationPlaceholder: '请选择职业',
@@ -734,6 +742,31 @@
     return html;
   }
 
+  function interpolateText(template, values) {
+    return String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, function (match, key) {
+      return Object.prototype.hasOwnProperty.call(values || {}, key) ? String(values[key]) : match;
+    });
+  }
+
+  function formatDistanceLabel(user) {
+    var km = Number(user && user.distanceKm);
+    if (Number.isFinite(km) && km > 0) {
+      if (km < 1) return TEXT.distanceWithin1km;
+      if (km < 5) return TEXT.distanceWithin5km;
+      if (km < 20) return TEXT.distanceWithin20km;
+      if (km < 50) return TEXT.distanceWithin50km;
+      if (km < 100) return TEXT.distanceWithin100km;
+      return interpolateText(TEXT.distanceKmAway, { km: Math.round(km) });
+    }
+    return norm(user && user.distanceText);
+  }
+
+  function renderDistanceBadge(user) {
+    var label = formatDistanceLabel(user);
+    if (!label) return '';
+    return '<span class="pps-distance-badge" title="' + escapeHtml(TEXT.distanceNearby) + '"><span class="pps-distance-pin">📍</span>' + escapeHtml(label) + '</span>';
+  }
+
   function renderAvatarBlock(user) {
     var flag = user.flagEmoji || countryFlag(user.countryCode || user.language_flag);
     var online = user.isOnline || String(user.status || '').toLowerCase() === 'online';
@@ -893,7 +926,7 @@
   function renderModeTabs() {
     var mode = state.mode || currentMode();
     return '' +
-      '<nav class="pps-mode-switcher" aria-label="语伴推荐模式">' +
+      '<nav class="pps-mode-switcher" aria-label="' + escapeHtml(TEXT.recommendTab + ' / ' + TEXT.nearbyTab) + '">' +
         '<button type="button" class="pps-mode-tab' + (mode === 'recommend' ? ' is-active' : '') + '" data-mode="recommend" aria-pressed="' + (mode === 'recommend' ? 'true' : 'false') + '">' + escapeHtml(TEXT.recommendTab) + '</button>' +
         '<button type="button" class="pps-mode-tab' + (mode === 'nearby' ? ' is-active' : '') + '" data-mode="nearby" aria-pressed="' + (mode === 'nearby' ? 'true' : 'false') + '">' + escapeHtml(TEXT.nearbyTab) + '</button>' +
       '</nav>';
@@ -957,7 +990,7 @@
           '<div class="pps-user-card">' +
             renderAvatarBlock(user) +
             '<div class="pps-user-main">' +
-              '<div class="pps-name-row"><span class="pps-name">' + escapeHtml(user.displayName || user.username || 'User') + '</span>' + (meta ? '<span class="pps-user-meta">' + meta + '</span>' : '') + '</div>' +
+              '<div class="pps-name-row"><span class="pps-name">' + escapeHtml(user.displayName || user.username || 'User') + '</span>' + (meta ? '<span class="pps-user-meta">' + meta + '</span>' : '') + renderDistanceBadge(user) + '</div>' +
               '<div class="pps-lang-row"><div class="pps-lang-side">' + renderLanguageList(nativeList, 'pps-native-chip', 3) + '</div><span class="pps-arrow">⇋</span><div class="pps-lang-side pps-lang-learn">' + renderLanguageList(learnList, 'pps-learn-chip', 5) + '</div></div>' +
               renderProfileDetails(user) +
             '</div>' +
@@ -1115,7 +1148,7 @@
     state.loading = false;
     state.feedRequestId += 1;
     syncModeTabs();
-    showLoading(mode === 'nearby' ? '正在查找附近的人...' : TEXT.loading);
+    showLoading(mode === 'nearby' ? TEXT.nearbyLoading : TEXT.loading);
 
     if (window.history && pushHistory !== false) {
       try { window.history.pushState({ peipeMode: mode }, '', rel(modePath(mode))); } catch (err) {}
@@ -1239,7 +1272,7 @@
     var requestId = ++state.feedRequestId;
 
     if (refresh) {
-      showLoading(state.mode === 'nearby' ? '正在查找附近的人...' : TEXT.loading);
+      showLoading(state.mode === 'nearby' ? TEXT.nearbyLoading : TEXT.loading);
       syncModeTabs();
       state.done = false;
       state.users = [];
