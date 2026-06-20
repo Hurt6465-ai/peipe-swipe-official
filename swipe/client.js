@@ -70,7 +70,8 @@
     profileTitle: '完善语伴资料',
     profileSubtitle: '第一次打开语伴前，需要先填写这些资料。',
     editProfileTitle: '编辑语伴资料',
-    displayName: '用户名 / 显示名',
+    displayName: '用户名',
+    displayNamePlaceholder: '请输入你的用户名',
     photos: '语伴照片',
     uploadPhotos: '上传手机图片',
     uploading: '上传中...',
@@ -267,6 +268,7 @@
     feedRequestId: 0,
     selectionGuardBound: false,
     modeGesture: null,
+    profilePrompted: false,
 
     // 悟空 SDK 状态
     wkReadyPromise: null,
@@ -293,6 +295,28 @@
     });
   }
   function norm(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
+  function looksLikeUidName(value) {
+    value = norm(value);
+    return !value || /^\d{3,}$/.test(value) || /^uid[_-]?\d+$/i.test(value) || /^user\s*\d+$/i.test(value) || /^tsdd_[0-9a-f]{8,}$/i.test(value);
+  }
+  function bestDisplayName(user, fallback) {
+    user = user || {};
+    var names = [user.displayName, user.peipe_partner_display_name, user.fullname, user.name, user.nickname, user.username, user.userslug, fallback];
+    for (var i = 0; i < names.length; i += 1) {
+      var text = norm(names[i]);
+      if (text && !looksLikeUidName(text)) return text;
+    }
+    return norm(fallback) || '';
+  }
+  function profilePromptKey() {
+    return 'pps-profile-prompted:' + String((currentUser() && currentUser().uid) || '0');
+  }
+  function hasProfilePrompted() {
+    try { return localStorage.getItem(profilePromptKey()) === '1'; } catch (e) { return false; }
+  }
+  function markProfilePrompted() {
+    try { localStorage.setItem(profilePromptKey(), '1'); } catch (e) {}
+  }
   function currentUser() { return (window.app && window.app.user) || null; }
   function isLoggedIn() { var u = currentUser(); return !!(u && Number(u.uid || 0) > 0); }
   function jsonBody(data) { return JSON.stringify(data || {}); }
@@ -339,60 +363,6 @@
     });
   }
 
-
-
-  function hasNativeLocationBridge() {
-    return !!(window.__TangSengRequestLocation || (window.TangSengLocation && typeof window.TangSengLocation.requestLocation === 'function'));
-  }
-  function getNativeOrBrowserPosition(options) {
-    options = options || {};
-    if (window.__TangSengRequestLocation) {
-      return window.__TangSengRequestLocation(options);
-    }
-    if (window.TangSengLocation && typeof window.TangSengLocation.requestLocation === 'function') {
-      return new Promise(function (resolve, reject) {
-        var id = 'pps_loc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-        var prevOk = window.__TangSengLocationNativeResult || function () {};
-        var prevErr = window.__TangSengLocationNativeError || function () {};
-        var done = false;
-        function finish(fn, value) {
-          if (done) return;
-          done = true;
-          window.__TangSengLocationNativeResult = prevOk;
-          window.__TangSengLocationNativeError = prevErr;
-          fn(value);
-        }
-        window.__TangSengLocationNativeResult = function (callbackId, payload) {
-          if (callbackId !== id) return prevOk.apply(this, arguments);
-          var data = payload;
-          if (typeof data === 'string') {
-            try { data = JSON.parse(data); } catch (e) { data = null; }
-          }
-          if (!data) return finish(reject, new Error('定位失败'));
-          finish(resolve, { coords: { latitude: Number(data.lat), longitude: Number(data.lng), accuracy: Number(data.accuracy || 0) }, timestamp: Number(data.time || Date.now()) });
-        };
-        window.__TangSengLocationNativeError = function (callbackId, message) {
-          if (callbackId !== id) return prevErr.apply(this, arguments);
-          finish(reject, new Error(message || '定位失败'));
-        };
-        try { window.TangSengLocation.requestLocation(id); } catch (e) { finish(reject, e); }
-      });
-    }
-    if (!navigator.geolocation) return Promise.reject(new Error('定位不可用'));
-    return new Promise(function (resolve, reject) {
-      navigator.geolocation.getCurrentPosition(resolve, reject, options);
-    });
-  }
-  function readNativePrefetch(key, maxAgeMs) {
-    if (!key) return null;
-    var entry = window.__PEIPE_NATIVE_PREFETCH__ && window.__PEIPE_NATIVE_PREFETCH__[key];
-    if (!entry && window.sessionStorage) {
-      try { entry = JSON.parse(sessionStorage.getItem('__PEIPE_NATIVE_PREFETCH__:' + key) || 'null'); } catch (e) { entry = null; }
-    }
-    if (!entry || !entry.data) return null;
-    if (maxAgeMs && Date.now() - Number(entry.time || 0) > maxAgeMs) return null;
-    return entry.data;
-  }
 
   function loadScriptOnce(url, key) {
     if (window.wk && window.wk.WKSDK) return Promise.resolve();
@@ -815,19 +785,10 @@
     return norm(user && user.distanceText);
   }
 
-  function renderNearbyIcon() {
-    return '<svg class="pps-distance-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.15 6-11a6 6 0 1 0-12 0c0 5.85 6 11 6 11z"></path><circle cx="12" cy="10" r="2.4"></circle></svg>';
-  }
-
-  function shouldShowDistance() {
-    return String(state.mode || currentMode() || '').toLowerCase() === 'nearby';
-  }
-
-  function renderDistanceLine(user) {
-    if (!shouldShowDistance()) return '';
+  function renderDistanceBadge(user) {
     var label = formatDistanceLabel(user);
     if (!label) return '';
-    return '<div class="pps-distance-line" title="' + escapeHtml(TEXT.distanceNearby) + '">' + renderNearbyIcon() + '<span>' + escapeHtml(label) + '</span></div>';
+    return '<span class="pps-distance-badge" title="' + escapeHtml(TEXT.distanceNearby) + '"><span class="pps-distance-pin">📍</span>' + escapeHtml(label) + '</span>';
   }
 
   function renderAvatarBlock(user) {
@@ -890,7 +851,7 @@
   }
 
   function isProfileComplete(profile) {
-    return !!(profile && profile.displayName && profile.language_flag && profile.language_fluent && profile.language_learning && profile.gender && profile.birthday);
+    return !!(profile && bestDisplayName(profile, profile.username) && profile.language_flag && profile.language_fluent && profile.language_learning && profile.gender && profile.birthday);
   }
 
   function normalisePhotos(list) {
@@ -905,7 +866,7 @@
 
   function avatarHtml(user, cls) {
     var src = user && (user.avatar || user.accountPicture || user.uploadedpicture || user.picture);
-    var name = (user && (user.displayName || user.username)) || 'U';
+    var name = bestDisplayName(user, 'U') || 'U';
     if (src) return '<img class="' + cls + '" src="' + escapeHtml(src) + '" alt="avatar">';
     return '<span class="' + cls + ' pps-avatar-fallback">' + escapeHtml(name.slice(0, 1).toUpperCase()) + '</span>';
   }
@@ -1053,13 +1014,12 @@
           '<div class="pps-user-card">' +
             renderAvatarBlock(user) +
             '<div class="pps-user-main">' +
-              '<div class="pps-name-row"><span class="pps-name">' + escapeHtml(user.displayName || user.username || 'User') + '</span>' + (meta ? '<span class="pps-user-meta">' + meta + '</span>' : '') + '</div>' +
+              '<div class="pps-name-row"><span class="pps-name">' + escapeHtml(bestDisplayName(user, user && user.username) || '未命名用户') + '</span>' + (meta ? '<span class="pps-user-meta">' + meta + '</span>' : '') + renderDistanceBadge(user) + '</div>' +
               '<div class="pps-lang-row"><div class="pps-lang-side">' + renderLanguageList(nativeList, 'pps-native-chip', 3) + '</div><span class="pps-arrow">⇋</span><div class="pps-lang-side pps-lang-learn">' + renderLanguageList(learnList, 'pps-learn-chip', 5) + '</div></div>' +
               renderProfileDetails(user) +
             '</div>' +
           '</div>' +
           '<div class="pps-bio">' + escapeHtml(bio) + '</div>' +
-          renderDistanceLine(user) +
           (tags ? '<div class="pps-tags">' + tags + '</div>' : '') +
         '</div>' +
         '<div class="pps-side-actions"><button type="button" class="pps-greet-btn" data-uid="' + Number(user.uid || 0) + '"><span class="pps-greet-wave">👋</span><span class="pps-greet-label">Hi</span></button></div>' +
@@ -1283,30 +1243,32 @@
   }
 
   function syncLocationIfPossible(force) {
-    if (!isLoggedIn() || (!hasNativeLocationBridge() && !navigator.geolocation)) return Promise.resolve(false);
+    if (!isLoggedIn() || !navigator.geolocation) return Promise.resolve(false);
     var uid = String(currentUser() && currentUser().uid || '0');
     var key = 'pps-location-sync:' + uid;
     var last = Number(localStorage.getItem(key) || 0) || 0;
     if (!force && Date.now() - last < 6 * 60 * 60 * 1000) return Promise.resolve(false);
     localStorage.setItem(key, String(Date.now()));
-    return getNativeOrBrowserPosition({
-      enableHighAccuracy: false,
-      timeout: 6500,
-      maximumAge: 60 * 60 * 1000
-    }).then(function (pos) {
-      var c = pos && pos.coords;
-      if (!c) return false;
-      return apiFetch('/api/peipe-partners/location', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-        body: JSON.stringify({ lat: c.latitude, lng: c.longitude, accuracy: c.accuracy || 0, source: hasNativeLocationBridge() ? 'tangseng-native' : 'browser' })
-      }).then(function () {
-        return true;
-      }).catch(function (err) {
-        console.warn('[peipe-swipe] location save failed', err);
-        return false;
+    return new Promise(function (resolve) {
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        var c = pos && pos.coords;
+        if (!c) return resolve(false);
+        apiFetch('/api/peipe-partners/location', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
+          body: JSON.stringify({ lat: c.latitude, lng: c.longitude })
+        }).then(function () {
+          resolve(true);
+        }).catch(function (err) {
+          console.warn('[peipe-swipe] location save failed', err);
+          resolve(false);
+        });
+      }, function () { resolve(false); }, {
+        enableHighAccuracy: false,
+        timeout: 6500,
+        maximumAge: 60 * 60 * 1000
       });
-    }).catch(function () { return false; });
+    });
   }
 
   function appendUniqueUsers(users, refresh, allowRepeats) {
@@ -1327,18 +1289,6 @@
     return out;
   }
 
-  function applyFeedPayload(json, refresh, requestId) {
-    if (requestId !== state.feedRequestId) return;
-
-    var rawUsers = Array.isArray(json && json.users) ? json.users : [];
-    var allowRepeats = !!(json && (json.recycled || json.allowRepeats));
-    var added = appendUniqueUsers(rawUsers, refresh, allowRepeats);
-    state.done = (json && json.hasMore === false && !allowRepeats && rawUsers.length === 0) || (!allowRepeats && !refresh && added.length === 0);
-
-    if (!state.users.length) showEmpty(TEXT.empty);
-    else showFeed();
-  }
-
   function loadFeed(refresh) {
     if (state.loading || (state.done && !refresh)) return Promise.resolve();
 
@@ -1356,16 +1306,17 @@
       state.photoSwipers.clear();
     }
 
-    var mode = state.mode || 'recommend';
-    var prefetched = refresh ? readNativePrefetch('peipePartnersFeed:' + mode, 30000) : null;
-    if (prefetched && Array.isArray(prefetched.users)) {
-      try { applyFeedPayload(prefetched, refresh, requestId); } finally { state.loading = false; }
-      return Promise.resolve();
-    }
-
-    return apiFetch('/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(mode) + '&limit=' + CONFIG.pageSize, { timeoutMs: 12000 })
+    return apiFetch('/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize, { timeoutMs: 12000 })
       .then(function (json) {
-        applyFeedPayload(json, refresh, requestId);
+        if (requestId !== state.feedRequestId) return;
+
+        var rawUsers = Array.isArray(json.users) ? json.users : [];
+        var allowRepeats = !!(json.recycled || json.allowRepeats);
+        var added = appendUniqueUsers(rawUsers, refresh, allowRepeats);
+        state.done = (json.hasMore === false && !allowRepeats && rawUsers.length === 0) || (!allowRepeats && !refresh && added.length === 0);
+
+        if (!state.users.length) showEmpty(TEXT.empty);
+        else showFeed();
       })
       .catch(function (err) {
         if (requestId !== state.feedRequestId) return;
@@ -1388,7 +1339,7 @@
         state.profile = json.profile || {};
         state.profileComplete = !!json.complete;
         state.tagCategories = json.tagCategories || [];
-        if (!state.profileComplete) openProfile(true);
+        if (!state.profileComplete && !hasProfilePrompted()) { markProfilePrompted(); openProfile(true); }
       })
       .catch(function (err) {
         console.warn('[peipe-swipe] me failed', err);
@@ -1595,7 +1546,7 @@
         '<div class="pps-profile-scroll">' +
           '<div class="pps-profile-head"><div><div class="pps-profile-title">' + escapeHtml(title) + '</div><div class="pps-profile-subtitle">' + escapeHtml(TEXT.profileSubtitle) + '</div></div></div>' +
           '<div class="pps-form-grid">' +
-            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.displayName) + '</label><div class="pps-display-row"><button type="button" class="pps-avatar-upload" aria-label="' + escapeHtml(TEXT.uploadAvatar) + '">' + (avatar ? '<img class="pps-form-avatar pps-form-avatar-img" data-avatar="' + escapeHtml(avatar) + '" src="' + escapeHtml(avatar) + '" alt="avatar">' : '<span class="pps-form-avatar pps-form-avatar-img" data-avatar=""></span>') + '<span class="pps-avatar-plus">+</span></button><input class="pps-avatar-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" hidden><input name="displayName" maxlength="40" value="' + escapeHtml(profile.displayName || profile.username || me.username || '') + '"></div></div>' +
+            '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.displayName) + '</label><div class="pps-display-row"><button type="button" class="pps-avatar-upload" aria-label="' + escapeHtml(TEXT.uploadAvatar) + '">' + (avatar ? '<img class="pps-form-avatar pps-form-avatar-img" data-avatar="' + escapeHtml(avatar) + '" src="' + escapeHtml(avatar) + '" alt="avatar">' : '<span class="pps-form-avatar pps-form-avatar-img" data-avatar=""></span>') + '<span class="pps-avatar-plus">+</span></button><input class="pps-avatar-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" hidden><input name="displayName" maxlength="40" placeholder="' + escapeHtml(TEXT.displayNamePlaceholder) + '" value="' + escapeHtml(bestDisplayName(profile, me.username || '') || '') + '"></div></div>' +
             '<div class="pps-field pps-span-2"><div class="pps-field-title">' + escapeHtml(TEXT.photos) + '</div><div class="pps-photos-row">' + renderPhotoTiles(profile.photos) + '</div><input class="pps-photo-input" type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.heic,.heif" multiple hidden><button type="button" class="pps-upload-btn">' + escapeHtml(TEXT.uploadPhotos) + '</button></div>' +
             '<div class="pps-field pps-span-2"><label>' + escapeHtml(TEXT.bio) + '</label><textarea name="bio" maxlength="180" placeholder="' + escapeHtml(TEXT.bioPlaceholder) + '">' + escapeHtml(profile.bio || '') + '</textarea></div>' +
             '<div class="pps-field pps-compact"><label>' + escapeHtml(TEXT.country) + '</label>' + buildChoicePicker('language_flag', OPTIONS.countries, profile.language_flag, 'country', false, 1, TEXT.country) + '</div>' +
@@ -1717,6 +1668,7 @@
       state.profile = json.profile || data;
       state.profileComplete = !!json.complete;
       state.requiredProfile = false;
+      markProfilePrompted();
       toast(TEXT.saveOk);
       $('.pps-sheet-backdrop', state.root).classList.remove('is-open');
       $('.pps-profile-sheet', state.root).classList.remove('is-open');
