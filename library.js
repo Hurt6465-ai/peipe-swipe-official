@@ -48,6 +48,10 @@ const REC_CACHE = {
   locationTtlSec: Math.max(24 * 60 * 60, Number(process.env.PEIPE_LOCATION_TTL_SEC || 7 * 24 * 60 * 60) || 7 * 24 * 60 * 60),
 };
 
+const NEARBY_MAX_DISTANCE_KM = 100;
+const RECOMMEND_NEARBY_PENALTY_RADIUS_KM = 60;
+const RECOMMEND_NEARBY_PENALTY_SCORE = -25;
+
 // 悟空服务端 REST API。当前默认按悟空官方默认内网端口 5001 调用，
 // 后期可以用环境变量覆盖：PEIPE_WUKONG_API_BASE=http://127.0.0.1:5001
 const WUKONG_API_BASE = String(
@@ -123,6 +127,35 @@ function scrubFeedCard(item) {
   return item;
 }
 
+function stripDistanceFields(item) {
+  item = Object.assign({}, item || {});
+  delete item.distanceKm;
+  delete item.distanceText;
+  return item;
+}
+
+function isNearbyRequest(req, payload) {
+  const raw = String((req && req.query && req.query.mode) || (payload && payload.mode) || 'recommend').toLowerCase();
+  return raw === 'nearby';
+}
+
+function roundedDistanceKm(km) {
+  km = Number(km);
+  return Number.isFinite(km) && km >= 0 ? Math.round(km * 100) / 100 : null;
+}
+
+function cardDistanceKm(item) {
+  if (!item) return null;
+  const raw = item._distanceKm != null ? item._distanceKm : item.distanceKm;
+  const km = Number(raw);
+  return Number.isFinite(km) && km >= 0 ? km : null;
+}
+
+function isWithinNearbyRadius(item) {
+  const km = cardDistanceKm(item);
+  return km !== null && km <= NEARBY_MAX_DISTANCE_KM;
+}
+
 function parseGeoRow(row) {
   if (!row) return null;
   const expiresAt = Number(row.peipe_partner_location_expires_at || row.location_expires_at || row.languagePartnerGeoExpiresAt || 0);
@@ -145,13 +178,17 @@ async function getViewerGeo(uid) {
 async function decorateFeedWithDistance(req, payload) {
   payload = payload || {};
   const users = Array.isArray(payload.users) ? payload.users : [];
-  payload.users = users.map(scrubFeedCard);
+  const nearbyMode = isNearbyRequest(req, payload);
+  payload.users = users.map(scrubFeedCard).map(stripDistanceFields);
   if (!users.length) return payload;
 
   const viewerGeo = await getViewerGeo(req.uid).catch(() => null);
-  if (!viewerGeo) return payload;
+  if (!viewerGeo) {
+    if (nearbyMode) payload.users = [];
+    return payload;
+  }
 
-  const uids = users.map(item => Number(item && item.uid)).filter(Boolean);
+  const uids = payload.users.map(item => Number(item && item.uid)).filter(Boolean);
   const fields = ['uid', 'lat', 'lng', 'peipe_partner_lat', 'peipe_partner_lng', 'peipe_partner_location_expires_at', 'languagePartnerGeoExpiresAt'];
   const rows = await user.getUsersFields(uids, fields).catch(() => []);
   const geo = new Map();
@@ -162,13 +199,21 @@ async function decorateFeedWithDistance(req, payload) {
 
   payload.users = payload.users.map((item) => {
     const targetGeo = geo.get(Number(item && item.uid));
-    const km = distanceKm(viewerGeo, targetGeo);
-    if (km > 0) {
+    if (!targetGeo) return item;
+    const km = roundedDistanceKm(distanceKm(viewerGeo, targetGeo));
+    if (km === null) return item;
+    item._distanceKm = km;
+    if (nearbyMode) {
       item.distanceKm = km;
       item.distanceText = formatDistance(km);
     }
     return item;
   });
+
+  if (nearbyMode) {
+    payload.users = payload.users.filter(isWithinNearbyRadius);
+  }
+
   return payload;
 }
 
@@ -704,35 +749,53 @@ async function mapLimit(items, limit, iterator) {
 
 function distanceBoost(item, mode) {
   if (String(mode || '').toLowerCase() !== 'nearby') return 0;
-  const km = Number(item && item.distanceKm || 0);
-  if (!km) return 0;
+  const km = cardDistanceKm(item);
+  if (km === null || km > NEARBY_MAX_DISTANCE_KM) return 0;
   if (km <= 1) return 30;
   if (km <= 5) return 24;
   if (km <= 20) return 18;
   if (km <= 50) return 10;
-  if (km <= 100) return 5;
-  return 0;
+  return 5;
+}
+
+function recommendNearbyPenalty(item, mode) {
+  if (String(mode || '').toLowerCase() === 'nearby') return 0;
+  const km = cardDistanceKm(item);
+  if (km === null || km > RECOMMEND_NEARBY_PENALTY_RADIUS_KM) return 0;
+  return RECOMMEND_NEARBY_PENALTY_SCORE;
+}
+
+function removePrivateDistance(item, nearbyMode) {
+  if (!item) return item;
+  delete item._distanceKm;
+  if (!nearbyMode) {
+    delete item.distanceKm;
+    delete item.distanceText;
+  }
+  return item;
 }
 
 async function decorateFeedWithRecommendationSignals(req, payload) {
   payload = payload || {};
   const users = Array.isArray(payload.users) ? payload.users : [];
-  payload.users = users.map(scrubFeedCard);
+  const nearbyMode = isNearbyRequest(req, payload);
+  payload.users = users.map(scrubFeedCard).map(item => nearbyMode ? item : stripDistanceFields(item));
   if (!users.length) return payload;
 
-  const mode = String((req.query && req.query.mode) || payload.mode || 'recommend');
+  const mode = nearbyMode ? 'nearby' : 'recommend';
   const viewerUid = Number(req.uid || 0);
 
-  const decorated = await mapLimit(users, 5, async (item, index) => {
+  const decorated = await mapLimit(payload.users, 5, async (item, index) => {
     item = item || {};
     const uid = Number(item.uid || 0);
     const vip = uid ? await isVip(uid) : false;
-    const baseOrder = Math.max(0, users.length - index) * 2;
+    const baseOrder = Math.max(0, payload.users.length - index) * 2;
     const vipBoost = vip ? 25 : 0;
     const dbs = distanceBoost(item, mode);
+    const proximityPenalty = recommendNearbyPenalty(item, mode);
     const recyclePenalty = item.recycled ? -10 : 0;
     const stableJitter = stableJitterScore(viewerUid, uid, item.recycled ? 'recycle-rank' : 'rank') * 4;
-    const score = baseOrder + vipBoost + dbs + recyclePenalty + stableJitter;
+    const score = baseOrder + vipBoost + dbs + proximityPenalty + recyclePenalty + stableJitter;
 
     item.isVip = !!vip;
     item.vipBoost = vipBoost;
@@ -742,7 +805,21 @@ async function decorateFeedWithRecommendationSignals(req, payload) {
     return item;
   });
 
-  payload.users = decorated.filter(Boolean).sort((a, b) => Number(b.recommendScore || 0) - Number(a.recommendScore || 0));
+  payload.users = decorated.filter(Boolean).sort((a, b) => {
+    if (nearbyMode) {
+      const da = cardDistanceKm(a);
+      const db = cardDistanceKm(b);
+      if (da !== db) return (da === null ? Number.POSITIVE_INFINITY : da) - (db === null ? Number.POSITIVE_INFINITY : db);
+      if (!!b.isOnline !== !!a.isOnline) return b.isOnline ? 1 : -1;
+    }
+    return Number(b.recommendScore || 0) - Number(a.recommendScore || 0);
+  });
+
+  if (nearbyMode) {
+    payload.users = payload.users.filter(isWithinNearbyRadius);
+  }
+
+  payload.users = payload.users.map(item => removePrivateDistance(item, nearbyMode));
   return payload;
 }
 
@@ -912,15 +989,15 @@ async function redisNearbyCandidates(req) {
   const viewerGeo = await getViewerGeo(uid).catch(() => null);
   if (!viewerGeo) return [];
 
-  const radiuses = String(process.env.PEIPE_NEARBY_RADII_KM || '5,20,50,100,300')
+  const radiuses = String(process.env.PEIPE_NEARBY_RADII_KM || '5,20,50,100')
     .split(',')
     .map(item => Number(item.trim()))
-    .filter(item => Number.isFinite(item) && item > 0)
+    .filter(item => Number.isFinite(item) && item > 0 && item <= NEARBY_MAX_DISTANCE_KM)
     .slice(0, 8);
   const wanted = Math.max(REC_CACHE.queueSize, recLimit(req) * 4);
   const map = new Map();
 
-  for (const radiusKm of radiuses.length ? radiuses : [5, 20, 50, 100, 300]) {
+  for (const radiusKm of radiuses.length ? radiuses : [5, 20, 50, 100]) {
     const rows = await recRedis.command([
       'GEOSEARCH',
       'peipe:geo:users',
@@ -936,7 +1013,8 @@ async function redisNearbyCandidates(req) {
       const dist = Array.isArray(row) ? Number(row[1]) : 0;
       const targetUid = Number(member || 0);
       if (!targetUid || targetUid === uid || map.has(targetUid)) return;
-      map.set(targetUid, { uid: targetUid, distanceKm: Number.isFinite(dist) ? dist : 0, radiusKm });
+      if (!Number.isFinite(dist) || dist > NEARBY_MAX_DISTANCE_KM) return;
+      map.set(targetUid, { uid: targetUid, distanceKm: dist, radiusKm });
     });
     if (map.size >= wanted) break;
   }
@@ -950,6 +1028,7 @@ async function redisNearbyCandidates(req) {
   return candidates.filter((item, index) => {
     const loc = locations[index];
     if (!loc || Number(loc.uid) !== item.uid) return false;
+    if (!Number.isFinite(Number(item.distanceKm)) || Number(item.distanceKm) > NEARBY_MAX_DISTANCE_KM) return false;
     const expiresAt = Number(loc.expiresAt || 0);
     return !expiresAt || expiresAt > nowMs;
   }).slice(0, wanted);
