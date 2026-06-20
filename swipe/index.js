@@ -104,7 +104,7 @@ function profileFromRaw(raw) {
   raw = raw || {};
   const decorated = partner.decorateUser(raw) || {};
   return Object.assign({}, raw, decorated, {
-    displayName: decorated.displayName || raw.peipe_partner_display_name || raw.username || '',
+    displayName: decorated.displayName || raw.peipe_partner_display_name || raw.fullname || raw.name || raw.nickname || raw.username || '',
     avatar: decorated.avatar || raw.picture || raw.uploadedpicture || '',
     accountPicture: decorated.avatar || raw.picture || raw.uploadedpicture || '',
     photos: decorated.photos || [],
