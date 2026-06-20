@@ -761,10 +761,19 @@
     return norm(user && user.distanceText);
   }
 
-  function renderDistanceBadge(user) {
+  function renderNearbyIcon() {
+    return '<svg class="pps-distance-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.15 6-11a6 6 0 1 0-12 0c0 5.85 6 11 6 11z"></path><circle cx="12" cy="10" r="2.4"></circle></svg>';
+  }
+
+  function shouldShowDistance() {
+    return String(state.mode || currentMode() || '').toLowerCase() === 'nearby';
+  }
+
+  function renderDistanceLine(user) {
+    if (!shouldShowDistance()) return '';
     var label = formatDistanceLabel(user);
     if (!label) return '';
-    return '<span class="pps-distance-badge" title="' + escapeHtml(TEXT.distanceNearby) + '"><span class="pps-distance-pin">📍</span>' + escapeHtml(label) + '</span>';
+    return '<div class="pps-distance-line" title="' + escapeHtml(TEXT.distanceNearby) + '">' + renderNearbyIcon() + '<span>' + escapeHtml(label) + '</span></div>';
   }
 
   function renderAvatarBlock(user) {
@@ -990,12 +999,13 @@
           '<div class="pps-user-card">' +
             renderAvatarBlock(user) +
             '<div class="pps-user-main">' +
-              '<div class="pps-name-row"><span class="pps-name">' + escapeHtml(user.displayName || user.username || 'User') + '</span>' + (meta ? '<span class="pps-user-meta">' + meta + '</span>' : '') + renderDistanceBadge(user) + '</div>' +
+              '<div class="pps-name-row"><span class="pps-name">' + escapeHtml(user.displayName || user.username || 'User') + '</span>' + (meta ? '<span class="pps-user-meta">' + meta + '</span>' : '') + '</div>' +
               '<div class="pps-lang-row"><div class="pps-lang-side">' + renderLanguageList(nativeList, 'pps-native-chip', 3) + '</div><span class="pps-arrow">⇋</span><div class="pps-lang-side pps-lang-learn">' + renderLanguageList(learnList, 'pps-learn-chip', 5) + '</div></div>' +
               renderProfileDetails(user) +
             '</div>' +
           '</div>' +
           '<div class="pps-bio">' + escapeHtml(bio) + '</div>' +
+          renderDistanceLine(user) +
           (tags ? '<div class="pps-tags">' + tags + '</div>' : '') +
         '</div>' +
         '<div class="pps-side-actions"><button type="button" class="pps-greet-btn" data-uid="' + Number(user.uid || 0) + '"><span class="pps-greet-wave">👋</span><span class="pps-greet-label">Hi</span></button></div>' +
