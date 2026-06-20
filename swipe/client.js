@@ -340,6 +340,60 @@
   }
 
 
+
+  function hasNativeLocationBridge() {
+    return !!(window.__TangSengRequestLocation || (window.TangSengLocation && typeof window.TangSengLocation.requestLocation === 'function'));
+  }
+  function getNativeOrBrowserPosition(options) {
+    options = options || {};
+    if (window.__TangSengRequestLocation) {
+      return window.__TangSengRequestLocation(options);
+    }
+    if (window.TangSengLocation && typeof window.TangSengLocation.requestLocation === 'function') {
+      return new Promise(function (resolve, reject) {
+        var id = 'pps_loc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+        var prevOk = window.__TangSengLocationNativeResult || function () {};
+        var prevErr = window.__TangSengLocationNativeError || function () {};
+        var done = false;
+        function finish(fn, value) {
+          if (done) return;
+          done = true;
+          window.__TangSengLocationNativeResult = prevOk;
+          window.__TangSengLocationNativeError = prevErr;
+          fn(value);
+        }
+        window.__TangSengLocationNativeResult = function (callbackId, payload) {
+          if (callbackId !== id) return prevOk.apply(this, arguments);
+          var data = payload;
+          if (typeof data === 'string') {
+            try { data = JSON.parse(data); } catch (e) { data = null; }
+          }
+          if (!data) return finish(reject, new Error('定位失败'));
+          finish(resolve, { coords: { latitude: Number(data.lat), longitude: Number(data.lng), accuracy: Number(data.accuracy || 0) }, timestamp: Number(data.time || Date.now()) });
+        };
+        window.__TangSengLocationNativeError = function (callbackId, message) {
+          if (callbackId !== id) return prevErr.apply(this, arguments);
+          finish(reject, new Error(message || '定位失败'));
+        };
+        try { window.TangSengLocation.requestLocation(id); } catch (e) { finish(reject, e); }
+      });
+    }
+    if (!navigator.geolocation) return Promise.reject(new Error('定位不可用'));
+    return new Promise(function (resolve, reject) {
+      navigator.geolocation.getCurrentPosition(resolve, reject, options);
+    });
+  }
+  function readNativePrefetch(key, maxAgeMs) {
+    if (!key) return null;
+    var entry = window.__PEIPE_NATIVE_PREFETCH__ && window.__PEIPE_NATIVE_PREFETCH__[key];
+    if (!entry && window.sessionStorage) {
+      try { entry = JSON.parse(sessionStorage.getItem('__PEIPE_NATIVE_PREFETCH__:' + key) || 'null'); } catch (e) { entry = null; }
+    }
+    if (!entry || !entry.data) return null;
+    if (maxAgeMs && Date.now() - Number(entry.time || 0) > maxAgeMs) return null;
+    return entry.data;
+  }
+
   function loadScriptOnce(url, key) {
     if (window.wk && window.wk.WKSDK) return Promise.resolve();
 
@@ -1229,32 +1283,30 @@
   }
 
   function syncLocationIfPossible(force) {
-    if (!isLoggedIn() || !navigator.geolocation) return Promise.resolve(false);
+    if (!isLoggedIn() || (!hasNativeLocationBridge() && !navigator.geolocation)) return Promise.resolve(false);
     var uid = String(currentUser() && currentUser().uid || '0');
     var key = 'pps-location-sync:' + uid;
     var last = Number(localStorage.getItem(key) || 0) || 0;
     if (!force && Date.now() - last < 6 * 60 * 60 * 1000) return Promise.resolve(false);
     localStorage.setItem(key, String(Date.now()));
-    return new Promise(function (resolve) {
-      navigator.geolocation.getCurrentPosition(function (pos) {
-        var c = pos && pos.coords;
-        if (!c) return resolve(false);
-        apiFetch('/api/peipe-partners/location', {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-          body: JSON.stringify({ lat: c.latitude, lng: c.longitude })
-        }).then(function () {
-          resolve(true);
-        }).catch(function (err) {
-          console.warn('[peipe-swipe] location save failed', err);
-          resolve(false);
-        });
-      }, function () { resolve(false); }, {
-        enableHighAccuracy: false,
-        timeout: 6500,
-        maximumAge: 60 * 60 * 1000
+    return getNativeOrBrowserPosition({
+      enableHighAccuracy: false,
+      timeout: 6500,
+      maximumAge: 60 * 60 * 1000
+    }).then(function (pos) {
+      var c = pos && pos.coords;
+      if (!c) return false;
+      return apiFetch('/api/peipe-partners/location', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
+        body: JSON.stringify({ lat: c.latitude, lng: c.longitude, accuracy: c.accuracy || 0, source: hasNativeLocationBridge() ? 'tangseng-native' : 'browser' })
+      }).then(function () {
+        return true;
+      }).catch(function (err) {
+        console.warn('[peipe-swipe] location save failed', err);
+        return false;
       });
-    });
+    }).catch(function () { return false; });
   }
 
   function appendUniqueUsers(users, refresh, allowRepeats) {
@@ -1275,6 +1327,18 @@
     return out;
   }
 
+  function applyFeedPayload(json, refresh, requestId) {
+    if (requestId !== state.feedRequestId) return;
+
+    var rawUsers = Array.isArray(json && json.users) ? json.users : [];
+    var allowRepeats = !!(json && (json.recycled || json.allowRepeats));
+    var added = appendUniqueUsers(rawUsers, refresh, allowRepeats);
+    state.done = (json && json.hasMore === false && !allowRepeats && rawUsers.length === 0) || (!allowRepeats && !refresh && added.length === 0);
+
+    if (!state.users.length) showEmpty(TEXT.empty);
+    else showFeed();
+  }
+
   function loadFeed(refresh) {
     if (state.loading || (state.done && !refresh)) return Promise.resolve();
 
@@ -1292,17 +1356,16 @@
       state.photoSwipers.clear();
     }
 
-    return apiFetch('/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(state.mode || 'recommend') + '&limit=' + CONFIG.pageSize, { timeoutMs: 12000 })
+    var mode = state.mode || 'recommend';
+    var prefetched = refresh ? readNativePrefetch('peipePartnersFeed:' + mode, 30000) : null;
+    if (prefetched && Array.isArray(prefetched.users)) {
+      try { applyFeedPayload(prefetched, refresh, requestId); } finally { state.loading = false; }
+      return Promise.resolve();
+    }
+
+    return apiFetch('/api/peipe-partners/swipe/feed?mode=' + encodeURIComponent(mode) + '&limit=' + CONFIG.pageSize, { timeoutMs: 12000 })
       .then(function (json) {
-        if (requestId !== state.feedRequestId) return;
-
-        var rawUsers = Array.isArray(json.users) ? json.users : [];
-        var allowRepeats = !!(json.recycled || json.allowRepeats);
-        var added = appendUniqueUsers(rawUsers, refresh, allowRepeats);
-        state.done = (json.hasMore === false && !allowRepeats && rawUsers.length === 0) || (!allowRepeats && !refresh && added.length === 0);
-
-        if (!state.users.length) showEmpty(TEXT.empty);
-        else showFeed();
+        applyFeedPayload(json, refresh, requestId);
       })
       .catch(function (err) {
         if (requestId !== state.feedRequestId) return;
