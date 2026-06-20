@@ -756,34 +756,46 @@ body.peipe-swipe-mode [component="container"] {
   color: rgba(255,255,255,.94);
 }
 
+.pps-distance-line,
 .pps-distance-badge {
-  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  max-width: 96px;
-  height: 24px;
-  padding: 0 8px;
-  border-radius: 999px;
-  color: rgba(255,255,255,.96);
-  background: rgba(15, 23, 42, .34);
-  border: 1px solid rgba(255,255,255,.20);
-  -webkit-backdrop-filter: blur(14px) saturate(1.12);
-  backdrop-filter: blur(14px) saturate(1.12);
-  box-shadow: 0 4px 14px rgba(0,0,0,.20);
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1;
+  gap: 6px;
+  max-width: 100%;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: rgba(255,255,255,.94);
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-shadow: 0 1px 5px rgba(0,0,0,.35);
+  text-shadow: 0 2px 10px rgba(0,0,0,.65), 0 0 2px rgba(0,0,0,.52);
 }
 
+.pps-distance-icon,
 .pps-distance-pin {
   flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  color: currentColor;
   line-height: 1;
-  font-size: 12px;
+}
+
+.pps-distance-icon {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .pps-gender-icon {
@@ -880,11 +892,15 @@ body.peipe-swipe-mode [component="container"] {
     font-size: clamp(19px, 5.2vw, 24px);
   }
 
+  .pps-distance-line,
   .pps-distance-badge {
-    max-width: 78px;
-    height: 22px;
-    padding: 0 7px;
-    font-size: 11px;
+    font-size: 12px;
+  }
+
+  .pps-distance-icon,
+  .pps-distance-pin {
+    width: 14px;
+    height: 14px;
   }
 
   .pps-side-actions {
@@ -1454,6 +1470,8 @@ body.peipe-swipe-mode [component="container"] {
 .pps-lang-row,
 .pps-detail-row,
 .pps-bio,
+.pps-distance-line,
+.pps-distance-badge,
 .pps-tags {
   background: transparent !important;
   box-shadow: none !important;
@@ -1583,6 +1601,8 @@ body.peipe-swipe-mode [component="container"] {
 .pps-lang-row,
 .pps-detail-row,
 .pps-bio,
+.pps-distance-line,
+.pps-distance-badge,
 .pps-tags,
 .pps-tag,
 .pps-detail-chip,
@@ -1603,6 +1623,8 @@ body.peipe-swipe-mode [component="container"] {
 .pps-lang-row,
 .pps-detail-row,
 .pps-bio,
+.pps-distance-line,
+.pps-distance-badge,
 .pps-tags {
   color: rgba(255,255,255,.95) !important;
   text-shadow: 0 2px 12px rgba(0,0,0,.72), 0 0 2px rgba(0,0,0,.55) !important;
@@ -1764,6 +1786,8 @@ body.peipe-swipe-mode [component="container"] {
 .pps-lang-row,
 .pps-detail-row,
 .pps-bio,
+.pps-distance-line,
+.pps-distance-badge,
 .pps-tags {
   text-shadow: 0 2px 14px rgba(0,0,0,.82), 0 0 3px rgba(0,0,0,.62) !important;
 }
