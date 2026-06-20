@@ -52,6 +52,7 @@
     viewerReviewId: '',
     translateSettings: null,
     longPressTimer: 0,
+    translateLongPressStartedAt: 0,
     langPickerRole: '',
     userMap: {},
     overlayFeedLoaded: false,
@@ -118,6 +119,62 @@
     return Promise.race([req, timeout]).finally(function () {
       if (timer) clearTimeout(timer);
     });
+  }
+
+
+  function hasNativeLocationBridge() {
+    return !!(window.__TangSengRequestLocation || (window.TangSengLocation && typeof window.TangSengLocation.requestLocation === 'function'));
+  }
+  function getNativeOrBrowserPosition(options) {
+    options = options || {};
+    if (window.__TangSengRequestLocation) {
+      return window.__TangSengRequestLocation(options);
+    }
+    if (window.TangSengLocation && typeof window.TangSengLocation.requestLocation === 'function') {
+      return new Promise(function (resolve, reject) {
+        var id = 'pps_loc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+        window.__TangSengLocationNativeResult = window.__TangSengLocationNativeResult || function () {};
+        window.__TangSengLocationNativeError = window.__TangSengLocationNativeError || function () {};
+        var prevOk = window.__TangSengLocationNativeResult;
+        var prevErr = window.__TangSengLocationNativeError;
+        var done = false;
+        function finish(fn, value) {
+          if (done) return;
+          done = true;
+          window.__TangSengLocationNativeResult = prevOk;
+          window.__TangSengLocationNativeError = prevErr;
+          fn(value);
+        }
+        window.__TangSengLocationNativeResult = function (callbackId, payload) {
+          if (callbackId !== id) return prevOk.apply(this, arguments);
+          var data = payload;
+          if (typeof data === 'string') {
+            try { data = JSON.parse(data); } catch (e) { data = null; }
+          }
+          if (!data) return finish(reject, new Error('定位失败'));
+          finish(resolve, { coords: { latitude: Number(data.lat), longitude: Number(data.lng), accuracy: Number(data.accuracy || 0) }, timestamp: Number(data.time || Date.now()) });
+        };
+        window.__TangSengLocationNativeError = function (callbackId, message) {
+          if (callbackId !== id) return prevErr.apply(this, arguments);
+          finish(reject, new Error(message || '定位失败'));
+        };
+        try { window.TangSengLocation.requestLocation(id); } catch (e) { finish(reject, e); }
+      });
+    }
+    if (!navigator.geolocation) return Promise.reject(new Error('定位不可用'));
+    return new Promise(function (resolve, reject) {
+      navigator.geolocation.getCurrentPosition(resolve, reject, options);
+    });
+  }
+  function readNativePrefetch(key, maxAgeMs) {
+    if (!key) return null;
+    var entry = window.__PEIPE_NATIVE_PREFETCH__ && window.__PEIPE_NATIVE_PREFETCH__[key];
+    if (!entry && window.sessionStorage) {
+      try { entry = JSON.parse(sessionStorage.getItem('__PEIPE_NATIVE_PREFETCH__:' + key) || 'null'); } catch (e) { entry = null; }
+    }
+    if (!entry || !entry.data) return null;
+    if (maxAgeMs && Date.now() - Number(entry.time || 0) > maxAgeMs) return null;
+    return entry.data;
   }
 
   function normalizeLangCode(code, fallback) {
@@ -202,8 +259,9 @@
   function renderTranslateSettings() {
     var s = state.translateSettings || loadTranslateSettings();
     var src = getLangMeta(s.sourceLang), tgt = getLangMeta(s.targetLang);
-    return '<div class="ppst-mask ppst-settings-mask"></div><section class="ppst-settings" role="dialog">' +
-      '<div class="ppst-head"><strong>AI翻译设置</strong><button type="button" class="ppst-settings-close">×</button></div>' +
+    return '<div class="ppst-mask ppst-settings-mask"></div><section class="ppst-settings" role="dialog" aria-modal="true">' +
+      '<div class="ppst-head"><strong>翻译菜单</strong><button type="button" class="ppst-settings-close">×</button></div>' +
+      '<div class="ppst-menu-hint">点翻译按钮直接翻译；长按翻译按钮打开这个菜单。</div>' +
       '<input type="hidden" class="ppst-source-lang" value="' + escapeHtml(s.sourceLang) + '"><input type="hidden" class="ppst-target-lang" value="' + escapeHtml(s.targetLang) + '">' +
       '<div class="ppst-preview-row"><button type="button" class="ppst-lang-trigger" data-role="source"><span>' + src.flag + '</span><b>' + escapeHtml(src.label) + '</b></button><i>⇄</i><button type="button" class="ppst-lang-trigger" data-role="target"><span>' + tgt.flag + '</span><b>' + escapeHtml(tgt.label) + '</b></button></div>' +
       '<input type="hidden" class="ppst-provider" value="' + escapeHtml(s.provider) + '"><div class="ppst-provider-tabs"><button type="button" data-provider="google" class="' + (s.provider === 'google' ? 'active' : '') + '">谷歌翻译</button><button type="button" data-provider="ai" class="' + (s.provider === 'ai' ? 'active' : '') + '">AI翻译</button></div>' +
@@ -233,6 +291,13 @@
   }
   function openTranslateSettings() { ensureTranslateSettingsDom(); updateSettingsPreview(); $('.ppst-settings').classList.add('show'); $('.ppst-settings-mask').classList.add('show'); }
   function closeTranslateSettings() { var a = $('.ppst-settings'), b = $('.ppst-settings-mask'); if (a) a.classList.remove('show'); if (b) b.classList.remove('show'); }
+  function openTranslateMenuFromLongPress(e) {
+    state.translateSuppressClickUntil = Date.now() + 900;
+    try { if (window.navigator && typeof navigator.vibrate === 'function') navigator.vibrate(10); } catch (err) {}
+    try { if (e && e.preventDefault) e.preventDefault(); } catch (err2) {}
+    try { if (e && e.stopPropagation) e.stopPropagation(); } catch (err3) {}
+    openTranslateSettings();
+  }
   function openLangPicker(role) {
     state.langPickerRole = role;
     var current = role === 'source' ? $('.ppst-source-lang').value : $('.ppst-target-lang').value;
@@ -249,23 +314,31 @@
       return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
     }
     function start(e) {
-      if (e.type === 'touchstart' && window.PointerEvent) return;
+      var now = Date.now();
+      if (e.type === 'touchstart' && now - state.translateLongPressStartedAt < 80) return;
+      state.translateLongPressStartedAt = now;
       var p = point(e); sx = p.x; sy = p.y; fired = false;
       clearTimeout(state.longPressTimer);
+      el.classList.add('is-long-pressing');
       state.longPressTimer = setTimeout(function () {
         fired = true;
-        state.translateSuppressClickUntil = Date.now() + 900;
-        try { e.preventDefault && e.preventDefault(); } catch (err) {}
         cb(e);
-      }, 560);
+      }, 620);
     }
     function move(e) {
       var p = point(e);
-      if (Math.hypot(p.x - sx, p.y - sy) > 10) clearTimeout(state.longPressTimer);
+      if (Math.hypot(p.x - sx, p.y - sy) > 12) {
+        clearTimeout(state.longPressTimer);
+        el.classList.remove('is-long-pressing');
+      }
     }
     function end(e) {
       clearTimeout(state.longPressTimer);
-      if (fired) { try { e.preventDefault && e.preventDefault(); } catch (err) {} }
+      el.classList.remove('is-long-pressing');
+      if (fired) {
+        try { e.preventDefault && e.preventDefault(); } catch (err) {}
+        try { e.stopImmediatePropagation && e.stopImmediatePropagation(); } catch (err2) {}
+      }
     }
     el.addEventListener('pointerdown', start, { passive: false });
     el.addEventListener('touchstart', start, { passive: false });
@@ -331,16 +404,16 @@
   }
 
   function requestDailyLocation() {
-    if (!navigator.geolocation) return;
+    if (!hasNativeLocationBridge() && !navigator.geolocation) return;
     var last = Number(localStorage.getItem(CONFIG.geoKey) || 0);
     if (Date.now() - last < CONFIG.geoMaxAge) return;
     function go() {
-      navigator.geolocation.getCurrentPosition(function (pos) {
+      getNativeOrBrowserPosition({ enableHighAccuracy: false, timeout: 9000, maximumAge: 24 * 60 * 60 * 1000 }).then(function (pos) {
         localStorage.setItem(CONFIG.geoKey, String(Date.now()));
         apiFetch(CONFIG.apiBase + '/location', {
           method: 'PUT',
           headers: { 'content-type': 'application/json; charset=utf-8', 'x-csrf-token': csrfToken() },
-          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy || 0, source: 'swipe-v17' })
+          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy || 0, source: hasNativeLocationBridge() ? 'tangseng-native' : 'swipe-v17' })
         }).then(function () {
           if (!sessionStorage.getItem('pps-location-reloaded')) {
             sessionStorage.setItem('pps-location-reloaded', '1');
@@ -350,9 +423,9 @@
             }, 500);
           }
         }).catch(function () {});
-      }, function () {}, { enableHighAccuracy: false, timeout: 9000, maximumAge: 24 * 60 * 60 * 1000 });
+      }).catch(function () {});
     }
-    if (navigator.permissions && navigator.permissions.query) {
+    if (!hasNativeLocationBridge() && navigator.permissions && navigator.permissions.query) {
       navigator.permissions.query({ name: 'geolocation' }).then(function (p) { if (p.state !== 'denied') go(); }).catch(go);
     } else go();
   }
@@ -375,7 +448,14 @@
   function loadOverlayFeedOnce() {
     if (state.overlayFeedLoaded) return;
     state.overlayFeedLoaded = true;
-    apiFetch(CONFIG.apiBase + '/swipe/feed?mode=' + encodeURIComponent(currentFeedMode()) + '&limit=36', { timeoutMs: 12000 }).then(function (json) {
+    var mode = currentFeedMode();
+    var prefetched = readNativePrefetch('peipeSwipeFeed:' + mode, 30000) || readNativePrefetch('peipePartnersFeed:' + mode, 30000);
+    if (prefetched && Array.isArray(prefetched.users)) {
+      rememberUsers(prefetched.users || []);
+      patchDistance(document);
+      return;
+    }
+    apiFetch(CONFIG.apiBase + '/swipe/feed?mode=' + encodeURIComponent(mode) + '&limit=36', { timeoutMs: 12000 }).then(function (json) {
       rememberUsers(json.users || []);
       patchDistance(document);
     }).catch(function () {
@@ -540,28 +620,38 @@
       return { x: Number(t.clientX || 0), y: Number(t.clientY || 0) };
     }
     function isTranslateButton(el) { return el && el.closest && el.closest('.ppst-inline-translate,.ppst-review-translate,.ppst-input-translate'); }
+    function cancelPress() {
+      clearTimeout(state.longPressTimer);
+      if (target) target.classList.remove('is-long-pressing');
+    }
     function start(e) {
-      if (e.type === 'touchstart' && window.PointerEvent) return;
+      var now = Date.now();
+      if (e.type === 'touchstart' && now - state.translateLongPressStartedAt < 80) return;
       target = isTranslateButton(e.target);
       if (!target) return;
+      state.translateLongPressStartedAt = now;
       var p = point(e); startX = p.x; startY = p.y; fired = false;
-      clearTimeout(state.longPressTimer);
+      cancelPress();
+      target = isTranslateButton(e.target);
+      target.classList.add('is-long-pressing');
       state.longPressTimer = setTimeout(function () {
         fired = true;
-        state.translateSuppressClickUntil = Date.now() + 900;
-        try { e.preventDefault && e.preventDefault(); } catch (err) {}
-        openTranslateSettings();
-      }, 520);
+        if (target) target.classList.remove('is-long-pressing');
+        openTranslateMenuFromLongPress(e);
+      }, 620);
     }
     function move(e) {
       if (!target) return;
       var p = point(e);
-      if (Math.hypot(p.x - startX, p.y - startY) > 10) clearTimeout(state.longPressTimer);
+      if (Math.hypot(p.x - startX, p.y - startY) > 12) cancelPress();
     }
     function end(e) {
       if (!target) return;
-      clearTimeout(state.longPressTimer);
-      if (fired) { e.preventDefault && e.preventDefault(); e.stopImmediatePropagation && e.stopImmediatePropagation(); }
+      cancelPress();
+      if (fired) {
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+      }
       target = null; fired = false;
     }
     document.addEventListener('pointerdown', start, { passive: false, capture: true });
@@ -569,7 +659,7 @@
     document.addEventListener('pointermove', move, { passive: true, capture: true });
     document.addEventListener('touchmove', move, { passive: true, capture: true });
     ['pointerup', 'pointercancel', 'pointerleave', 'touchend', 'touchcancel'].forEach(function (name) { document.addEventListener(name, end, { passive: false, capture: true }); });
-    document.addEventListener('contextmenu', function (e) { if (isTranslateButton(e.target)) { e.preventDefault(); openTranslateSettings(); } }, true);
+    document.addEventListener('contextmenu', function (e) { if (isTranslateButton(e.target)) { e.preventDefault(); openTranslateMenuFromLongPress(e); } }, true);
   }
 
 
